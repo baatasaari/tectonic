@@ -41,6 +41,8 @@ tests/integration/        Real-Postgres tier via testcontainers (needs Docker)
 
 ## Design notes vs. the LLD
 
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
+
 - **ADK 2.0 Workflow Runtime.** The LLD names Google ADK 2.0's Workflow
   Runtime as the production graph executor. `core/scheduler.py` implements
   the same semantics (fan-out/fan-in, retry, confidence-gated human-in-the-

@@ -35,6 +35,41 @@ subtree under `modules/`, own README, own CI-shaped test tiers), then
 integrated. See a module's low-level design doc under `docs/` before
 building against it.
 
+## Enterprise-readiness hardening
+
+A structured audit across all 19 built modules (against auth, resiliency,
+real-database testing, durability, connection/pagination limits, and CI
+gaps) found the platform architecturally sound but missing several things
+a production-facing deployment genuinely needs. These are being fixed as
+a series of dedicated, independently reviewable branches/PRs, in this
+order (foundational correctness/scalability risks first, process next,
+the largest single item — auth — last):
+
+| # | Area | Status |
+|---|---|---|
+| 1 | Resiliency — retries + circuit breakers on every outbound HTTP call | Built — `claude/resiliency-retries` |
+| 2 | Real-Postgres integration tests (repository layer tested against genuine Postgres, not just SQLite) | Not yet started |
+| 3 | Durable background jobs (Regulatory and Compliance's evidence-pack generation survives a pod restart) | Not yet started |
+| 4 | Connection pooling tuned to each Helm chart's replica counts + pagination on list endpoints | Not yet started |
+| 5 | CI/CD pipeline (lint + test gating on every push/PR) | Not yet started |
+| 6 | JWT bearer service-to-service auth, shared signing key | Not yet started |
+
+Item 1 (this repo state) adds a `ResilientHTTPClient` base class
+(`clients/resilience.py`) to every module: real, off-the-shelf libraries —
+`tenacity` for exponential-backoff retry, `aiobreaker` for a proper
+Release-It!-pattern circuit breaker — not hand-rolled equivalents. Every
+one of the ~50 client classes across the platform's `clients/http_clients.py`
+files now retries network failures and 5xx responses (never 4xx) and
+opens its breaker after repeated failures, so a struggling peer gets a
+break instead of a retry storm and callers fail fast instead of piling up
+against a peer that's already down. LLM Gateway's real provider-calling
+path (`http_provider_client.py`) gets its own per-provider breaker, so one
+provider being down never blocks calls to a different one. Verified with
+a live reproduction, not just wired and assumed to work: confirmed retry
+count on a flaky-then-recovers backend, confirmed zero retries on a 4xx,
+and confirmed the breaker actually opens after repeated failures and then
+short-circuits without a further network call.
+
 ## Repository layout
 
 ```
