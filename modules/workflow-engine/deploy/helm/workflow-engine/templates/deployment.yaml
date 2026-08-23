@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-workflow-engine
+  labels:
+    app.kubernetes.io/name: workflow-engine
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: workflow-engine
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: workflow-engine
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: workflow-engine
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: WORKFLOW_ENGINE_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: WORKFLOW_ENGINE_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: WORKFLOW_ENGINE_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: WORKFLOW_ENGINE_EXECUTION__DEFAULT_CONFIDENCE_THRESHOLD
+              value: {{ .Values.config.defaultConfidenceThreshold | quote }}
+            - name: WORKFLOW_ENGINE_EXECUTION__MAX_PARALLEL_STEPS_PER_INSTANCE
+              value: {{ .Values.config.maxParallelStepsPerInstance | quote }}
+            - name: WORKFLOW_ENGINE_REPLANNING__ENABLED
+              value: {{ .Values.config.replanningEnabled | quote }}
+            - name: WORKFLOW_ENGINE_KAFKA_BOOTSTRAP_SERVERS
+              value: {{ .Values.kafka.bootstrapServers | quote }}
+            {{- if .Values.dependencyStubBaseUrl }}
+            - name: WORKFLOW_ENGINE_DEPENDENCY_STUB_BASE_URL
+              value: {{ .Values.dependencyStubBaseUrl | quote }}
+            {{- end }}
+            {{- if .Values.database.existingSecret }}
+            - name: WORKFLOW_ENGINE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: WORKFLOW_ENGINE_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}

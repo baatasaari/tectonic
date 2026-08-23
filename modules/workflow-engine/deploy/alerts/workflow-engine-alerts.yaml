@@ -1,0 +1,49 @@
+# Prometheus Alertmanager rule definitions for the Workflow Engine module
+# (LLD §4.4). Ships as a versioned rule file; routing (team, channel,
+# escalation policy) is left to the customer's own Alertmanager configuration.
+groups:
+  - name: workflow-engine
+    rules:
+      - alert: WorkflowOrchestrationOverheadHigh
+        expr: histogram_quantile(0.95, sum(rate(workflow_orchestration_overhead_seconds_bucket[5m])) by (le, tenant_id)) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Workflow Engine orchestration overhead p95 above 50ms for tenant {{ $labels.tenant_id }}"
+          description: "Scheduler time excluding downstream calls has exceeded the 50ms non-functional target for 5 minutes."
+
+      - alert: WorkflowStepFailureRateHigh
+        expr: |
+          sum(rate(workflow_steps_total{status="failed"}[5m])) by (tenant_id)
+            /
+          sum(rate(workflow_steps_total[5m])) by (tenant_id)
+          > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Workflow step failure rate above 5% for tenant {{ $labels.tenant_id }}"
+
+      - alert: WorkflowEventPublishFailing
+        expr: increase(workflow_event_publish_failures_total[10m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Workflow Engine failing to publish lifecycle events to {{ $labels.destination }}"
+          description: "Does not block execution, but Observability/Auditability data is at risk of gaps."
+
+      - alert: WorkflowApprovalBacklog
+        expr: workflow_instances_active{status="paused_for_approval"} > 25
+        labels:
+          severity: warning
+        annotations:
+          summary: "Approval backlog for tenant {{ $labels.tenant_id }} above threshold"
+          description: "Tune this threshold per tenant; 25 is a starting default, not the LLD's prescribed value."
+
+      - alert: WorkflowReplanExhaustion
+        expr: rate(workflow_replan_total{outcome="no_valid_replan"}[15m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Workflow Engine replanner is exhausting its options for tenant {{ $labels.tenant_id }}"

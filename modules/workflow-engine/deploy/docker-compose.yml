@@ -1,0 +1,72 @@
+# Deployability and Testability Contract (LLD Level 1): this module runs and
+# tests fully with its external module dependencies stubbed. Real Postgres
+# and Kafka(-compatible) run here for real; LLM Gateway / Tool Orchestration
+# / Guardrails / Human Oversight are stood in for by dependency-stub.
+#
+# Usage: docker compose -f deploy/docker-compose.yml up --build
+name: workflow-engine
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: workflow_engine
+      POSTGRES_PASSWORD: workflow_engine
+      POSTGRES_DB: workflow_engine
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workflow_engine"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=512M
+      - --overprovisioned
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+    ports:
+      - "9092:9092"
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9100:9100"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      WORKFLOW_ENGINE_DATABASE_URL: postgresql+asyncpg://workflow_engine:workflow_engine@postgres:5432/workflow_engine
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  workflow-engine:
+    build: ..
+    ports:
+      - "8080:8080"
+    environment:
+      WORKFLOW_ENGINE_DATABASE_URL: postgresql+asyncpg://workflow_engine:workflow_engine@postgres:5432/workflow_engine
+      WORKFLOW_ENGINE_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      WORKFLOW_ENGINE_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9100
+      # No OTel collector in this profile; traces export best-effort and are
+      # dropped if nothing is listening. Point WORKFLOW_ENGINE_TELEMETRY__OTLP_ENDPOINT
+      # at a real collector (Tempo/Jaeger/etc.) for an environment that has one.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_started
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

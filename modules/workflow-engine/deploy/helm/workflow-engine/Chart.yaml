@@ -1,0 +1,6 @@
+apiVersion: v2
+name: workflow-engine
+description: Tectonic Agentic AI Platform — Module 1: Workflow Engine
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
