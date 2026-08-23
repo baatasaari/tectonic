@@ -1,0 +1,31 @@
+# Prometheus Alertmanager rule definitions for the Intent Detection module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: intent-detection
+    rules:
+      - alert: IntentClassificationLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(intent_classification_duration_seconds_bucket{fallback_used="false"}[5m])) by (le, tenant_id)) > 0.1
+        labels:
+          severity: warning
+        annotations:
+          summary: "Non-fallback classification latency p95 above 100ms for tenant {{ $labels.tenant_id }}"
+
+      - alert: IntentFallbackRateHigh
+        expr: |
+          sum(rate(intent_classifications_total{fallback_used="true"}[1h])) by (tenant_id)
+            /
+          sum(rate(intent_classifications_total[1h])) by (tenant_id)
+          > 0.30
+        labels:
+          severity: warning
+        annotations:
+          summary: "Fallback ratio above 30% over 1h for tenant {{ $labels.tenant_id }}"
+          description: "May indicate the taxonomy needs expansion rather than a classifier problem."
+
+      - alert: IntentDriftDetected
+        expr: intent_drift_score > 0.15
+        labels:
+          severity: warning
+        annotations:
+          summary: "Intent drift score for tenant {{ $labels.tenant_id }} exceeds threshold"
+          description: "Routed to platform operators for taxonomy review."

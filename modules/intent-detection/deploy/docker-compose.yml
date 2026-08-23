@@ -1,0 +1,49 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# with LLM Gateway stubbed for the compositional fallback path. The primary
+# small classifier is bundled with the module itself (no external
+# model-serving dependency). Real Postgres runs here.
+name: intent-detection
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: intent_detection
+      POSTGRES_PASSWORD: intent_detection
+      POSTGRES_DB: intent_detection
+    ports:
+      - "5436:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U intent_detection"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9105:9105"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      INTENT_DETECTION_DATABASE_URL: postgresql+asyncpg://intent_detection:intent_detection@postgres:5432/intent_detection
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  intent-detection:
+    build: ..
+    ports:
+      - "8084:8084"
+    environment:
+      INTENT_DETECTION_DATABASE_URL: postgresql+asyncpg://intent_detection:intent_detection@postgres:5432/intent_detection
+      INTENT_DETECTION_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9105
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

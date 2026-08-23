@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-context-engineering
+  labels:
+    app.kubernetes.io/name: context-engineering
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: context-engineering
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: context-engineering
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: context-engineering
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8086
+          env:
+            - name: CONTEXT_ENGINEERING_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: CONTEXT_ENGINEERING_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: CONTEXT_ENGINEERING_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: CONTEXT_ENGINEERING_BUDGET__DEFAULT_TOKEN_BUDGET
+              value: {{ .Values.config.defaultTokenBudget | quote }}
+            - name: CONTEXT_ENGINEERING_BUDGET__SUMMARISATION_ENABLED
+              value: {{ .Values.config.summarisationEnabled | quote }}
+            {{- if .Values.dependencyStubBaseUrl }}
+            - name: CONTEXT_ENGINEERING_DEPENDENCY_STUB_BASE_URL
+              value: {{ .Values.dependencyStubBaseUrl | quote }}
+            {{- end }}
+            {{- if .Values.database.existingSecret }}
+            - name: CONTEXT_ENGINEERING_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: CONTEXT_ENGINEERING_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}

@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-intent-detection
+  labels:
+    app.kubernetes.io/name: intent-detection
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: intent-detection
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: intent-detection
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: intent-detection
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8084
+          env:
+            - name: INTENT_DETECTION_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: INTENT_DETECTION_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: INTENT_DETECTION_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: INTENT_DETECTION_CLASSIFICATION__CONFIDENCE_THRESHOLD
+              value: {{ .Values.config.confidenceThreshold | quote }}
+            - name: INTENT_DETECTION_DRIFT_MONITORING__ENABLED
+              value: {{ .Values.config.driftMonitoringEnabled | quote }}
+            {{- if .Values.dependencyStubBaseUrl }}
+            - name: INTENT_DETECTION_DEPENDENCY_STUB_BASE_URL
+              value: {{ .Values.dependencyStubBaseUrl | quote }}
+            {{- end }}
+            {{- if .Values.database.existingSecret }}
+            - name: INTENT_DETECTION_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: INTENT_DETECTION_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}

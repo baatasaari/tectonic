@@ -1,0 +1,32 @@
+# Prometheus Alertmanager rule definitions for the Agentic RAG module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: agentic-rag
+    rules:
+      - alert: RAGGroundednessLow
+        expr: histogram_quantile(0.5, sum(rate(rag_groundedness_score_bucket[1h])) by (le, tenant_id)) < 0.85
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Median groundedness score for tenant {{ $labels.tenant_id }} below threshold over 1h"
+          description: "May indicate corpus staleness."
+
+      - alert: RAGMaxHopsRateHigh
+        expr: |
+          sum(rate(rag_retrievals_total{outcome="max_hops_reached"}[1h])) by (tenant_id)
+            /
+          sum(rate(rag_retrievals_total[1h])) by (tenant_id)
+          > 0.20
+        labels:
+          severity: warning
+        annotations:
+          summary: "max_hops_reached ratio above 20% over 1h for tenant {{ $labels.tenant_id }}"
+          description: "May indicate a corpus coverage gap."
+
+      - alert: RAGRetrievalLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(rag_retrieval_duration_seconds_bucket[5m])) by (le, tenant_id)) > 2.0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Full-request retrieval latency p95 above 2s for tenant {{ $labels.tenant_id }}"

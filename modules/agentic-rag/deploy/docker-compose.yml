@@ -1,0 +1,48 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# with Vector DB, Graph DB, Knowledge Base, and LLM Gateway stubbed, using
+# canned retrieval results and groundedness scores. Real Postgres runs here.
+name: agentic-rag
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: agentic_rag
+      POSTGRES_PASSWORD: agentic_rag
+      POSTGRES_DB: agentic_rag
+    ports:
+      - "5437:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentic_rag"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9106:9106"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      AGENTIC_RAG_DATABASE_URL: postgresql+asyncpg://agentic_rag:agentic_rag@postgres:5432/agentic_rag
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  agentic-rag:
+    build: ..
+    ports:
+      - "8085:8085"
+    environment:
+      AGENTIC_RAG_DATABASE_URL: postgresql+asyncpg://agentic_rag:agentic_rag@postgres:5432/agentic_rag
+      AGENTIC_RAG_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9106
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

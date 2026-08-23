@@ -1,0 +1,6 @@
+apiVersion: v2
+name: agentic-rag
+description: Tectonic Agentic AI Platform — Module 6: Agentic RAG
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

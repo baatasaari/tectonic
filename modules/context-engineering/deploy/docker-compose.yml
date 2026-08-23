@@ -1,0 +1,49 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# with Evaluation Framework's feedback feed stubbed with canned
+# prioritisation signals. Real Postgres runs here (the only persistent
+# store this module has, beyond ontology/weights config).
+name: context-engineering
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: context_engineering
+      POSTGRES_PASSWORD: context_engineering
+      POSTGRES_DB: context_engineering
+    ports:
+      - "5438:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U context_engineering"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9107:9107"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      CONTEXT_ENGINEERING_DATABASE_URL: postgresql+asyncpg://context_engineering:context_engineering@postgres:5432/context_engineering
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  context-engineering:
+    build: ..
+    ports:
+      - "8086:8086"
+    environment:
+      CONTEXT_ENGINEERING_DATABASE_URL: postgresql+asyncpg://context_engineering:context_engineering@postgres:5432/context_engineering
+      CONTEXT_ENGINEERING_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9107
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

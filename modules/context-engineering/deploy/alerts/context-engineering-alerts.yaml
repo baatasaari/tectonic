@@ -1,0 +1,30 @@
+# Prometheus Alertmanager rule definitions for the Context Engineering
+# module (LLD §Level 4 "Alerting").
+groups:
+  - name: context-engineering
+    rules:
+      - alert: ContextTruncationRateHigh
+        expr: histogram_quantile(0.5, sum(rate(context_truncation_rate_bucket[1h])) by (le, tenant_id, task_type)) > 0.40
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Truncation rate above 40% for tenant {{ $labels.tenant_id }}, task_type {{ $labels.task_type }}"
+          description: "May indicate the token budget is too small for this task."
+
+      - alert: ContextAssemblyLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(context_assembly_duration_seconds_bucket[5m])) by (le, tenant_id)) > 0.05
+        labels:
+          severity: warning
+        annotations:
+          summary: "Assembly latency p95 above 50ms for tenant {{ $labels.tenant_id }} (excludes summarisation calls)"
+
+      - alert: ContextSummarisationCostHigh
+        expr: |
+          sum(rate(context_summarisation_invocations_total[1h])) by (tenant_id)
+            > 2 * sum(rate(context_summarisation_invocations_total[7d])) by (tenant_id) / (7*24)
+        labels:
+          severity: info
+        annotations:
+          summary: "Summarisation invocation rate for tenant {{ $labels.tenant_id }} spiked vs. 7-day baseline"
+          description: "Cost-awareness signal feeding FinOps."
