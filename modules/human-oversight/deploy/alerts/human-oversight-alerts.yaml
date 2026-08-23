@@ -1,0 +1,46 @@
+# Prometheus Alertmanager rule definitions for the Human Oversight module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: human-oversight
+    rules:
+      - alert: OversightBacklogGrowing
+        expr: sum(oversight_requests_total{outcome="pending"}) by (tenant_id) > 0 and delta(sum(oversight_requests_total{outcome="pending"}) by (tenant_id)[1h:]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pending oversight queue depth for tenant {{ $labels.tenant_id }} growing sustained over 1 hour"
+
+      - alert: OversightExpiryRateHigh
+        expr: |
+          sum(rate(oversight_requests_total{outcome="expired"}[1h])) by (tenant_id)
+            /
+          sum(rate(oversight_requests_total[1h])) by (tenant_id)
+          > 0.10
+        labels:
+          severity: warning
+        annotations:
+          summary: "Expiry rate for tenant {{ $labels.tenant_id }} above 10%"
+          description: "Likely means reviewer capacity or notification delivery issue."
+
+      - alert: OversightNotificationDeliveryFailing
+        expr: |
+          sum(rate(oversight_notification_delivery_failures_total[15m])) by (channel)
+            /
+          sum(rate(oversight_requests_total[15m]))
+          > 0.05
+        labels:
+          severity: critical
+        annotations:
+          summary: "Notification delivery failure rate above 5% for channel {{ $labels.channel }}"
+          description: "A failed notification means a request may sit unseen."
+
+      - alert: OversightOverrideRateSpike
+        expr: |
+          oversight_override_rate
+            >
+          2 * avg_over_time(oversight_override_rate[7d])
+        labels:
+          severity: info
+        annotations:
+          summary: "Override rate for {{ $labels.requesting_module }} rose sharply relative to baseline"
+          description: "Worth investigating whether the underlying agent behaviour has degraded."

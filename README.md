@@ -22,7 +22,10 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 11 — Graph DB | Built — [`modules/graph-db`](modules/graph-db) |
 | 12 — Short-Term Memory | Built — [`modules/short-term-memory`](modules/short-term-memory) |
 | 13 — Long-Term Memory | Built — [`modules/long-term-memory`](modules/long-term-memory) |
-| 14–34 | Not yet started |
+| 14 — Guardrails | Built — [`modules/guardrails`](modules/guardrails) |
+| 15 — Sentinel Agents | Built — [`modules/sentinel-agents`](modules/sentinel-agents) |
+| 16 — Human Oversight | Built — [`modules/human-oversight`](modules/human-oversight) |
+| 17–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -47,6 +50,9 @@ modules/
   graph-db/                                    Module 11
   short-term-memory/                             Module 12
   long-term-memory/                                Module 13
+  guardrails/                                        Module 14
+  sentinel-agents/                                     Module 15
+  human-oversight/                                       Module 16
 ```
 
 ## Cross-module integration, once deployed together
@@ -88,6 +94,23 @@ surfaced a genuine gap worth flagging: Graph DB's own LLD doesn't yet
 define a delete endpoint, so Long-Term Memory's right-to-erasure flow
 treats a Graph DB deletion call as best-effort today (see
 `modules/long-term-memory/README.md`).
+
+The Governance/Safety group added in this batch is where cross-module
+wiring stops being aspirational: Sentinel Agents' autonomous pause/
+terminate calls and Human Oversight's decision callback for
+Workflow-Engine-originated requests both target Module 1's actual,
+already-built endpoints (`/instances/{id}/pause`, `/terminate`, and
+`/instances/{id}/approvals/{approval_id}/callback`), verified by reading
+Workflow Engine's own route source rather than assumed from the LLD —
+the same "real peer, not a stub" pattern as Vector DB's embedded
+qdrant-client. Guardrails, Sentinel Agents and Human Oversight also form
+their own triangle: a Guardrails red-team run alerts Sentinel Agents on
+any policy bypass, and both modules escalate into Human Oversight's
+approval queue when an autonomous decision needs a person. Everything
+else these three modules call — Tool Orchestration's circuit-breaker,
+non-Workflow-Engine oversight callbacks — remains a documented
+best-effort gap, logged on failure rather than raised, until those
+peers grow the matching endpoints.
 
 ## Modules
 
@@ -214,6 +237,42 @@ right-to-erasure flow turns GDPR-style forgetting into an auditable,
 on-demand action rather than a manual data-protection project. Design
 doc: [`docs/module-13-long-term-memory.md`](docs/module-13-long-term-memory.md).
 Build: [`modules/long-term-memory`](modules/long-term-memory).
+
+### Module 14: Guardrails
+
+The safety gate every input and output can be checked against: jailbreak
+detection, PII detection-and-redaction, denied-topic and groundedness
+policy checks, all driven by per-tenant policy profiles, plus a red-team
+runner that fires adversarial prompts at a shadow profile and records any
+bypass as an incident. A zero-config default profile means `/check` works
+out of the box before any tenant has configured one. Design doc:
+[`docs/module-14-guardrails.md`](docs/module-14-guardrails.md).
+Build: [`modules/guardrails`](modules/guardrails).
+
+### Module 15: Sentinel Agents
+
+Watches every agent's behavior for statistical deviation from its own
+baseline (Welford's online algorithm for numerically stable running
+mean/variance, z-scored per event) and for swarm-level correlated
+deviation across agents in a sliding time window — then autonomously
+pauses, escalates to Human Oversight, or alerts, depending on severity
+and configured autonomy. Its pause/terminate calls target Workflow
+Engine's real, already-built instance-control endpoints rather than a
+stub. Design doc:
+[`docs/module-15-sentinel-agents.md`](docs/module-15-sentinel-agents.md).
+Build: [`modules/sentinel-agents`](modules/sentinel-agents).
+
+### Module 16: Human Oversight
+
+The human-in-the-loop approval queue: request enqueueing, claim/decide
+workflows, and an override capture path that logs the original agent
+proposal against the human's corrected action with extra audit weight.
+Slack/Teams/webhook notification delivery is genuinely functional (those
+channels are just webhook POSTs under the hood), and the decision
+callback for a Workflow-Engine-originated request calls that module's
+real approval-callback endpoint rather than a placeholder. Design doc:
+[`docs/module-16-human-oversight.md`](docs/module-16-human-oversight.md).
+Build: [`modules/human-oversight`](modules/human-oversight).
 
 ## Running any module locally
 

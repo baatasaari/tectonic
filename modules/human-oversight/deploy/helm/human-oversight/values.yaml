@@ -1,0 +1,55 @@
+image:
+  repository: tectonic/human-oversight
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: 512Mi
+  limits:
+    cpu: "500m"
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8095
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  notificationChannels: "slack"
+  defaultTimeoutSeconds: 86400
+
+database:
+  url: "postgresql+asyncpg://human_oversight:human_oversight@postgres:5432/human_oversight"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+dependencyStubBaseUrl: ""  # set to real notification webhook URLs and calling-module callback URLs once deployed
+
+podDisruptionBudget:
+  minAvailable: 1
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8095
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8095
+  initialDelaySeconds: 5
+  periodSeconds: 10

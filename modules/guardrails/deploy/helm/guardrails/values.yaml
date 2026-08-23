@@ -1,0 +1,55 @@
+image:
+  repository: tectonic/guardrails
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 4
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 1Gi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 4
+  maxReplicas: 30
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8093
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  groundednessThreshold: 0.85
+  redTeamEnabled: true
+
+database:
+  url: "postgresql+asyncpg://guardrails:guardrails@postgres:5432/guardrails"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+dependencyStubBaseUrl: ""  # set to real LLM Gateway/Sentinel Agents URLs once deployed
+
+podDisruptionBudget:
+  minAvailable: 3
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8093
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8093
+  initialDelaySeconds: 5
+  periodSeconds: 10

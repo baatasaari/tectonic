@@ -1,0 +1,55 @@
+image:
+  repository: tectonic/sentinel-agents
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 1Gi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8094
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  sensitivity: "medium"
+  swarmDetectionEnabled: true
+
+database:
+  url: "postgresql+asyncpg://sentinel_agents:sentinel_agents@postgres:5432/sentinel_agents"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+dependencyStubBaseUrl: ""  # set to real Workflow Engine/Tool Orchestration/Human Oversight/Auditability URLs once deployed
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8094
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8094
+  initialDelaySeconds: 5
+  periodSeconds: 10
