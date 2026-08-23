@@ -1,0 +1,6 @@
+apiVersion: v2
+name: data-source-plugins
+description: Tectonic Agentic AI Platform — Module 8: Data Source Plugins
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

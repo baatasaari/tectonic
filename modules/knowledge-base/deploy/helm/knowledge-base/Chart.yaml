@@ -1,0 +1,6 @@
+apiVersion: v2
+name: knowledge-base
+description: Tectonic Agentic AI Platform — Module 9: Knowledge Base / Document Management
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

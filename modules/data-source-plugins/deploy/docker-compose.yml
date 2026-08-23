@@ -1,0 +1,49 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# with Secrets and Credential Management stubbed to return fake
+# credentials, and with source systems mocked via the same dependency-stub
+# (see stubs/dependency-stub/app.py). Real Postgres runs here.
+name: data-source-plugins
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: data_source_plugins
+      POSTGRES_PASSWORD: data_source_plugins
+      POSTGRES_DB: data_source_plugins
+    ports:
+      - "5439:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U data_source_plugins"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9108:9108"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATA_SOURCE_PLUGINS_DATABASE_URL: postgresql+asyncpg://data_source_plugins:data_source_plugins@postgres:5432/data_source_plugins
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  data-source-plugins:
+    build: ..
+    ports:
+      - "8087:8087"
+    environment:
+      DATA_SOURCE_PLUGINS_DATABASE_URL: postgresql+asyncpg://data_source_plugins:data_source_plugins@postgres:5432/data_source_plugins
+      DATA_SOURCE_PLUGINS_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9108
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

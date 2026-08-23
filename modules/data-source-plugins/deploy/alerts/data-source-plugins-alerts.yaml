@@ -1,0 +1,37 @@
+# Prometheus Alertmanager rule definitions for the Data Source Plugins
+# module (LLD §Level 4 "Alerting").
+groups:
+  - name: data-source-plugins
+    rules:
+      - alert: DataSourceSyncFailing
+        expr: |
+          sum(increase(data_source_syncs_total{outcome="failed"}[30m])) by (tenant_id, source_type)
+          >= 3
+        labels:
+          severity: critical
+        annotations:
+          summary: "3 or more consecutive failed syncs for tenant {{ $labels.tenant_id }} / {{ $labels.source_type }}"
+
+      - alert: DataSourceFreshnessLagHigh
+        expr: data_source_freshness_lag_seconds > on(connector_id) data_source_freshness_lag_sla_seconds
+        labels:
+          severity: warning
+        annotations:
+          summary: "Freshness lag for connector {{ $labels.connector_id }} exceeds its tenant-configured SLA"
+
+      - alert: DataSourceQualityScoreLow
+        expr: data_source_quality_score < 0.7
+        labels:
+          severity: warning
+        annotations:
+          summary: "Quality score for connector {{ $labels.connector_id }} below 0.7"
+
+      - alert: DataSourceDriftManualReviewPending
+        expr: |
+          max_over_time(data_source_drift_incidents_total{auto_adapted="false"}[24h])
+          - min_over_time(data_source_drift_incidents_total{auto_adapted="false"}[24h])
+          > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "A drift incident for connector {{ $labels.connector_id }} has sat in manual review for over 24h"

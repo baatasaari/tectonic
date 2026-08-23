@@ -1,0 +1,30 @@
+# Prometheus Alertmanager rule definitions for the Knowledge Base module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: knowledge-base
+    rules:
+      - alert: KnowledgeBaseIngestionFailureRateHigh
+        expr: |
+          sum(rate(knowledge_base_documents_ingested_total{outcome="failed"}[1h]))
+            /
+          sum(rate(knowledge_base_documents_ingested_total[1h]))
+          > 0.05
+        labels:
+          severity: warning
+        annotations:
+          summary: "Knowledge Base ingestion failure rate above 5% over 1h"
+
+      - alert: KnowledgeBaseStaleDocumentsRatioHigh
+        expr: knowledge_base_stale_documents_ratio > 0.2
+        labels:
+          severity: warning
+        annotations:
+          summary: "Stale document ratio for tenant {{ $labels.tenant_id }} exceeds threshold"
+          description: "Routed to content owners for review."
+
+      - alert: KnowledgeBaseIngestionLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(knowledge_base_ingestion_duration_seconds_bucket[5m])) by (le, document_size_bucket)) > 5
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 ingestion duration exceeds tenant SLA for document size bucket {{ $labels.document_size_bucket }}"

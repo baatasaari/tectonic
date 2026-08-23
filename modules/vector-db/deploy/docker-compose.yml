@@ -1,0 +1,35 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# with LLM Gateway stubbed (canned embeddings). This compose file runs a
+# real self-hosted Qdrant server (the LLD's chosen production topology);
+# the module's own unit tests instead use Qdrant's embedded in-memory mode
+# and need no server at all.
+name: vector-db
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    ports:
+      - "6333:6333"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/localhost/6333' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9110:9110"
+
+  vector-db:
+    build: ..
+    ports:
+      - "8089:8089"
+    environment:
+      VECTOR_DB_QDRANT__URL: http://qdrant:6333
+      VECTOR_DB_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9110
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started

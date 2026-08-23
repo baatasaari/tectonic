@@ -1,0 +1,26 @@
+# Prometheus Alertmanager rule definitions for the Vector DB module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: vector-db
+    rules:
+      - alert: VectorDBQueryLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(vector_db_query_duration_seconds_bucket[5m])) by (le, tenant_id)) > 0.05
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 query latency for tenant {{ $labels.tenant_id }} above 50ms"
+          description: "Target is up to 10M vectors per the design target; investigate collection size and HNSW config."
+
+      - alert: VectorDBMigrationStalled
+        expr: delta(vector_db_migration_progress_ratio[30m]) == 0 and vector_db_migration_progress_ratio < 1
+        labels:
+          severity: critical
+        annotations:
+          summary: "Migration {{ $labels.migration_id }} has made no progress in 30 minutes"
+
+      - alert: VectorDBClusterDegraded
+        expr: up{job="vector-db-qdrant"} == 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Qdrant cluster health check reports degraded replica state"
