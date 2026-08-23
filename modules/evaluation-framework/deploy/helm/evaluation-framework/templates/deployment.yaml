@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-evaluation-framework
+  labels:
+    app.kubernetes.io/name: evaluation-framework
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: evaluation-framework
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: evaluation-framework
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: evaluation-framework
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8097
+          env:
+            - name: EVALUATION_FRAMEWORK_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: EVALUATION_FRAMEWORK_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: EVALUATION_FRAMEWORK_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: EVALUATION_FRAMEWORK_PRODUCTION_SAMPLING__SAMPLE_RATE
+              value: {{ .Values.config.sampleRate | quote }}
+            - name: EVALUATION_FRAMEWORK_PRODUCTION_SAMPLING__ENABLED
+              value: {{ .Values.config.productionSamplingEnabled | quote }}
+            {{- if .Values.dependencyStubBaseUrl }}
+            - name: EVALUATION_FRAMEWORK_DEPENDENCY_STUB_BASE_URL
+              value: {{ .Values.dependencyStubBaseUrl | quote }}
+            {{- end }}
+            {{- if .Values.database.existingSecret }}
+            - name: EVALUATION_FRAMEWORK_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: EVALUATION_FRAMEWORK_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}

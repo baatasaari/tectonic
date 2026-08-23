@@ -25,7 +25,10 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 14 — Guardrails | Built — [`modules/guardrails`](modules/guardrails) |
 | 15 — Sentinel Agents | Built — [`modules/sentinel-agents`](modules/sentinel-agents) |
 | 16 — Human Oversight | Built — [`modules/human-oversight`](modules/human-oversight) |
-| 17–34 | Not yet started |
+| 17 — Regulatory and Compliance | Built — [`modules/regulatory-compliance`](modules/regulatory-compliance) |
+| 18 — Evaluation Framework | Built — [`modules/evaluation-framework`](modules/evaluation-framework) |
+| 19 — Observability | Built — [`modules/observability`](modules/observability) |
+| 20–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -53,6 +56,9 @@ modules/
   guardrails/                                        Module 14
   sentinel-agents/                                     Module 15
   human-oversight/                                       Module 16
+  regulatory-compliance/                                   Module 17
+  evaluation-framework/                                      Module 18
+  observability/                                               Module 19
 ```
 
 ## Cross-module integration, once deployed together
@@ -111,6 +117,27 @@ else these three modules call — Tool Orchestration's circuit-breaker,
 non-Workflow-Engine oversight callbacks — remains a documented
 best-effort gap, logged on failure rather than raised, until those
 peers grow the matching endpoints.
+
+This batch's Quality/Trust-adjacent additions round out that picture.
+Regulatory and Compliance is the crosswalk sitting on top of the modules
+already built: its bundled default mapping table maps controls this
+platform's own Human Oversight, Guardrails, Sentinel Agents and Workflow
+Engine already implement to EU AI Act, NIST AI RMF, ISO 42001 and DORA
+clauses, and its evidence packs are real generated PDFs (`fpdf2`), not a
+text stand-in. Evaluation Framework and Observability both depend on LLM
+Gateway the same way every other module does (LLM-as-judge scoring,
+reasoning-trace narrative reconstruction) — and Observability's Cost
+Attribution Joiner is a second instance of the "real peer, not invented"
+pattern: it reads the exact `gen_ai.usage.input_tokens`/`output_tokens`
+and `llm_gateway.cost` span attributes LLM Gateway's own
+`telemetry/tracing.py` already documents emitting, a genuine cross-module
+telemetry contract rather than a guessed shape. Auditability (Module 20,
+not yet built) is the one dependency all three of this batch's modules
+gesture at without a real peer to call yet — Regulatory and Compliance's
+control-event ingestion and Evaluation Framework's/Observability's
+Postgres-backed "other modules poll our API for scores/traces" pattern
+are both explicitly designed to keep working once it exists, documented
+as such in each module's README.
 
 ## Modules
 
@@ -273,6 +300,45 @@ callback for a Workflow-Engine-originated request calls that module's
 real approval-callback endpoint rather than a placeholder. Design doc:
 [`docs/module-16-human-oversight.md`](docs/module-16-human-oversight.md).
 Build: [`modules/human-oversight`](modules/human-oversight).
+
+### Module 17: Regulatory and Compliance
+
+Maps a single, once-implemented control to the specific clauses it
+satisfies across every regulatory framework a tenant has enabled (EU AI
+Act, NIST AI RMF, ISO 42001, DORA), and generates framework-formatted
+evidence packs — real PDFs — on demand. A config-driven crosswalk table
+makes the "living regulatory feed" claim real: a new framework or
+delegated act is a data change, never a code change, and publishing a new
+version deprecates rather than deletes prior mappings so an in-flight
+audit cycle never sees its evidence trail shift shape. Design doc:
+[`docs/module-17-regulatory-compliance.md`](docs/module-17-regulatory-compliance.md).
+Build: [`modules/regulatory-compliance`](modules/regulatory-compliance).
+
+### Module 18: Evaluation Framework
+
+Scores agent outputs against faithfulness, coherence, tool-trace
+correctness and domain-specific metrics, both as a CI/CD gate
+(`agenteval run --gate`) before deployment and as continuous sampling
+against live production traffic. Own lightweight metric heuristics stand
+in for DeepEval/Ragas, falling back to an LLM Gateway LLM-as-judge call
+for any metric without a local implementation — the same
+multiple-sources-behind-one-interface shape the LLD calls for. Design
+doc: [`docs/module-18-evaluation-framework.md`](docs/module-18-evaluation-framework.md).
+Build: [`modules/evaluation-framework`](modules/evaluation-framework).
+
+### Module 19: Observability
+
+The platform-wide sink for every trace, span, metric and log this
+platform's other modules emit, differentiated by two features built on
+top: a Reasoning-Trace Reconstructor that turns a raw trace tree into a
+plain-language decision narrative via LLM Gateway, and a Cost Attribution
+Joiner that reads LLM Gateway's real `gen_ai.usage.*`/`llm_gateway.cost`
+span attributes to show spend alongside performance as one dataset.
+Stores spans in its own Postgres table behind a simplified HTTP ingestion
+endpoint rather than standing up a real Tempo/Mimir/Loki/Grafana stack —
+see its README for why that's the one deviation worth calling out here.
+Design doc: [`docs/module-19-observability.md`](docs/module-19-observability.md).
+Build: [`modules/observability`](modules/observability).
 
 ## Running any module locally
 

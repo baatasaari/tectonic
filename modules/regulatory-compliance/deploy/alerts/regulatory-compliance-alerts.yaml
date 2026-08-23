@@ -1,0 +1,30 @@
+# Prometheus Alertmanager rule definitions for the Regulatory and
+# Compliance module (LLD §Level 4 "Alerting").
+groups:
+  - name: regulatory-compliance
+    rules:
+      - alert: RegCompCoverageGap
+        expr: regcomp_framework_coverage_percentage < 90
+        labels:
+          severity: warning
+        annotations:
+          summary: "Coverage for tenant {{ $labels.tenant_id }} / framework {{ $labels.framework_name }} below minimum"
+          description: "Likely means a required control has no implementation event on record."
+
+      - alert: RegCompEvidenceGenerationFailing
+        expr: |
+          sum(rate(regcomp_evidence_packs_generated_total{outcome="failed"}[1h]))
+            /
+          sum(rate(regcomp_evidence_packs_generated_total[1h]))
+          > 0.05
+        labels:
+          severity: warning
+        annotations:
+          summary: "Evidence pack generation failure rate above 5%"
+
+      - alert: RegCompEvidenceGenerationSlow
+        expr: histogram_quantile(0.95, sum(rate(regcomp_evidence_generation_duration_seconds_bucket[15m])) by (le, framework_name)) > 300
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 evidence pack generation time for {{ $labels.framework_name }} above 5 minutes"

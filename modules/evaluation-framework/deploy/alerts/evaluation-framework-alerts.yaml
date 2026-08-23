@@ -1,0 +1,33 @@
+# Prometheus Alertmanager rule definitions for the Evaluation Framework
+# module (LLD §Level 4 "Alerting").
+groups:
+  - name: evaluation-framework
+    rules:
+      - alert: EvalGatePassRateDropping
+        expr: |
+          eval_gate_pass_rate
+            <
+          0.8 * avg_over_time(eval_gate_pass_rate[7d])
+        labels:
+          severity: warning
+        annotations:
+          summary: "Gate pass rate for tenant {{ $labels.tenant_id }} / {{ $labels.environment }} dropped sharply vs 7-day baseline"
+          description: "May indicate a regression before it reaches production."
+
+      - alert: EvalProductionScoreDegrading
+        expr: |
+          avg_over_time(eval_metric_score_sum[1h]) / avg_over_time(eval_metric_score_count[1h])
+            <
+          0.9 * (avg_over_time(eval_metric_score_sum[7d]) / avg_over_time(eval_metric_score_count[7d]))
+        labels:
+          severity: warning
+        annotations:
+          summary: "Metric {{ $labels.metric_name }} for tenant {{ $labels.tenant_id }} trending down over a sustained window"
+
+      - alert: EvalSamplingRateOffTarget
+        expr: abs(eval_sampling_rate - on(tenant_id) group_left avg(eval_sampling_rate)) > 0.02
+        labels:
+          severity: warning
+        annotations:
+          summary: "Observed sampling rate for tenant {{ $labels.tenant_id }} deviates from configured target"
+          description: "May indicate a consumer lag issue on the sampling ingestion path."

@@ -1,0 +1,56 @@
+image:
+  repository: tectonic/observability
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 1Gi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8098
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  reasoningNarrativeEnabled: true
+  costAttributionEnabled: true
+  tracesRetentionDays: 30
+
+database:
+  url: "postgresql+asyncpg://observability:observability@postgres:5432/observability"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+dependencyStubBaseUrl: ""  # set to the real LLM Gateway URL once deployed
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8098
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8098
+  initialDelaySeconds: 5
+  periodSeconds: 10

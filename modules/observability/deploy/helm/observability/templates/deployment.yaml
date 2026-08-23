@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-observability
+  labels:
+    app.kubernetes.io/name: observability
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: observability
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: observability
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: observability
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8098
+          env:
+            - name: OBSERVABILITY_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: OBSERVABILITY_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: OBSERVABILITY_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: OBSERVABILITY_REASONING_NARRATIVE__ENABLED
+              value: {{ .Values.config.reasoningNarrativeEnabled | quote }}
+            - name: OBSERVABILITY_COST_ATTRIBUTION__ENABLED
+              value: {{ .Values.config.costAttributionEnabled | quote }}
+            - name: OBSERVABILITY_RETENTION__TRACES_DAYS
+              value: {{ .Values.config.tracesRetentionDays | quote }}
+            {{- if .Values.dependencyStubBaseUrl }}
+            - name: OBSERVABILITY_DEPENDENCY_STUB_BASE_URL
+              value: {{ .Values.dependencyStubBaseUrl | quote }}
+            {{- end }}
+            {{- if .Values.database.existingSecret }}
+            - name: OBSERVABILITY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: OBSERVABILITY_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}

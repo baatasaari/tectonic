@@ -1,0 +1,48 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# standalone with Auditability stubbed to return canned evidence data. Real
+# Postgres runs here.
+name: regulatory-compliance
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: regcomp
+      POSTGRES_PASSWORD: regcomp
+      POSTGRES_DB: regcomp
+    ports:
+      - "5446:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U regcomp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9117:9117"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      REGULATORY_COMPLIANCE_DATABASE_URL: postgresql+asyncpg://regcomp:regcomp@postgres:5432/regcomp
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  regulatory-compliance:
+    build: ..
+    ports:
+      - "8096:8096"
+    environment:
+      REGULATORY_COMPLIANCE_DATABASE_URL: postgresql+asyncpg://regcomp:regcomp@postgres:5432/regcomp
+      REGULATORY_COMPLIANCE_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9117
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-regulatory-compliance
+  labels:
+    app.kubernetes.io/name: regulatory-compliance
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: regulatory-compliance
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: regulatory-compliance
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: regulatory-compliance
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8096
+          env:
+            - name: REGULATORY_COMPLIANCE_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: REGULATORY_COMPLIANCE_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: REGULATORY_COMPLIANCE_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: REGULATORY_COMPLIANCE_EVIDENCE__OUTPUT_FORMAT
+              value: {{ .Values.config.evidenceOutputFormat | quote }}
+            {{- if .Values.dependencyStubBaseUrl }}
+            - name: REGULATORY_COMPLIANCE_DEPENDENCY_STUB_BASE_URL
+              value: {{ .Values.dependencyStubBaseUrl | quote }}
+            {{- end }}
+            {{- if .Values.database.existingSecret }}
+            - name: REGULATORY_COMPLIANCE_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: REGULATORY_COMPLIANCE_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
