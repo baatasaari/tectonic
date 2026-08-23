@@ -1,0 +1,32 @@
+# Prometheus Alertmanager rule definitions for the Tool Orchestration
+# module (LLD §Level 4 "Alerting").
+groups:
+  - name: tool-orchestration
+    rules:
+      - alert: ToolCircuitBreakerOpen
+        expr: tool_circuit_breaker_state == 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Circuit breaker open for tool {{ $labels.tool_id }} for 5 minutes"
+
+      - alert: ToolReliabilityScoreLow
+        expr: tool_reliability_score < 0.8
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Reliability score for tool {{ $labels.tool_id }} sustained below 0.8 for 1 hour"
+
+      - alert: ToolSynthesisRejectionSpike
+        expr: |
+          sum(rate(tool_synthesis_requests_total{outcome="rejected"}[24h])) by (tenant_id)
+            /
+          sum(rate(tool_synthesis_requests_total[24h])) by (tenant_id)
+          > 0.5
+        labels:
+          severity: info
+        annotations:
+          summary: "Tool synthesis rejection rate above 50% over 24h for tenant {{ $labels.tenant_id }}"
+          description: "May indicate the feature needs tuning rather than a systemic problem."

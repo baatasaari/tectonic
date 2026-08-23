@@ -1,0 +1,42 @@
+# Prometheus Alertmanager rule definitions for the LLM Gateway module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: llm-gateway
+    rules:
+      - alert: LLMGatewayOverheadHigh
+        expr: histogram_quantile(0.95, sum(rate(llm_gateway_overhead_seconds_bucket[5m])) by (le)) > 0.015
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Gateway overhead p95 above 15ms"
+
+      - alert: LLMGatewayProviderDown
+        expr: llm_gateway_requests_total{outcome="error"} > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "A provider has been failing calls for 2 consecutive minutes"
+
+      - alert: LLMGatewayBudgetNearLimit
+        expr: llm_gateway_budget_utilisation_ratio > 0.8
+        labels:
+          severity: warning
+        annotations:
+          summary: "Budget utilisation for tenant {{ $labels.tenant_id }} above its alert threshold"
+
+      - alert: LLMGatewayCacheHitRateDrop
+        expr: llm_gateway_cache_hit_ratio < 0.7 * (llm_gateway_cache_hit_ratio offset 7d)
+        labels:
+          severity: warning
+        annotations:
+          summary: "24h cache hit ratio for tenant {{ $labels.tenant_id }} down >30% vs. 7-day baseline"
+          description: "May indicate staleness detection over-triggering rather than a real cache problem."
+
+      - alert: LLMGatewayDeprecationNoticeDetected
+        expr: increase(llm_gateway_deprecation_notices_total[1h]) > 0
+        labels:
+          severity: info
+        annotations:
+          summary: "Model Deprecation Watcher found a new provider sunset notice"

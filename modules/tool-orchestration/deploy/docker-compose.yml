@@ -1,0 +1,63 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# with LLM Gateway, Guardrails and Sentinel Agents stubbed. Real Redis and
+# Postgres run here; a small toy MCP server is part of the dependency-stub
+# for local dev (a separate suite against real, safe public test APIs
+# validates MCP protocol behaviour end to end — not part of this profile).
+name: tool-orchestration
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tool_orchestration
+      POSTGRES_PASSWORD: tool_orchestration
+      POSTGRES_DB: tool_orchestration
+    ports:
+      - "5435:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tool_orchestration"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6381:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9104:9104"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      TOOL_ORCHESTRATION_DATABASE_URL: postgresql+asyncpg://tool_orchestration:tool_orchestration@postgres:5432/tool_orchestration
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  tool-orchestration:
+    build: ..
+    ports:
+      - "8083:8083"
+    environment:
+      TOOL_ORCHESTRATION_DATABASE_URL: postgresql+asyncpg://tool_orchestration:tool_orchestration@postgres:5432/tool_orchestration
+      TOOL_ORCHESTRATION_REDIS_URL: redis://redis:6379/0
+      TOOL_ORCHESTRATION_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9104
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

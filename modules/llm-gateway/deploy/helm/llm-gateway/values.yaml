@@ -1,0 +1,61 @@
+image:
+  repository: tectonic/llm-gateway
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# Higher replica floor and stricter SLO than most modules — this sits on
+# the hot path for nearly every other module (LLD §4.6 equivalent).
+replicaCount: 4
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 1Gi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 4
+  maxReplicas: 30
+  targetCPUUtilizationPercentage: 65
+
+service:
+  type: ClusterIP
+  port: 8082
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  routingStrategy: "quality_weighted"
+  similarityThreshold: 0.92
+  enforceHardBudgetLimit: true
+
+database:
+  url: "postgresql+asyncpg://llm_gateway:llm_gateway@postgres:5432/llm_gateway"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+redis:
+  url: "redis://redis:6379/0"
+
+dependencyStubBaseUrl: ""  # set to real Secrets and Credential Management / Evaluation Framework URLs once deployed
+
+podDisruptionBudget:
+  minAvailable: 3
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8082
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8082
+  initialDelaySeconds: 5
+  periodSeconds: 10

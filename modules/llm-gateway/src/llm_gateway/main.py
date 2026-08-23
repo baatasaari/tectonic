@@ -1,0 +1,108 @@
+"""FastAPI application entrypoint (LLD §Level 4 "Deployment"). Given this
+module sits on the hot path for nearly every other module, `/healthz`
+checks Redis, Postgres and provider reachability separately.
+"""
+from __future__ import annotations
+
+import json
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Response
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
+from redis.asyncio import Redis
+from sqlalchemy import text
+
+from llm_gateway.api.routes_admin import router as admin_router
+from llm_gateway.api.routes_completions import router as completions_router
+from llm_gateway.app_context import AppContext
+from llm_gateway.clients.http_clients import HTTPSecretsClient
+from llm_gateway.clients.http_provider_client import HTTPProviderClient
+from llm_gateway.clients.redis_quality_scores import RedisQualityScoreProvider
+from llm_gateway.config import LLMGatewaySettings, load_settings
+from llm_gateway.core.semantic_cache import RedisSemanticCache
+from llm_gateway.db.session import make_engine, make_session_factory
+from llm_gateway.telemetry.logging import configure_logging, get_logger
+from llm_gateway.telemetry.tracing import configure_tracing
+
+logger = get_logger(component="main")
+
+
+def build_app_context(settings: LLMGatewaySettings) -> AppContext:
+    engine = make_engine(settings)
+    redis = Redis.from_url(settings.redis_url)
+    return AppContext(
+        settings=settings,
+        engine=engine,
+        session_factory=make_session_factory(engine),
+        redis=redis,
+        cache=RedisSemanticCache(redis, similarity_threshold=settings.cache.similarity_threshold),
+        quality_scores=RedisQualityScoreProvider(redis),
+        secrets=HTTPSecretsClient(settings.dependency_stub_base_url),
+        provider_client=HTTPProviderClient(providers={}),
+    )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings = load_settings()
+    configure_logging(settings.telemetry.log_level)
+    configure_tracing(settings.service_name, settings.telemetry.otlp_endpoint)
+
+    ctx = build_app_context(settings)
+    app.state.ctx = ctx
+
+    logger.info("startup_complete", service=settings.service_name, tenant_id=settings.tenant_id)
+    try:
+        yield
+    finally:
+        await ctx.redis.aclose()
+        await ctx.engine.dispose()
+        logger.info("shutdown_complete")
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="LLM Gateway",
+        version="0.1.0",
+        description="Tectonic Agentic AI Platform — Module 3: the only module permitted to call model "
+        "providers directly. Quality-aware routing, semantic caching, cost governance, failover.",
+        lifespan=lifespan,
+    )
+    app.include_router(completions_router)
+    app.include_router(admin_router)
+
+    @app.get("/healthz")
+    async def healthz() -> Response:
+        ctx: AppContext = app.state.ctx
+        components = {}
+        try:
+            async with ctx.session_factory() as session:
+                await session.execute(text("SELECT 1"))
+            components["postgres"] = "ok"
+        except Exception as e:
+            components["postgres"] = f"degraded: {e}"
+
+        try:
+            await ctx.redis.ping()
+            components["redis"] = "ok"
+        except Exception as e:
+            components["redis"] = f"degraded: {e}"
+
+        overall = "ok" if all(v == "ok" for v in components.values()) else "degraded"
+        status_code = 200 if overall == "ok" else 503
+        return Response(
+            content=json.dumps({"status": overall, "components": components}),
+            media_type="application/json",
+            status_code=status_code,
+        )
+
+    @app.get("/metrics")
+    async def metrics() -> Response:
+        return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+    FastAPIInstrumentor.instrument_app(app)
+    return app
+
+
+app = create_app()

@@ -1,0 +1,61 @@
+image:
+  repository: tectonic/conversational-engine
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 2Gi
+  limits:
+    cpu: "1"
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  # Scale on active session count and turn throughput per the LLD; falls
+  # back to CPU-only scaling if no custom-metrics adapter is installed.
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8081
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  sessionTtlSeconds: 1800
+  emotionScoreThreshold: 0.75
+  streamingProtocol: "sse"
+
+database:
+  url: "postgresql+asyncpg://conversational_engine:conversational_engine@postgres:5432/conversational_engine"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+redis:
+  url: "redis://redis:6379/0"
+
+dependencyStubBaseUrl: ""  # set to a real LLM Gateway / Guardrails / Long-Term Memory / Human Oversight URL once deployed
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8081
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8081
+  initialDelaySeconds: 5
+  periodSeconds: 10

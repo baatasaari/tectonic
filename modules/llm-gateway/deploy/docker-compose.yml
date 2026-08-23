@@ -1,0 +1,62 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# with all model providers mocked, Secrets and Credential Management
+# stubbed to return fake keys, Evaluation Framework's quality feed stubbed
+# with canned scores (defaulted in Redis). Real Redis and Postgres run here.
+name: llm-gateway
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: llm_gateway
+      POSTGRES_PASSWORD: llm_gateway
+      POSTGRES_DB: llm_gateway
+    ports:
+      - "5434:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U llm_gateway"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9103:9103"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      LLM_GATEWAY_DATABASE_URL: postgresql+asyncpg://llm_gateway:llm_gateway@postgres:5432/llm_gateway
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  llm-gateway:
+    build: ..
+    ports:
+      - "8082:8082"
+    environment:
+      LLM_GATEWAY_DATABASE_URL: postgresql+asyncpg://llm_gateway:llm_gateway@postgres:5432/llm_gateway
+      LLM_GATEWAY_REDIS_URL: redis://redis:6379/0
+      LLM_GATEWAY_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9103
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

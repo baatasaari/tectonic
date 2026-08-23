@@ -1,0 +1,58 @@
+image:
+  repository: tectonic/tool-orchestration
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 1Gi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8083
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  circuitBreakerFailureThreshold: 0.5
+  synthesisEnabled: false
+
+database:
+  url: "postgresql+asyncpg://tool_orchestration:tool_orchestration@postgres:5432/tool_orchestration"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+redis:
+  url: "redis://redis:6379/0"
+
+dependencyStubBaseUrl: ""  # set to real LLM Gateway / Guardrails / Sentinel Agents URLs once deployed
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8083
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8083
+  initialDelaySeconds: 5
+  periodSeconds: 10

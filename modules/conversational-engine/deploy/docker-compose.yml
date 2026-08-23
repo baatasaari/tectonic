@@ -1,0 +1,62 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# with LLM Gateway, Guardrails, Long-Term Memory, Human Oversight,
+# Observability and Auditability stubbed. Real Redis and Postgres run here
+# for real.
+name: conversational-engine
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: conversational_engine
+      POSTGRES_PASSWORD: conversational_engine
+      POSTGRES_DB: conversational_engine
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U conversational_engine"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9101:9101"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      CONVERSATIONAL_ENGINE_DATABASE_URL: postgresql+asyncpg://conversational_engine:conversational_engine@postgres:5432/conversational_engine
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  conversational-engine:
+    build: ..
+    ports:
+      - "8081:8081"
+    environment:
+      CONVERSATIONAL_ENGINE_DATABASE_URL: postgresql+asyncpg://conversational_engine:conversational_engine@postgres:5432/conversational_engine
+      CONVERSATIONAL_ENGINE_REDIS_URL: redis://redis:6379/0
+      CONVERSATIONAL_ENGINE_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9101
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
