@@ -59,6 +59,14 @@ src/llm_gateway/
   estimated ceiling is reserved against the budget before the provider call
   (so two concurrent requests can't both slip under a limit that only one
   should), then settled to the real cost once the provider responds.
+- **Postgres integration tests** — the repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  `provider_scope` / `deprecation_notices` JSONB round-tripping, a real UUID
+  primary key, and a multi-row `list_virtual_keys` query that must hit only
+  the intended tenant's rows — all things SQLite's unit-tier fakes can't
+  reliably prove. See `tests/integration/conftest.py` for how the Postgres
+  instance is obtained.
 
 ## Running locally
 

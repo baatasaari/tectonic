@@ -59,6 +59,14 @@ src/data_source_plugins/
   `type_widening` only for a fixed table of safe generalisations
   (int→number, int/number/bool→string) and `breaking` otherwise. Auto-
   adapt then follows `drift.auto_adapt_scope` exactly as configured.
+- **Postgres integration tests** — the repository layer is now also
+  tested against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  JSONB round-tripping of `connection_config`/`schema_diff`, real UUID
+  primary keys, and a multi-row `list_sync_runs` query that must hit
+  only the intended connector's rows — things SQLite's unit-tier fakes
+  can't reliably prove. See `tests/integration/conftest.py` for how the
+  Postgres instance is obtained.
 
 ## Running locally
 

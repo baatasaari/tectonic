@@ -55,6 +55,16 @@ src/human_oversight/
   build sources it from static YAML/env like the rest of this module's
   config, consistent with how other modules in this platform handle
   config not yet backed by dynamic per-tenant storage.
+- **Postgres integration tests** — the repository layer is now also
+  tested against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  nested-dict/list JSONB round-tripping on `context` and the paired
+  `original_agent_proposal`/`human_override_action` columns, a real
+  UUID primary key round trip through `get_request`, and a multi-row
+  filtered query (`list_pending_expired`) hitting only rows matching
+  tenant, status *and* expiry cutoff — none of which SQLite's unit-tier
+  fakes can reliably prove. See `tests/integration/conftest.py` for how
+  the Postgres instance is obtained.
 
 ## Running locally
 

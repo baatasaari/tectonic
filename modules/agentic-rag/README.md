@@ -53,6 +53,13 @@ src/agentic_rag/
   clearing the groundedness threshold, the result returned is the
   best-scoring hop seen, not the last one tried — a partial answer with
   provenance beats silently returning the weakest attempt.
+- **Postgres integration tests** — the repository layer is now also
+  tested against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  nested JSONB round-tripping of `retrieved_items`/`provenance_chain`
+  and real UUID primary keys that SQLite's unit-tier fakes can't
+  reliably prove. See `tests/integration/conftest.py` for how the
+  Postgres instance is obtained.
 
 ## Running locally
 

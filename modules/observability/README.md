@@ -91,6 +91,16 @@ src/observability/
   degraded case" pattern used elsewhere in this platform (e.g.
   Guardrails' ambiguous-jailbreak fallback), rather than surfacing an
   error to a support engineer mid-incident.
+- **Postgres integration tests** — the repository layer is now also
+  tested against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  nested-attribute JSONB round-tripping on `Span.attributes` (mixed
+  ints/floats/lists/nulls) with real `trace_id`/`span_id` values, and two
+  multi-row queries — `list_spans_for_trace`'s tenant+trace filter and
+  `list_traces_for_tenant`'s `DISTINCT` across many spans per trace —
+  hitting only the intended rows, none of which SQLite's unit-tier fakes
+  can reliably prove. See `tests/integration/conftest.py` for how the
+  Postgres instance is obtained.
 
 ## Running locally
 

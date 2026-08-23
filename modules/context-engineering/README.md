@@ -52,6 +52,15 @@ src/context_engineering/
   metadata declares a `policy_tags` entry the tenant's ontology doesn't
   recognise is excluded outright, not merely left untagged — ungoverned
   content shouldn't silently reach the prompt.
+- **Postgres integration tests** — the repository layer is now also
+  tested against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  JSONB list/dict round-tripping (`OntologyConfig`, `PrioritisationWeights.
+  feature_weights`), an upsert that updates rather than duplicates a row,
+  and nested JSONB assembly logs with real UUID primary keys — all things
+  SQLite's unit-tier fakes can't reliably prove. See
+  `tests/integration/conftest.py` for how the Postgres instance is
+  obtained.
 
 ## Running locally
 

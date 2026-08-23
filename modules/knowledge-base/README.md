@@ -65,6 +65,15 @@ src/knowledge_base/
   uploaded `file` or an inline `content_text` form field as the byte
   source, and still records `source_ref`/`source_type` as metadata so the
   data model matches the LLD exactly.
+- **Postgres integration tests** — the repository layer is now also
+  tested against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering a
+  genuine multi-row bulk insert (`create_chunks`) with distinct real
+  UUID primary keys and per-row JSONB `policy_tags` round-tripping, and
+  a multi-table filter (`list_chunks_by_policy_tag`) that must return
+  only the intended chunks — things SQLite's unit-tier fakes can't
+  reliably prove. See `tests/integration/conftest.py` for how the
+  Postgres instance is obtained.
 
 ## Running locally
 

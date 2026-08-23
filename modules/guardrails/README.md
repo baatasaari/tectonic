@@ -71,6 +71,16 @@ src/guardrails/
   this module falls back to an ephemeral profile built directly from its
   own YAML config defaults, so `/check` works immediately without
   requiring a `POST /policy-profiles` call first.
+- **Postgres integration tests.** The repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering JSONB
+  round-tripping across `PolicyProfile`'s three list columns
+  (`enabled_checks`, `pii_entity_types`, `denied_topics`), a real UUID
+  foreign key (`BypassIncident.red_team_run_id`) scoping a multi-row
+  query to only its parent run, and an `ORDER BY ... LIMIT 1` query
+  across multiple candidate rows — none of which SQLite's unit-tier
+  fakes can reliably prove. See `tests/integration/conftest.py` for how
+  the Postgres instance is obtained.
 
 ## Running locally
 

@@ -48,6 +48,16 @@ src/intent_detection/
 - **Privacy by design.** Raw input text is never persisted — only
   `hash_input()`'s SHA-256 hash, per the LLD's `ClassificationLog.input_hash`
   field and its stated rationale.
+- **Postgres integration tests** — the repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  `IntentTaxonomy.intents` / `ClassificationLog.intents_detected` JSONB
+  round-tripping (nested lists-of-dicts, exact float confidence values), a
+  real UUID primary key, and a multi-row `get_taxonomy_by_version`/
+  `get_active_taxonomy` query that must select only the intended
+  tenant+version/status row among several taxonomies — all things SQLite's
+  unit-tier fakes can't reliably prove. See `tests/integration/conftest.py`
+  for how the Postgres instance is obtained.
 
 ## Running locally
 

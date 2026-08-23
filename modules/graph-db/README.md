@@ -52,6 +52,15 @@ src/graph_db/
   implements exactly that structured DSL (`query_type: "neighbours" |
   "path"`) and nothing else — raw Cypher stays out of scope, consistent
   with the LLD's own default-off posture, not a deviation from it.
+- **Postgres integration tests.** The repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  `Node.attributes` JSONB round-tripping, a real UUID primary/foreign key
+  relationship between two nodes and the edge connecting them, and a
+  tenant-scoped multi-row aggregation (`count_edges_by_kind`) — none of
+  which SQLite's unit-tier fakes can reliably prove. See
+  `tests/integration/conftest.py` for how the Postgres instance is
+  obtained.
 
 ## Running locally
 

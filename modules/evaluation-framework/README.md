@@ -96,6 +96,16 @@ src/evaluation_framework/
   access), so that feedback loop is `GET /v1/evaluation-framework/scores`
   being polled by those modules instead — the same data, reached through
   this module's API rather than its storage.
+- **Postgres integration tests** — the repository layer is now also
+  tested against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  `EvalRun.metrics_evaluated` list-order-preserving JSONB round trips, a
+  real UUID primary key round trip through `get_eval_run`, float-type
+  fidelity on `DomainMetricPack.custom_thresholds`, and a multi-row
+  filtered query (`list_metric_scores_for_tenant`) hitting only rows
+  matching both tenant and agent_ref — none of which SQLite's unit-tier
+  fakes can reliably prove. See `tests/integration/conftest.py` for how
+  the Postgres instance is obtained.
 
 ## Running locally
 

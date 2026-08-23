@@ -52,6 +52,15 @@ src/tool_orchestration/
   is enabled (enforced at config load, not just documented). A synthesised
   tool always passes through Guardrails and gets a Sentinel Agents review
   ticket before it can ever be approved.
+- **Postgres integration tests** — the repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering the
+  `ToolDefinition.schema` JSONB round trip, a real UUID primary key, a
+  multi-row `list_tool_definitions` query filtered by tenant and status,
+  and an upsert-style reliability-score update that must touch only the
+  targeted tool's row — all things SQLite's unit-tier fakes can't reliably
+  prove. See `tests/integration/conftest.py` for how the Postgres instance
+  is obtained.
 
 ## Running locally
 

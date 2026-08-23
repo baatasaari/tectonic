@@ -71,6 +71,17 @@ src/sentinel_agents/
   completeness but doesn't persist a per-tenant override in this build —
   configuration is sourced from this module's own YAML/env at startup,
   with `baselining.sensitivity` marked hot-reloadable there.
+- **Postgres integration tests.** The repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  `Alert.agent_refs` JSONB round-tripping, an upsert-style query
+  (`upsert_baseline`) that must update only the one row matching a real
+  multi-column uniqueness constraint (`tenant_id`, `agent_ref`,
+  `action_type`) rather than creating a duplicate, and a multi-row
+  filtered query (`list_alerts` scoped by severity) — none of which
+  SQLite's unit-tier fakes can reliably prove. See
+  `tests/integration/conftest.py` for how the Postgres instance is
+  obtained.
 
 ## Running locally
 
