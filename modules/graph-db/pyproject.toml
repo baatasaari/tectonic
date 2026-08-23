@@ -33,7 +33,7 @@ dev = [
   "respx>=0.21",
   "ruff>=0.7",
   "schemathesis>=3.35",
-  "testcontainers>=4.8",
+  "testcontainers[postgres]>=4.8",
 ]
 
 [build-system]
@@ -46,6 +46,7 @@ packages = ["src/graph_db"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["integration: requires a real Postgres (testcontainers/Docker, or TECTONIC_TEST_POSTGRES_URL)"]
 
 [tool.ruff]
 line-length = 100

@@ -52,6 +52,13 @@ src/conversational_engine/
   per-session turn counters the Handoff Trigger Engine needs (e.g.
   consecutive refusals); Postgres holds the durable session/message/handoff
   history. Losing Redis loses escalation memory, not conversation history.
+- **Postgres integration tests** — the repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering nested
+  `guardrail_check_result` / `tone_settings` / topic-list JSONB
+  round-tripping and real UUID primary keys that SQLite's unit-tier fakes
+  can't reliably prove. See `tests/integration/conftest.py` for how the
+  Postgres instance is obtained.
 
 ## Running locally
 
