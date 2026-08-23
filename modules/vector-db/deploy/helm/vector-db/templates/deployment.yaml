@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-vector-db
+  labels:
+    app.kubernetes.io/name: vector-db
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vector-db
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vector-db
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: vector-db
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8089
+          env:
+            - name: VECTOR_DB_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: VECTOR_DB_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: VECTOR_DB_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: VECTOR_DB_QUERY__HYBRID_SEARCH_DEFAULT
+              value: {{ .Values.config.hybridSearchDefault | quote }}
+            - name: VECTOR_DB_QUERY__DEFAULT_TOP_K
+              value: {{ .Values.config.defaultTopK | quote }}
+            - name: VECTOR_DB_ISOLATION__TENANCY_MODEL
+              value: {{ .Values.config.tenancyModel | quote }}
+            - name: VECTOR_DB_QDRANT__URL
+              value: {{ .Values.qdrant.url | quote }}
+            - name: VECTOR_DB_QDRANT__COLLECTION_ALIAS
+              value: {{ .Values.qdrant.collectionAlias | quote }}
+            - name: VECTOR_DB_QDRANT__DEFAULT_EMBEDDING_MODEL
+              value: {{ .Values.qdrant.defaultEmbeddingModel | quote }}
+            {{- if .Values.dependencyStubBaseUrl }}
+            - name: VECTOR_DB_DEPENDENCY_STUB_BASE_URL
+              value: {{ .Values.dependencyStubBaseUrl | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}

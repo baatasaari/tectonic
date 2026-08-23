@@ -1,0 +1,55 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# with Vector DB and Graph DB stubbed (ingestion, chunking, versioning and
+# policy-tagging correctness tested without a real embedding or graph
+# backend). Real Postgres runs here; raw document bytes are stored on a
+# local volume via FileBlobStorage (see clients/blob_storage.py).
+name: knowledge-base
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: knowledge_base
+      POSTGRES_PASSWORD: knowledge_base
+      POSTGRES_DB: knowledge_base
+    ports:
+      - "5440:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U knowledge_base"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9109:9109"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      KNOWLEDGE_BASE_DATABASE_URL: postgresql+asyncpg://knowledge_base:knowledge_base@postgres:5432/knowledge_base
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  knowledge-base:
+    build: ..
+    ports:
+      - "8088:8088"
+    volumes:
+      - kb-blobs:/data/blobs
+    environment:
+      KNOWLEDGE_BASE_DATABASE_URL: postgresql+asyncpg://knowledge_base:knowledge_base@postgres:5432/knowledge_base
+      KNOWLEDGE_BASE_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9109
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  kb-blobs:

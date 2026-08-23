@@ -1,0 +1,56 @@
+image:
+  repository: tectonic/vector-db
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 2Gi
+  limits:
+    cpu: "2"
+    memory: 2Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8089
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  hybridSearchDefault: true
+  defaultTopK: 10
+  tenancyModel: "shared_collection_with_filter"
+
+qdrant:
+  url: "http://qdrant:6333"  # Qdrant deployed as its own clustered StatefulSet, see the Qdrant Helm chart
+  collectionAlias: "vector_db_points"
+  defaultEmbeddingModel: "text-embedding-3-small"
+
+dependencyStubBaseUrl: ""  # set to a real LLM Gateway URL once deployed
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8089
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8089
+  initialDelaySeconds: 5
+  periodSeconds: 10
