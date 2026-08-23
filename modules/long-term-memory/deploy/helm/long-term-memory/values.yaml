@@ -1,0 +1,57 @@
+image:
+  repository: tectonic/long-term-memory
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 1Gi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8092
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  decayThreshold: 0.2
+  reflectionEnabled: true
+  crossAgentSharingEnabled: false
+  erasureSlaHours: 72
+
+database:
+  url: "postgresql+asyncpg://long_term_memory:long_term_memory@postgres:5432/long_term_memory"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+dependencyStubBaseUrl: ""  # set to real Vector DB/Graph DB/LLM Gateway/Guardrails URLs once deployed
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8092
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8092
+  initialDelaySeconds: 5
+  periodSeconds: 10

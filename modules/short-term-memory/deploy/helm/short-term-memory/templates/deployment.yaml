@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-short-term-memory
+  labels:
+    app.kubernetes.io/name: short-term-memory
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: short-term-memory
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: short-term-memory
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: short-term-memory
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8091
+          env:
+            - name: SHORT_TERM_MEMORY_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: SHORT_TERM_MEMORY_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: SHORT_TERM_MEMORY_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: SHORT_TERM_MEMORY_BUFFER__DEFAULT_TOKEN_BUDGET
+              value: {{ .Values.config.defaultTokenBudget | quote }}
+            - name: SHORT_TERM_MEMORY_BUFFER__SESSION_TTL_SECONDS
+              value: {{ .Values.config.sessionTtlSeconds | quote }}
+            - name: SHORT_TERM_MEMORY_SALIENCE__RETENTION_PRIORITY_THRESHOLD
+              value: {{ .Values.config.retentionPriorityThreshold | quote }}
+            {{- if .Values.dependencyStubBaseUrl }}
+            - name: SHORT_TERM_MEMORY_DEPENDENCY_STUB_BASE_URL
+              value: {{ .Values.dependencyStubBaseUrl | quote }}
+            {{- end }}
+            {{- if .Values.redis.existingSecret }}
+            - name: SHORT_TERM_MEMORY_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.redis.existingSecret }}
+                  key: {{ .Values.redis.existingSecretKey }}
+            {{- else }}
+            - name: SHORT_TERM_MEMORY_REDIS_URL
+              value: {{ .Values.redis.url | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}

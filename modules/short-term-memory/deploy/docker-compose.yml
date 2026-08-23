@@ -1,0 +1,32 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# with LLM Gateway stubbed for the summarisation path. Real Redis runs here.
+name: short-term-memory
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6381:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9112:9112"
+
+  short-term-memory:
+    build: ..
+    ports:
+      - "8091:8091"
+    environment:
+      SHORT_TERM_MEMORY_REDIS_URL: redis://redis:6379/0
+      SHORT_TERM_MEMORY_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9112
+    depends_on:
+      redis:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started

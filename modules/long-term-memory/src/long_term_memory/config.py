@@ -1,0 +1,68 @@
+"""Configuration schema for the Long-Term Memory module (LLD §Level 4
+"Configuration")."""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Literal
+
+import yaml
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ConsolidationConfig(BaseModel):
+    schedule: Literal["hourly", "daily", "weekly"] = "daily"
+    decay_threshold: float = Field(0.2, ge=0.0, le=1.0)  # hot-reloadable
+
+
+class ReflectionConfig(BaseModel):
+    enabled: bool = True  # feature flag
+    trigger_source: str = "evaluation_framework"
+
+
+class CrossAgentSharingConfig(BaseModel):
+    enabled: bool = False  # feature flag, default off, opt-in per tenant
+    visibility_policy_ref: str = ""
+
+
+class ErasureConfig(BaseModel):
+    sla_hours: int = Field(72, gt=0)
+
+
+class TelemetryConfig(BaseModel):
+    otlp_endpoint: str = "http://localhost:4317"
+    log_level: str = "INFO"
+
+
+class LongTermMemorySettings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="LONG_TERM_MEMORY_", env_nested_delimiter="__", extra="forbid")
+
+    tenant_id: str = "default"
+    consolidation: ConsolidationConfig = ConsolidationConfig()
+    reflection: ReflectionConfig = ReflectionConfig()
+    cross_agent_sharing: CrossAgentSharingConfig = CrossAgentSharingConfig()
+    erasure: ErasureConfig = ErasureConfig()
+    telemetry: TelemetryConfig = TelemetryConfig()
+
+    database_url: str = "postgresql+asyncpg://long_term_memory:long_term_memory@localhost:5432/long_term_memory"
+    service_name: str = "long-term-memory"
+    http_port: int = 8092
+    dependency_stub_base_url: str = "http://localhost:9113"
+
+
+_HOT_RELOADABLE = {"consolidation.decay_threshold"}
+
+
+def is_hot_reloadable(path: str) -> bool:
+    return path in _HOT_RELOADABLE
+
+
+def load_settings() -> LongTermMemorySettings:
+    yaml_path = os.environ.get("LONG_TERM_MEMORY_CONFIG_FILE")
+    overrides: dict = {}
+    if yaml_path and Path(yaml_path).is_file():
+        with open(yaml_path) as f:
+            raw = yaml.safe_load(f) or {}
+        overrides = raw.get("long_term_memory", raw)
+    return LongTermMemorySettings(**overrides)

@@ -19,7 +19,10 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 8 — Data Source Plugins | Built — [`modules/data-source-plugins`](modules/data-source-plugins) |
 | 9 — Knowledge Base | Built — [`modules/knowledge-base`](modules/knowledge-base) |
 | 10 — Vector DB | Built — [`modules/vector-db`](modules/vector-db) |
-| 11–34 | Not yet started |
+| 11 — Graph DB | Built — [`modules/graph-db`](modules/graph-db) |
+| 12 — Short-Term Memory | Built — [`modules/short-term-memory`](modules/short-term-memory) |
+| 13 — Long-Term Memory | Built — [`modules/long-term-memory`](modules/long-term-memory) |
+| 14–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -41,6 +44,9 @@ modules/
   data-source-plugins/                   Module 8
   knowledge-base/                          Module 9
   vector-db/                                 Module 10
+  graph-db/                                    Module 11
+  short-term-memory/                             Module 12
+  long-term-memory/                                Module 13
 ```
 
 ## Cross-module integration, once deployed together
@@ -70,6 +76,18 @@ genuinely runs embedded and in-memory with no server process
 (`AsyncQdrantClient(location=":memory:")`), so its "Deployability and
 Testability Contract" is met literally, without a fallback implementation
 to document.
+
+The Memory group closes out this batch: Short-Term Memory (session-
+scoped, Redis-backed) and Long-Term Memory (cross-session, Postgres-
+backed) both sit beneath Conversational Engine and Context Engineering
+for prompt assembly, and Long-Term Memory itself now delegates real
+work to two peers built in this same session — Vector DB for semantic
+memory and Graph DB for procedural memory — via HTTP clients that target
+their actual API surfaces rather than placeholders. That integration
+surfaced a genuine gap worth flagging: Graph DB's own LLD doesn't yet
+define a delete endpoint, so Long-Term Memory's right-to-erasure flow
+treats a Graph DB deletion call as best-effort today (see
+`modules/long-term-memory/README.md`).
 
 ## Modules
 
@@ -164,6 +182,38 @@ available, both via a real Qdrant backend rather than a bolted-together
 substitute. Design doc:
 [`docs/module-10-vector-db.md`](docs/module-10-vector-db.md).
 Build: [`modules/vector-db`](modules/vector-db).
+
+### Module 11: Graph DB
+
+Stores entities and their relationships for graph-based reasoning and
+memory — temporal (valid-from/valid-to) edges so agents can reason about
+"what was true when," and mandatory causal-vs-correlational-vs-structural
+edge typing so no relationship is silently treated as more meaningful
+than it actually is. Design doc:
+[`docs/module-11-graph-db.md`](docs/module-11-graph-db.md).
+Build: [`modules/graph-db`](modules/graph-db).
+
+### Module 12: Short-Term Memory
+
+The working memory for a single active session: a token-budgeted message
+buffer that the Conversational Engine and Context Engineering draw on
+when assembling a prompt. Salience-weighted retention keeps high-value
+content (numbers, commitments, explicit "remember this" cues) verbatim
+through overflow summarisation rather than dropping it just because it
+aged out. Design doc:
+[`docs/module-12-short-term-memory.md`](docs/module-12-short-term-memory.md).
+Build: [`modules/short-term-memory`](modules/short-term-memory).
+
+### Module 13: Long-Term Memory
+
+The durable, cross-session memory store for facts, episodes, semantic
+and procedural knowledge — consolidation and decay keep it from growing
+unbounded, a self-reflection loop lets agents improve from corrected
+interactions without retraining, and a cryptographically provable
+right-to-erasure flow turns GDPR-style forgetting into an auditable,
+on-demand action rather than a manual data-protection project. Design
+doc: [`docs/module-13-long-term-memory.md`](docs/module-13-long-term-memory.md).
+Build: [`modules/long-term-memory`](modules/long-term-memory).
 
 ## Running any module locally
 

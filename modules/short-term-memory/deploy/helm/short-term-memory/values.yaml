@@ -1,0 +1,56 @@
+image:
+  repository: tectonic/short-term-memory
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: 512Mi
+  limits:
+    cpu: "500m"
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8091
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  defaultTokenBudget: 4000
+  sessionTtlSeconds: 1800
+  retentionPriorityThreshold: 0.7
+
+redis:
+  url: "redis://redis:6379/0"
+  existingSecret: ""
+  existingSecretKey: "redis-url"
+
+dependencyStubBaseUrl: ""  # set to a real LLM Gateway URL once deployed
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8091
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8091
+  initialDelaySeconds: 5
+  periodSeconds: 10

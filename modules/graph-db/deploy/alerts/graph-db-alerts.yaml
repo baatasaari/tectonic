@@ -1,0 +1,29 @@
+# Prometheus Alertmanager rule definitions for the Graph DB module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: graph-db
+    rules:
+      - alert: GraphDBQueryLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(graph_db_query_duration_seconds_bucket{traversal_depth_bucket="2-3"}[5m])) by (le)) > 0.1
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 query latency for 2-3 hop traversals above 100ms"
+
+      - alert: GraphDBWriteFailureRateHigh
+        expr: |
+          sum(rate(graph_db_writes_total{outcome="failed"}[15m]))
+            /
+          sum(rate(graph_db_writes_total[15m]))
+          > 0.05
+        labels:
+          severity: critical
+        annotations:
+          summary: "Graph DB write failure rate above 5% over 15 minutes"
+
+      - alert: GraphDBUntypedEdgeRejectionSpike
+        expr: increase(graph_db_writes_total{edge_kind="missing"}[15m]) > 20
+        labels:
+          severity: info
+        annotations:
+          summary: "Sharp rise in edge writes rejected for missing edge_kind — check upstream integrations"

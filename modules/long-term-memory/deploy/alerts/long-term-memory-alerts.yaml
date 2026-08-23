@@ -1,0 +1,35 @@
+# Prometheus Alertmanager rule definitions for the Long-Term Memory
+# module (LLD §Level 4 "Alerting").
+groups:
+  - name: long-term-memory
+    rules:
+      - alert: LTMErasureRequestFailing
+        expr: increase(ltm_erasure_requests_total{outcome="failed"}[1h]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "An erasure request for tenant {{ $labels.tenant_id }} failed to complete within its SLA window"
+          description: "Compliance-relevant — investigate immediately."
+
+      - alert: LTMRetrievalLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(ltm_retrieval_duration_seconds_bucket[5m])) by (le, tenant_id)) > 0.15
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 retrieval latency for tenant {{ $labels.tenant_id }} above 150ms"
+
+      - alert: LTMConsolidationBacklog
+        expr: |
+          time() - max(ltm_consolidation_runs_total) by (tenant_id) > 172800
+        labels:
+          severity: warning
+        annotations:
+          summary: "Consolidation runs falling behind schedule for tenant {{ $labels.tenant_id }}"
+
+      - alert: LTMReflectionLoopStalled
+        expr: increase(ltm_reflection_entries_total[24h]) == 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "No new ReflectionEntry created for agent {{ $labels.agent_ref }} despite Evaluation Framework flags"
+          description: "May indicate a broken integration."

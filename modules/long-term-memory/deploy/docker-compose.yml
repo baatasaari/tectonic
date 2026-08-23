@@ -1,0 +1,49 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# with Vector DB, Graph DB, LLM Gateway and Evaluation Framework stubbed.
+# Real Postgres runs here for the module's own fact/episode/reflection/
+# deletion-record storage.
+name: long-term-memory
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: long_term_memory
+      POSTGRES_PASSWORD: long_term_memory
+      POSTGRES_DB: long_term_memory
+    ports:
+      - "5442:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U long_term_memory"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9113:9113"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      LONG_TERM_MEMORY_DATABASE_URL: postgresql+asyncpg://long_term_memory:long_term_memory@postgres:5432/long_term_memory
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  long-term-memory:
+    build: ..
+    ports:
+      - "8092:8092"
+    environment:
+      LONG_TERM_MEMORY_DATABASE_URL: postgresql+asyncpg://long_term_memory:long_term_memory@postgres:5432/long_term_memory
+      LONG_TERM_MEMORY_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9113
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
