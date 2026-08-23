@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class FrameworksConfig(BaseModel):
-    enabled: list[str] = ["eu_ai_act", "nist_ai_rmf"]  # per-tenant selection
+    enabled: list[str] = ["eu_ai_act", "nist_ai_rmf", "gdpr"]  # per-tenant selection
 
 
 class EvidenceConfig(BaseModel):

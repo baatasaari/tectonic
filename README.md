@@ -139,6 +139,37 @@ Postgres-backed "other modules poll our API for scores/traces" pattern
 are both explicitly designed to keep working once it exists, documented
 as such in each module's README.
 
+**Post-review corrections to this batch.** Three gaps raised in review of
+Modules 17-19 turned out to be real, not just documentation debt, and are
+fixed as of this batch's latest commit:
+
+1. **GDPR was missing from Regulatory and Compliance's crosswalk table.**
+   Not a deliberate scoping decision — added, mapped against four
+   controls this platform already implements (Long-Term Memory's
+   right-to-erasure flow → Art.17, Guardrails' PII redaction →
+   Art.5(1)(c)/Art.25, Human Oversight's approval queue → Art.22,
+   Auditability's event log → Art.30/Art.5(2)).
+2. **Evaluation Framework's `faithfulness` metric now genuinely uses
+   `deepeval`.** The original build assumed DeepEval was too
+   dependency-heavy for this platform's offline-testable module pattern
+   and reimplemented it as a term-overlap heuristic instead — that
+   assumption was never verified and was wrong (DeepEval installs in
+   seconds, no torch, no local models). `core/deepeval_adapter.py` now
+   wraps the real `deepeval.metrics.FaithfulnessMetric`, routed through
+   this platform's LLM Gateway via a small `DeepEvalBaseLLM` adapter, with
+   the original heuristic kept only as an automatic fallback.
+3. **Distributed tracing didn't actually connect across modules.**
+   Every module already exported real OTel spans, but no module
+   propagated trace context on its *outbound* HTTP calls — so a request
+   touching five modules produced five separately-rooted traces, not one.
+   Every module's `main.py` now also instruments its httpx clients
+   (`HTTPXClientInstrumentor().instrument()`), which injects the standard
+   W3C `traceparent` header FastAPI already knows how to extract on the
+   receiving end. Verified with an isolated reproduction (an
+   `InMemorySpanExporter` capturing a caller span, an httpx client span
+   and a downstream FastAPI server span, all sharing one `trace_id`), not
+   just installed and assumed to work.
+
 ## Modules
 
 ### Module 1: Workflow Engine
@@ -305,7 +336,7 @@ Build: [`modules/human-oversight`](modules/human-oversight).
 
 Maps a single, once-implemented control to the specific clauses it
 satisfies across every regulatory framework a tenant has enabled (EU AI
-Act, NIST AI RMF, ISO 42001, DORA), and generates framework-formatted
+Act, NIST AI RMF, ISO 42001, DORA, GDPR), and generates framework-formatted
 evidence packs — real PDFs — on demand. A config-driven crosswalk table
 makes the "living regulatory feed" claim real: a new framework or
 delegated act is a data change, never a code change, and publishing a new
@@ -319,11 +350,17 @@ Build: [`modules/regulatory-compliance`](modules/regulatory-compliance).
 Scores agent outputs against faithfulness, coherence, tool-trace
 correctness and domain-specific metrics, both as a CI/CD gate
 (`agenteval run --gate`) before deployment and as continuous sampling
-against live production traffic. Own lightweight metric heuristics stand
-in for DeepEval/Ragas, falling back to an LLM Gateway LLM-as-judge call
-for any metric without a local implementation — the same
-multiple-sources-behind-one-interface shape the LLD calls for. Design
-doc: [`docs/module-18-evaluation-framework.md`](docs/module-18-evaluation-framework.md).
+against live production traffic. `faithfulness` is backed by the real
+`deepeval` package (`deepeval.metrics.FaithfulnessMetric`, routed through
+LLM Gateway via a custom `DeepEvalBaseLLM` adapter) — an earlier version
+of this module assumed DeepEval was too heavyweight for this platform's
+build pattern and reimplemented it as a heuristic instead; that
+assumption was wrong and is corrected. `coherence` and
+`tool_trace_correctness` remain local heuristics (no equivalent
+off-the-shelf DeepEval metric), falling back further to an LLM Gateway
+LLM-as-judge call for any metric without a local implementation — the
+same multiple-sources-behind-one-interface shape the LLD calls for.
+Design doc: [`docs/module-18-evaluation-framework.md`](docs/module-18-evaluation-framework.md).
 Build: [`modules/evaluation-framework`](modules/evaluation-framework).
 
 ### Module 19: Observability
@@ -336,7 +373,10 @@ Joiner that reads LLM Gateway's real `gen_ai.usage.*`/`llm_gateway.cost`
 span attributes to show spend alongside performance as one dataset.
 Stores spans in its own Postgres table behind a simplified HTTP ingestion
 endpoint rather than standing up a real Tempo/Mimir/Loki/Grafana stack —
-see its README for why that's the one deviation worth calling out here.
+see its README for why that's the one remaining deviation worth calling
+out here, now that every module in this platform propagates W3C trace
+context on its outbound calls (`HTTPXClientInstrumentor`), closing the
+actual end-to-end distributed tracing gap raised in review.
 Design doc: [`docs/module-19-observability.md`](docs/module-19-observability.md).
 Build: [`modules/observability`](modules/observability).
 

@@ -59,8 +59,15 @@ src/regulatory_compliance/
 - **Crosswalk mapping table.** `core/mapping_data.py` ships a default
   crosswalk covering the controls this platform's other governance
   modules already implement (human oversight, guardrails policy checks,
-  sentinel monitoring, audit logging, workflow confidence-gating) against
-  EU AI Act, NIST AI RMF, ISO 42001 and DORA. `RegulatoryFeedManager`
+  sentinel monitoring, audit logging, workflow confidence-gating, PII
+  redaction, right-to-erasure) against EU AI Act, NIST AI RMF, ISO 42001,
+  DORA **and GDPR**. GDPR was missing from the first cut of this table —
+  a real gap, not a deliberate scoping decision, caught in review — and is
+  now mapped against four controls this platform already implements:
+  Long-Term Memory's provable right-to-erasure flow (Art.17), Guardrails'
+  PII redaction (Art.5(1)(c), Art.25), Human Oversight's approval queue
+  (Art.22, the automated-decision-making safeguard), and Auditability's
+  event log (Art.30, Art.5(2)). `RegulatoryFeedManager`
   reads config-driven mapping data (this file today; `mapping_table_path`
   can point at an operator-supplied YAML file), matching the LLD's
   "living regulatory feed" claim that a new framework or delegated act is

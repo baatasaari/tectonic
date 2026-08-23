@@ -1,7 +1,7 @@
 from evaluation_framework.core.metric_adapters import (
     CoherenceMetric,
-    FaithfulnessMetric,
     FinancialGuidanceComplianceMetric,
+    HeuristicFaithfulnessMetric,
     LLMJudgeMetric,
     ToolTraceCorrectnessMetric,
     resolve_metric,
@@ -9,7 +9,7 @@ from evaluation_framework.core.metric_adapters import (
 
 
 async def test_faithfulness_high_when_output_matches_context(harness):
-    metric = FaithfulnessMetric()
+    metric = HeuristicFaithfulnessMetric()
     score = await metric.compute(
         "the account balance is 500 dollars", {"context": "the account balance is 500 dollars today"}, harness.llm_gateway,
     )
@@ -17,13 +17,13 @@ async def test_faithfulness_high_when_output_matches_context(harness):
 
 
 async def test_faithfulness_zero_when_no_context(harness):
-    metric = FaithfulnessMetric()
+    metric = HeuristicFaithfulnessMetric()
     score = await metric.compute("anything", {}, harness.llm_gateway)
     assert score == 0.0
 
 
 async def test_faithfulness_low_for_unrelated_output(harness):
-    metric = FaithfulnessMetric()
+    metric = HeuristicFaithfulnessMetric()
     score = await metric.compute("bananas are yellow", {"context": "quarterly revenue grew 12 percent"}, harness.llm_gateway)
     assert score < 0.2
 
@@ -82,7 +82,10 @@ async def test_financial_guidance_compliance_neither(harness):
 
 
 async def test_resolve_metric_returns_known_heuristics():
-    assert isinstance(resolve_metric("faithfulness"), FaithfulnessMetric)
+    # metric_adapters' own resolve_metric still returns the heuristic for
+    # "faithfulness" — deepeval_adapter.resolve_metric() is the one that overrides it
+    # with the real DeepEval-backed metric; see test_deepeval_adapter.py.
+    assert isinstance(resolve_metric("faithfulness"), HeuristicFaithfulnessMetric)
     assert isinstance(resolve_metric("coherence"), CoherenceMetric)
     assert isinstance(resolve_metric("tool_trace_correctness"), ToolTraceCorrectnessMetric)
 

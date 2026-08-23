@@ -102,4 +102,42 @@ DEFAULT_MAPPINGS: list[dict[str, Any]] = [
         "clause_references": ["MANAGE-1.3"],
         "mapping_rationale": "Maps to NIST AI RMF's risk-prioritisation-and-response management function.",
     },
+    # GDPR (Regulation (EU) 2016/679) — added after review: an AI platform handling
+    # personal data needs this crosswalked regardless of whether a deployment is
+    # in-scope for the EU AI Act, and this platform already implements controls that
+    # map to it cleanly (Long-Term Memory's provable right-to-erasure flow chief among
+    # them), so leaving it out of the default table was a real gap, not a deliberate
+    # scoping decision.
+    {
+        "control_name": "right_to_erasure",
+        "framework_name": "gdpr",
+        "framework_version": "2016",
+        "clause_references": ["Art.17"],
+        "mapping_rationale": "Long-Term Memory's cryptographically provable forgetting flow satisfies "
+        "Article 17's right to erasure ('right to be forgotten').",
+    },
+    {
+        "control_name": "pii_redaction",
+        "framework_name": "gdpr",
+        "framework_version": "2016",
+        "clause_references": ["Art.5(1)(c)", "Art.25"],
+        "mapping_rationale": "Guardrails' PII detection-and-redaction satisfies Article 5(1)(c)'s data "
+        "minimisation principle and Article 25's data-protection-by-design-and-by-default requirement.",
+    },
+    {
+        "control_name": "human_oversight",
+        "framework_name": "gdpr",
+        "framework_version": "2016",
+        "clause_references": ["Art.22"],
+        "mapping_rationale": "Human Oversight's approval queue satisfies Article 22's safeguard against "
+        "solely-automated decisions with legal or similarly significant effects.",
+    },
+    {
+        "control_name": "audit_logging",
+        "framework_name": "gdpr",
+        "framework_version": "2016",
+        "clause_references": ["Art.30", "Art.5(2)"],
+        "mapping_rationale": "Auditability's immutable event log satisfies Article 30's records-of-processing "
+        "requirement and Article 5(2)'s accountability principle.",
+    },
 ]

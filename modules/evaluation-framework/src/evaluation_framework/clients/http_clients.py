@@ -17,3 +17,8 @@ class HTTPLLMGatewayClient:
         )
         resp.raise_for_status()
         return float(resp.json()["score"])
+
+    async def complete(self, prompt: str) -> str:
+        resp = await self._client.post("/v1/complete", json={"prompt": prompt})
+        resp.raise_for_status()
+        return resp.json()["text"]

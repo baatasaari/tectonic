@@ -1,7 +1,8 @@
 # Deployability and Testability Contract: this module runs and tests fully
-# with LLM Gateway stubbed (for LLM-as-judge calls) and with a direct HTTP
-# fixture in place of live Kafka traffic for the continuous evaluation
-# path. Real Postgres runs here.
+# with LLM Gateway stubbed (for LLM-as-judge calls and the real
+# deepeval.metrics.FaithfulnessMetric's completion calls alike) and with a
+# direct HTTP fixture in place of live Kafka traffic for the continuous
+# evaluation path. Real Postgres runs here.
 name: evaluation-framework
 
 services:

@@ -17,8 +17,9 @@ src/evaluation_framework/
     domain.py                EvalRun/MetricScore/GateResult/DomainMetricPack dataclasses
     ports.py                   Repository, LLM Gateway
     fakes.py                     In-memory implementations of every port, for unit tests
-    similarity.py                  Term-frequency cosine similarity — the FaithfulnessMetric's basis
-    metric_adapters.py               Eval Library Adapters + Domain-Specific Metrics
+    similarity.py                  Term-frequency cosine similarity — the heuristic-fallback's basis
+    metric_adapters.py               Heuristic metrics (coherence, tool-trace, domain packs) + LLM-judge fallback
+    deepeval_adapter.py                Real `deepeval.metrics.FaithfulnessMetric` integration
     evaluator.py                       Orchestrates a metric set against one agent output
     gate_engine.py                      Aggregates MetricScores into a pass/fail GateResult
     sampler.py                           Production Sampler — deterministic hash-based sampling
@@ -32,20 +33,44 @@ src/evaluation_framework/
 
 ## Design notes vs. the LLD
 
-- **Eval library adapters.** The LLD calls for wrapping DeepEval, Ragas
-  and an OpenAI-Evals-compatible format behind one interface. Those
-  libraries pull in heavy dependency trees (transformer model downloads
-  in particular) unsuited to this module's offline unit-test tier.
-  `core/metric_adapters.py` implements `faithfulness` (term-overlap
-  cosine similarity, the same lightweight approach Guardrails' and
-  Agentic RAG's groundedness checks use — a parallel implementation, not
-  shared code), `coherence` (a repetition/redundancy heuristic — a
-  deliberately narrower signal than a real coherence model, documented
-  as such) and `tool_trace_correctness` (error-free-call ratio) as local
-  heuristics behind the same `EvalMetric` protocol a real DeepEval/Ragas
-  adapter would satisfy. Any metric name not in that local registry falls
-  back to an LLM Gateway LLM-as-judge call, preserving the LLD's
-  "multiple metric sources feeding one interface" shape.
+- **Eval library adapters — `faithfulness` is real DeepEval, corrected
+  after review.** The LLD calls for wrapping DeepEval, Ragas and an
+  OpenAI-Evals-compatible format behind one interface. The first version
+  of this module assumed DeepEval "pulls in heavy dependency trees
+  (torch, transformer model downloads) unsuited to this module's offline
+  unit-test tier" and reimplemented faithfulness as a term-overlap
+  heuristic instead of using it — that assumption was never actually
+  verified and turned out to be wrong: `deepeval` installs in a few
+  seconds with ~35 lightweight dependencies (no torch, no local models;
+  its LLM-as-judge calls go through a small `DeepEvalBaseLLM` interface
+  you implement). `core/deepeval_adapter.py` now genuinely wraps the real
+  `deepeval.metrics.FaithfulnessMetric`, via `DeepEvalLLMGatewayModel`
+  routing every one of DeepEval's internal judge calls through this
+  module's own LLM Gateway client — consistent with the platform rule
+  that LLM Gateway is the only module allowed to call a model provider
+  directly. `core/metric_adapters.py`'s original term-overlap
+  implementation (`HeuristicFaithfulnessMetric`) is kept as the automatic
+  fallback when the real DeepEval call fails (LLM Gateway unreachable,
+  unparseable model output) — the same real-call-for-the-common-case,
+  documented-fallback-for-the-degraded-case pattern used elsewhere in
+  this platform. `coherence` and `tool_trace_correctness` remain local
+  heuristics — DeepEval has no equivalent off-the-shelf metric worth
+  wrapping for either. Ragas remains unintegrated; the technique proven
+  here for DeepEval would apply equally to it. Any metric name covered by
+  neither DeepEval nor this local registry falls back to an LLM Gateway
+  LLM-as-judge call, preserving the LLD's "multiple metric sources
+  feeding one interface" shape.
+- **Testing DeepEval offline.** `deepeval`'s metric classes make several
+  internal LLM calls per evaluation (extract truths, extract claims,
+  judge each claim, summarise a reason) using its own prompt templates —
+  real prompts, not a mock of DeepEval itself. The unit tests
+  (`test_deepeval_adapter.py`) and the dependency-stub
+  (`stubs/dependency-stub/app.py`'s `/v1/complete`) both script responses
+  to those exact templates, computing per-claim verdicts from real
+  token-overlap recall against the retrieval context rather than a fixed
+  canned answer — an unfaithful claim genuinely scores lower than a
+  faithful one in these tests, the same as it would against a real
+  backing model.
 - **Domain-specific metrics.** The LLD says these are "ported directly
   from AgentEval's existing custom metrics" — that codebase isn't
   available in this build environment, so `financial_guidance_compliance`

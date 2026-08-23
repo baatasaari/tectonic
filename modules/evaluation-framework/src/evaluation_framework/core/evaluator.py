@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from evaluation_framework.core.deepeval_adapter import resolve_metric
 from evaluation_framework.core.domain import (
     EvalRunRecord,
     EvalRunStatus,
@@ -13,7 +14,6 @@ from evaluation_framework.core.domain import (
     new_id,
     now,
 )
-from evaluation_framework.core.metric_adapters import resolve_metric
 from evaluation_framework.core.ports import EvaluationFrameworkRepository, LLMGatewayClient
 from evaluation_framework.telemetry.logging import get_logger
 

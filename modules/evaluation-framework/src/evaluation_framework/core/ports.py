@@ -39,3 +39,9 @@ class LLMGatewayClient(Protocol):
         """LLM-as-judge fallback for a metric with no local heuristic implementation.
         Returns a 0.0-1.0 score."""
         ...
+
+    async def complete(self, prompt: str) -> str:
+        """Raw text completion — the primitive DeepEval's real metric classes need
+        (core/deepeval_adapter.py), since DeepEval's own prompt templates already embed
+        the schema/format instructions and just need a text-in/text-out call."""
+        ...

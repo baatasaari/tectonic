@@ -32,6 +32,30 @@ src/observability/
 
 ## Design notes vs. the LLD
 
+- **End-to-end distributed trace propagation — added after review, not a
+  pre-existing feature.** Ingesting spans into one Postgres table isn't
+  what makes tracing "end-to-end": until this fix, every module's
+  outbound HTTP calls to a peer module carried no trace context, so
+  `FastAPIInstrumentor` on the receiving side always started a *new* root
+  trace — a request touching five modules produced five disconnected
+  traces, not one. Every module's `main.py` now also calls
+  `HTTPXClientInstrumentor().instrument()` alongside the existing
+  `FastAPIInstrumentor.instrument_app(app)`, which is what actually closes
+  the gap: it injects a W3C `traceparent` header into every outbound
+  `httpx` call platform-wide (not just this module's own client), and
+  `FastAPIInstrumentor` already extracts that header on the receiving
+  side by default. Verified directly, not just installed: an isolated
+  reproduction (one `httpx.AsyncClient` instrumented the same way, one
+  downstream FastAPI app instrumented the same way, an
+  `InMemorySpanExporter` capturing every span) shows the caller span, the
+  httpx client span, and the downstream server span all carrying the
+  identical `trace_id` — genuine cross-process trace continuity, not
+  three separately-rooted traces that merely look related. This is a
+  platform-wide fix (every one of the 19 modules built so far carries
+  it), not something local to this module — Observability's own
+  ingestion endpoint is a separate, still-real deviation (see below);
+  what those spans look like *before* they reach this module's
+  ingestion endpoint is what changed here.
 - **The Grafana/Tempo/Mimir/Loki stack.** This is the one deviation that
   matters in this module: the LLD's storage/query layer is Grafana
   Tempo (traces), Mimir/Prometheus (metrics) and Loki (logs), fronted by

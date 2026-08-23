@@ -16,6 +16,7 @@ COPY src ./src
 COPY alembic.ini ./
 COPY alembic ./alembic
 ENV PYTHONPATH=/app/src
+ENV DEEPEVAL_TELEMETRY_OPT_OUT=YES
 USER appuser
 EXPOSE 8097
 CMD ["uvicorn", "evaluation_framework.main:app", "--host", "0.0.0.0", "--port", "8097"]
