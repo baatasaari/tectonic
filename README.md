@@ -35,6 +35,59 @@ subtree under `modules/`, own README, own CI-shaped test tiers), then
 integrated. See a module's low-level design doc under `docs/` before
 building against it.
 
+## Enterprise-readiness hardening
+
+A dedicated review pass across all 19 built modules — gaps, technical
+depth, edge cases, and custom code that open-source frameworks could
+replace — is landing as a series of independent, foundational-risk-first
+branches/PRs, each scoped to one concern so it can be reviewed and merged
+on its own:
+
+| # | Branch | Scope | Status |
+|---|---|---|---|
+| 1 | `claude/resiliency-retries` | Retries + circuit breakers on every outbound HTTP call | Built — separate PR |
+| 2 | `claude/postgres-integration-tests` | Repository layer tested against a real Postgres, not just SQLite | Built — separate PR |
+| 3 | `claude/durable-background-jobs` | Module 17's evidence-pack generation surviving a pod restart | Built — separate PR |
+| 4 | `claude/pooling-and-pagination` | Connection pooling tuned to Helm replica counts + pagination on list endpoints | Built (this branch) |
+| 5 | CI/CD pipeline | Lint + test gating via GitHub Actions | Not started |
+| 6 | JWT bearer auth | Shared-signing-key service-to-service auth (final, dedicated push) | Not started |
+
+**This branch (4/6), two parts:**
+
+- **Connection pooling.** SQLAlchemy's out-of-the-box async engine
+  defaults (`pool_size=5`, `max_overflow=10`) applied identically
+  everywhere regardless of how many pods are actually running — at each
+  module's own Helm chart's `autoscaling.maxReplicas` (10/20/30
+  depending on the module), that meant up to 150–450 connections to a
+  single module's own Postgres instance from that module alone at full
+  autoscale, with no one having deliberately decided the number. Across
+  all 17 Postgres-backed modules, `db/session.py`'s `make_engine` now
+  passes explicit `pool_size`/`max_overflow`/`pool_timeout`/
+  `pool_recycle`, computed per module from its own `maxReplicas` so
+  steady-state stays around 100 connections and full-burst around 150
+  even at max autoscale, plus `pool_recycle=1800s` everywhere to avoid
+  stale connections behind a cloud LB/proxy's own idle timeout — a real,
+  independent gap. All four values are now env-overridable Settings
+  fields, with a regression test per module asserting `make_engine`
+  actually applies them.
+- **Pagination.** Audited every list-returning API endpoint platform-wide
+  (15 found across 12 modules); added `limit`/`offset` query params
+  (default 50, max 200) and a `<Resource>ListResponse` envelope
+  (`items`/`total`/`limit`/`offset`) to the ones that were genuinely
+  unbounded growing lists. A handful were deliberately left unpaginated
+  — llm-gateway's `GET /providers` (a small, fixed, admin-configured
+  set) and long-term-memory's `POST /query` (already bounded via its own
+  `top_k` ranking) — each justified in a code comment and its module's
+  README, not silently skipped. Where a list method is also called
+  internally by core logic needing the *complete* set (regulatory-
+  compliance's crosswalk/coverage calculation, workflow-engine's
+  instance-detail view embedding its full step list), those call sites
+  pass an effectively-unbounded internal page size rather than silently
+  truncating to the API's default page.
+
+Full regression: all 19 modules' unit tiers green, 517 tests total, ruff
+clean across every touched module.
+
 ## Repository layout
 
 ```
