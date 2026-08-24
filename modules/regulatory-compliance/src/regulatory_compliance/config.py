@@ -18,6 +18,10 @@ class FrameworksConfig(BaseModel):
 class EvidenceConfig(BaseModel):
     output_format: Literal["pdf", "json"] = "pdf"
     auto_generation_schedule: str | None = None  # e.g. "monthly", null means on-demand only
+    # Durable evidence-pack worker (core/evidence_worker.py) — see its module docstring.
+    worker_poll_interval_seconds: float = 2.0
+    worker_lease_seconds: int = 120
+    worker_max_attempts: int = 3
 
 
 class TelemetryConfig(BaseModel):

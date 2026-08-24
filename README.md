@@ -35,6 +35,46 @@ subtree under `modules/`, own README, own CI-shaped test tiers), then
 integrated. See a module's low-level design doc under `docs/` before
 building against it.
 
+## Enterprise-readiness hardening
+
+A dedicated review pass across all 19 built modules — gaps, technical
+depth, edge cases, and custom code that open-source frameworks could
+replace — is landing as a series of independent, foundational-risk-first
+branches/PRs, each scoped to one concern so it can be reviewed and merged
+on its own:
+
+| # | Branch | Scope | Status |
+|---|---|---|---|
+| 1 | `claude/resiliency-retries` | Retries + circuit breakers on every outbound HTTP call | Built — separate PR |
+| 2 | `claude/postgres-integration-tests` | Repository layer tested against a real Postgres, not just SQLite | Built — separate PR |
+| 3 | `claude/durable-background-jobs` | Module 17's evidence-pack generation surviving a pod restart | Built (this branch) |
+| 4 | Connection pooling + pagination | Pool sizing tuned to Helm replica counts; pagination on list endpoints | Not started |
+| 5 | CI/CD pipeline | Lint + test gating via GitHub Actions | Not started |
+| 6 | JWT bearer auth | Shared-signing-key service-to-service auth (final, dedicated push) | Not started |
+
+**This branch (3/6):** Module 17 (Regulatory and Compliance)'s
+evidence-pack generation used to run as an in-process FastAPI
+`BackgroundTasks` job — genuine async work, but non-durable: a pod
+restart between the `202 Accepted` response and the background task
+finishing left the pack permanently stuck at `status=generating`, with
+nothing else ever picking the job back up. Fixed with a Postgres-backed
+job queue (`core/evidence_worker.py`'s `EvidencePackWorker`), reusing the
+`evidence_packs` table itself as the queue: an asyncio poll loop claims
+pending packs via `SELECT ... FOR UPDATE SKIP LOCKED`, so multiple worker
+instances/pods can poll the same table concurrently without ever
+double-claiming a row; each claim gets a time-bounded lease so a crash
+mid-generation is recovered automatically once the lease expires, with no
+separate liveness check; a startup recovery sweep force-expires every
+held lease immediately so anything left mid-flight by a now-dead previous
+process instance is reclaimed on the very next poll tick; and a
+transient generation failure is requeued for retry, with a
+`worker_max_attempts` ceiling so a permanently-broken job stops being
+retried forever instead of spinning indefinitely. The one property here
+that neither SQLite nor an in-memory fake can prove for real —
+concurrent claims never double-claiming the same row — is proven against
+a genuine Postgres instance in
+`modules/regulatory-compliance/tests/integration/test_evidence_worker_postgres.py`.
+
 ## Repository layout
 
 ```

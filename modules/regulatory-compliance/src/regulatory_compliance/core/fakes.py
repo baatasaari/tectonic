@@ -4,11 +4,15 @@ independent of any other module).
 """
 from __future__ import annotations
 
+from datetime import timedelta
+
 from regulatory_compliance.core.domain import (
     ControlImplementationEventRecord,
     ControlMappingRecord,
     EvidencePackRecord,
+    EvidencePackStatus,
     FrameworkProfileRecord,
+    now,
 )
 
 
@@ -87,6 +91,49 @@ class InMemoryRegulatoryComplianceRepository:
         if pack is None or pack.tenant_id != tenant_id:
             return None
         return pack
+
+    async def claim_next_evidence_pack(self, worker_id: str, lease_seconds: int) -> EvidencePackRecord | None:
+        moment = now()
+        candidates = sorted(
+            (
+                p for p in self.evidence_packs.values()
+                if p.status == EvidencePackStatus.GENERATING
+                and (p.lease_expires_at is None or p.lease_expires_at < moment)
+            ),
+            key=lambda p: p.created_at,
+        )
+        if not candidates:
+            return None
+        pack = candidates[0]
+        pack.worker_id = worker_id
+        pack.attempts += 1
+        pack.lease_expires_at = moment + timedelta(seconds=lease_seconds)
+        return pack
+
+    async def requeue_evidence_pack_for_retry(self, pack_id: str) -> None:
+        pack = self.evidence_packs.get(pack_id)
+        if pack is None:
+            return
+        pack.status = EvidencePackStatus.GENERATING
+        pack.lease_expires_at = None
+
+    async def fail_exhausted_evidence_packs(self, max_attempts: int) -> int:
+        count = 0
+        for p in self.evidence_packs.values():
+            if p.status == EvidencePackStatus.GENERATING and p.attempts >= max_attempts:
+                p.status = EvidencePackStatus.FAILED
+                p.last_error = f"exceeded max attempts ({max_attempts})"
+                count += 1
+        return count
+
+    async def force_expire_stale_leases(self) -> int:
+        moment = now()
+        count = 0
+        for p in self.evidence_packs.values():
+            if p.status == EvidencePackStatus.GENERATING and p.lease_expires_at is not None and p.lease_expires_at > moment:
+                p.lease_expires_at = moment
+                count += 1
+        return count
 
 
 class StubAuditabilityClient:

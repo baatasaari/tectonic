@@ -71,6 +71,8 @@ class EvidencePackSchema(BaseModel):
     document_format: str
     document_bytes_b64: str | None = None
     created_at: datetime
+    attempts: int
+    last_error: str | None = None
 
 
 class CoverageResponse(BaseModel):
