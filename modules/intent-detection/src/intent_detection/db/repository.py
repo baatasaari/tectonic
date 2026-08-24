@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from intent_detection.core.domain import (
@@ -116,6 +116,20 @@ class SQLAlchemyIntentRepository:
         await self.session.refresh(m)
         return _drift_to_domain(m)
 
-    async def list_drift_reports(self, tenant_id: str) -> list[DriftReportRecord]:
-        rows = await self.session.execute(select(models.DriftReport).where(models.DriftReport.tenant_id == tenant_id))
-        return [_drift_to_domain(m) for m in rows.scalars().all()]
+    async def list_drift_reports(
+        self, tenant_id: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[DriftReportRecord], int]:
+        where_clause = models.DriftReport.tenant_id == tenant_id
+        total_rows = await self.session.execute(
+            select(func.count(models.DriftReport.id)).where(where_clause)
+        )
+        total = total_rows.scalar_one()
+
+        rows = await self.session.execute(
+            select(models.DriftReport)
+            .where(where_clause)
+            .order_by(models.DriftReport.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_drift_to_domain(m) for m in rows.scalars().all()], total

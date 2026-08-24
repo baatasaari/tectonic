@@ -66,8 +66,13 @@ class InMemoryIntentRepository:
         self.drift_reports.append(copy.deepcopy(record))
         return copy.deepcopy(record)
 
-    async def list_drift_reports(self, tenant_id: str) -> list[DriftReportRecord]:
-        return [copy.deepcopy(r) for r in self.drift_reports if r.tenant_id == tenant_id]
+    async def list_drift_reports(
+        self, tenant_id: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[DriftReportRecord], int]:
+        matching = [r for r in self.drift_reports if r.tenant_id == tenant_id]
+        matching.sort(key=lambda r: r.created_at, reverse=True)
+        sliced = [copy.deepcopy(r) for r in matching[offset : offset + limit]]
+        return sliced, len(matching)
 
 
 class StubLLMGatewayClient:

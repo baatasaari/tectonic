@@ -19,6 +19,7 @@ from intent_detection.schemas.intents import (
     ClassifyResponse,
     CreateTaxonomyRequest,
     DetectedIntentSchema,
+    DriftReportListResponse,
     DriftReportSchema,
     TaxonomySummary,
 )
@@ -82,17 +83,24 @@ async def activate_taxonomy(
     return ActivateTaxonomyResponse(status=record.status.value)
 
 
-@router.get("/drift-reports", response_model=list[DriftReportSchema])
+@router.get("/drift-reports", response_model=DriftReportListResponse)
 async def list_drift_reports(
     tenant_id: str,
     date_range: str | None = Query(None, description="Reserved for future filtering; not yet enforced"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     repository: IntentRepository = Depends(get_repository),
-) -> list[DriftReportSchema]:
-    reports = await repository.list_drift_reports(tenant_id)
-    return [
-        DriftReportSchema(
-            id=r.id, taxonomy_version=r.taxonomy_version, drift_score=r.drift_score,
-            flagged_intents=r.flagged_intents, created_at=r.created_at,
-        )
-        for r in reports
-    ]
+) -> DriftReportListResponse:
+    reports, total = await repository.list_drift_reports(tenant_id, limit=limit, offset=offset)
+    return DriftReportListResponse(
+        items=[
+            DriftReportSchema(
+                id=r.id, taxonomy_version=r.taxonomy_version, drift_score=r.drift_score,
+                flagged_intents=r.flagged_intents, created_at=r.created_at,
+            )
+            for r in reports
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
