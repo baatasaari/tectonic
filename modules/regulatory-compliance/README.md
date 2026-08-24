@@ -24,6 +24,7 @@ src/regulatory_compliance/
     crosswalk_engine.py           Crosswalk Engine + Coverage Calculator
     regulatory_feed.py             Regulatory Feed Manager — publishes/deprecates mapping-table versions
     evidence_generator.py           Evidence Pack Generator — real PDF (fpdf2) or JSON output
+    evidence_worker.py               Durable evidence-pack worker — SELECT FOR UPDATE SKIP LOCKED poll loop
   db/                      SQLAlchemy 2.0 async models + repository
   clients/                 HTTP client for Auditability
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
@@ -52,12 +53,30 @@ src/regulatory_compliance/
   available," never as a reason to fail generation, since this module's
   own `ControlImplementationEvent` rows remain the evidence source of
   record either way.
-- **Async evidence generation.** Implemented as a real FastAPI
-  `BackgroundTasks` job (not a queue/worker deployment) — `POST
-  /evidence-packs` returns immediately with `status=generating`, and the
-  background job opens its own DB session (the request-scoped one is
-  already torn down by the time background tasks run) before flipping
-  the record to `completed` or `failed`.
+- **Async evidence generation — durable, not in-process.** `POST
+  /evidence-packs` returns immediately with `status=generating`; that
+  record IS the queue entry. This used to be a real FastAPI
+  `BackgroundTasks` job — genuine async work, but non-durable: a pod
+  restart between the 202 response and the background task finishing
+  left the pack stuck at `status=generating` forever, since nothing else
+  would ever pick it back up. Fixed by `core/evidence_worker.py`'s
+  `EvidencePackWorker`: an asyncio poll loop (started in `main.py`'s
+  lifespan) claiming pending packs via a real Postgres `SELECT ... FOR
+  UPDATE SKIP LOCKED` query, so multiple worker instances/pods can poll
+  the same table concurrently without ever double-claiming a row. Each
+  claim gets a time-bounded lease; a worker that crashes mid-generation
+  simply lets that lease expire, and the next poll (from any instance)
+  reclaims the job — no separate liveness check needed. A startup
+  recovery sweep force-expires every held lease immediately, so anything
+  left mid-flight by a now-dead previous process instance is reclaimed
+  on the very next poll tick rather than waiting out its lease. A
+  generation failure with attempts remaining is requeued for retry;
+  once `evidence.worker_max_attempts` is exhausted the pack is marked
+  `failed` for good (`last_error` explains why) instead of being retried
+  forever. See `tests/integration/test_evidence_worker_postgres.py` for
+  the concurrency property this actually depends on, proven against a
+  real Postgres — `FOR UPDATE SKIP LOCKED` can't be meaningfully tested
+  against SQLite or an in-memory fake.
 - **Crosswalk mapping table.** `core/mapping_data.py` ships a default
   crosswalk covering the controls this platform's other governance
   modules already implement (human oversight, guardrails policy checks,

@@ -75,6 +75,13 @@ class EvidencePackRecord:
     document_format: str = "pdf"
     document_bytes_b64: str | None = None
     created_at: datetime = field(default_factory=now)
+    # Durable job-queue fields (LLD gap fix: generation used to run as a FastAPI
+    # BackgroundTasks job, so a pod restart mid-generation lost the job forever with
+    # the record stuck at status=generating). See core/evidence_worker.py.
+    worker_id: str | None = None
+    lease_expires_at: datetime | None = None
+    attempts: int = 0
+    last_error: str | None = None
 
 
 @dataclass
