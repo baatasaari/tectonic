@@ -18,6 +18,7 @@ from short_term_memory.clients.http_clients import HTTPLLMGatewayClient
 from short_term_memory.clients.redis_buffer_store import RedisBufferStore
 from short_term_memory.config import ShortTermMemorySettings, load_settings
 from short_term_memory.core.buffer_manager import BufferManager
+from short_term_memory.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from short_term_memory.telemetry.logging import configure_logging, get_logger
 from short_term_memory.telemetry.tracing import configure_tracing
 
@@ -27,7 +28,10 @@ logger = get_logger(component="main")
 def build_app_context(settings: ShortTermMemorySettings, *, redis: Redis | None = None) -> AppContext:
     redis = redis or Redis.from_url(settings.redis_url)
     buffer_manager = BufferManager(
-        RedisBufferStore(redis), HTTPLLMGatewayClient(settings.dependency_stub_base_url),
+        RedisBufferStore(redis), HTTPLLMGatewayClient(
+            settings.dependency_stub_base_url, issuer=settings.service_name,
+            shared_secret=settings.jwt_shared_secret, ttl_seconds=settings.jwt_ttl_seconds,
+        ),
         settings.buffer, settings.salience,
     )
     return AppContext(settings=settings, redis=redis, buffer_manager=buffer_manager)
@@ -35,9 +39,15 @@ def build_app_context(settings: ShortTermMemorySettings, *, redis: Redis | None 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = load_settings()
+    settings: ShortTermMemorySettings = app.state.settings
     configure_logging(settings.telemetry.log_level)
     configure_tracing(settings.service_name, settings.telemetry.otlp_endpoint)
+
+    if settings.jwt_shared_secret == INSECURE_DEFAULT_SECRET:
+        logger.warning(
+            "jwt_shared_secret_is_insecure_default",
+            hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
+        )
 
     ctx = build_app_context(settings)
     app.state.ctx = ctx
@@ -51,12 +61,18 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = load_settings()
+
     app = FastAPI(
         title="Short-Term Memory",
         version="0.1.0",
         description="Tectonic Agentic AI Platform — Module 12: token-budgeted session buffer "
         "with salience-weighted retention.",
         lifespan=lifespan,
+    )
+    app.state.settings = settings
+    app.add_middleware(
+        ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )
     app.include_router(sessions_router)
 

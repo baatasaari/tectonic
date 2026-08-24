@@ -27,6 +27,7 @@ src/llm_gateway/
     deprecation_watcher.py               Model Deprecation Watcher
   db/                      SQLAlchemy 2.0 async models + repository
   clients/                 HTTP provider adapter, Redis quality-score store, Secrets client
+  security/                 Service-to-service JWT bearer auth (shared signing key)
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI routers — OpenAI-compatible completions/embeddings, admin
   schemas/                    Pydantic request/response models
@@ -59,6 +60,31 @@ src/llm_gateway/
   estimated ceiling is reserved against the budget before the provider call
   (so two concurrent requests can't both slip under a limit that only one
   should), then settled to the real cost once the provider responds.
+- **Service-to-service JWT auth.** Before this, no module authenticated
+  any of its inbound HTTP calls — any process able to reach a module's
+  port could call it, and every outbound call this module makes to a
+  platform peer carried no credential at all. `security/jwt_auth.py` adds
+  shared-signing-key (HS256) bearer auth: `ServiceAuthMiddleware` verifies
+  every inbound request's `Authorization: Bearer <JWT>` against this
+  module's own `service_name` as the required audience (except
+  `/healthz` and `/metrics` — Kubernetes probes and Prometheus scraping
+  carry no auth token); `ServiceBearerAuth` (an `httpx.Auth` flow) mints a
+  fresh, short-lived (5 min default) token scoped via the `aud` claim to
+  the *specific* peer being called on every outbound request
+  `HTTPSecretsClient` makes to Secrets and Credential Management (not yet
+  built in this platform — same aspirational-target pattern used
+  elsewhere) — a token minted to call one peer is rejected if replayed
+  against a different one. `HTTPProviderClient` is deliberately excluded:
+  it calls real external LLM provider APIs, not a platform peer, and
+  those already authenticate via their own API keys. The shared secret
+  (`TECTONIC_JWT_SHARED_SECRET`, one Kubernetes Secret referenced by
+  every module's Helm chart under this same literal env var name, not a
+  per-module-prefixed one) defaults to an obviously-insecure placeholder
+  for zero-config local dev/tests; `main.py` logs a startup warning if
+  it's still active. This is service-to-service auth for inter-module
+  calls, not the platform's external-facing user-auth story — a real API
+  gateway/OAuth layer in front of the platform's own entry points is a
+  separate, larger concern, out of scope here.
 
 ## Running locally
 

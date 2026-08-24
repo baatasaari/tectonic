@@ -28,8 +28,14 @@ class HTTPLLMGatewayClient:
 
 
 class HTTPGuardrailsClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="guardrails", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0, auth=auth)
 
     async def check(
         self, *, content: dict[str, Any], policy_profile: str, tenant_id: str
@@ -43,8 +49,14 @@ class HTTPGuardrailsClient:
 
 
 class HTTPSentinelAgentsClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="sentinel-agents", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0, auth=auth)
 
     async def submit_for_review(self, *, tool_id: str, proposed_schema: dict[str, Any], tenant_id: str) -> str:
         resp = await self._client.post(

@@ -16,6 +16,10 @@ from evaluation_framework.clients.http_clients import HTTPLLMGatewayClient
 from evaluation_framework.config import EvaluationFrameworkSettings, load_settings
 from evaluation_framework.core.sampler import ProductionSampler
 from evaluation_framework.db.session import make_engine, make_session_factory
+from evaluation_framework.security.jwt_auth import (
+    INSECURE_DEFAULT_SECRET,
+    ServiceAuthMiddleware,
+)
 from evaluation_framework.telemetry.logging import configure_logging, get_logger
 from evaluation_framework.telemetry.tracing import configure_tracing
 
@@ -29,16 +33,25 @@ def build_app_context(settings: EvaluationFrameworkSettings) -> AppContext:
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
-        llm_gateway=HTTPLLMGatewayClient(dep_url),
+        llm_gateway=HTTPLLMGatewayClient(
+            dep_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
         sampler=ProductionSampler(settings.production_sampling.sample_rate),
     )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = load_settings()
+    settings: EvaluationFrameworkSettings = app.state.settings
     configure_logging(settings.telemetry.log_level)
     configure_tracing(settings.service_name, settings.telemetry.otlp_endpoint)
+
+    if settings.jwt_shared_secret == INSECURE_DEFAULT_SECRET:
+        logger.warning(
+            "jwt_shared_secret_is_insecure_default",
+            hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
+        )
 
     ctx = build_app_context(settings)
     app.state.ctx = ctx
@@ -52,12 +65,18 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = load_settings()
+
     app = FastAPI(
         title="Evaluation Framework",
         version="0.1.0",
         description="Tectonic Agentic AI Platform — Module 18: faithfulness, coherence and "
         "tool-trace scoring, as both a CI/CD gate and continuous production evaluation.",
         lifespan=lifespan,
+    )
+    app.state.settings = settings
+    app.add_middleware(
+        ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )
     app.include_router(evalfw_router)
 

@@ -31,6 +31,7 @@ from human_oversight.core.domain import (
     new_id,
     now,
 )
+from human_oversight.security.jwt_auth import ServiceBearerAuth, mint_service_token
 from human_oversight.telemetry.logging import get_logger
 
 logger = get_logger(component="http_clients")
@@ -122,15 +123,42 @@ class SMTPNotificationChannel:
 
 
 class HTTPDecisionCallbackDispatcher:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
+    """Unlike every other HTTP client in this module (and this platform),
+    this one's target audience isn't known at construction time: `notify()`
+    calls back to whichever `requesting_module` raised the original
+    oversight request, a value that varies per call. That rules out the
+    usual construction-time `ServiceBearerAuth` (an `httpx.Auth` bound to
+    one fixed `audience`) — instead, a fresh token scoped to that specific
+    call's target is minted inline, per call, in `notify()` itself.
+    """
+
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
         self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0)
+        self._issuer = issuer
+        self._shared_secret = shared_secret
+        self._ttl_seconds = ttl_seconds
 
     async def notify(self, requesting_module: str, requesting_ref: str, decision: DecisionRecord) -> None:
+        headers = {}
+        if self._issuer:
+            # Kebab-case the target module name to match this platform's
+            # service-name convention (e.g. "workflow_engine" -> "workflow-engine").
+            audience = requesting_module.replace("_", "-")
+            token = mint_service_token(
+                issuer=self._issuer, audience=audience,
+                shared_secret=self._shared_secret, ttl_seconds=self._ttl_seconds,
+            )
+            headers["Authorization"] = f"Bearer {token}"
+
         if requesting_module == "workflow_engine" and ":" in requesting_ref:
             instance_id, approval_id = requesting_ref.split(":", 1)
             resp = await self._client.post(
                 f"/v1/workflow-engine/instances/{instance_id}/approvals/{approval_id}/callback",
                 json={"decision": decision.decision.value, "resolved_by": decision.decided_by},
+                headers=headers,
             )
             resp.raise_for_status()
             return
@@ -139,6 +167,7 @@ class HTTPDecisionCallbackDispatcher:
             resp = await self._client.post(
                 f"/v1/{requesting_module}/oversight-callback",
                 json={"requesting_ref": requesting_ref, "decision": decision.decision.value, "decided_by": decision.decided_by},
+                headers=headers,
             )
             resp.raise_for_status()
         except httpx.HTTPError as e:
@@ -146,8 +175,14 @@ class HTTPDecisionCallbackDispatcher:
 
 
 class HTTPAuditabilityClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=5.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="auditability", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=5.0, auth=auth)
 
     async def emit(self, event: dict) -> None:
         await self._client.post("/v1/auditability/events", json=event)

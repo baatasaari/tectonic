@@ -24,6 +24,7 @@ src/human_oversight/
     decision_capture.py             Decision Capture + Override Logger — decide, callback, audit
   db/                      SQLAlchemy 2.0 async models + repository
   clients/                 Real notification channel adapters (Slack/Teams/webhook/SMTP) + callback dispatcher
+  security/                 Service-to-service JWT bearer auth (shared signing key)
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — requests, claim, decide
   schemas/                    Pydantic request/response models
@@ -55,6 +56,36 @@ src/human_oversight/
   build sources it from static YAML/env like the rest of this module's
   config, consistent with how other modules in this platform handle
   config not yet backed by dynamic per-tenant storage.
+- **Service-to-service JWT auth.** Before this, no module authenticated
+  any of its inbound HTTP calls — any process able to reach a module's
+  port could call it, and every outbound call this module makes carried
+  no credential at all. `security/jwt_auth.py` adds shared-signing-key
+  (HS256) bearer auth: `ServiceAuthMiddleware` verifies every inbound
+  request's `Authorization: Bearer <JWT>` against this module's own
+  `service_name` as the required audience (except `/healthz` and
+  `/metrics` — Kubernetes probes and Prometheus scraping carry no auth
+  token). `ServiceBearerAuth` (an `httpx.Auth` flow) mints a fresh,
+  short-lived (5 min default) token scoped via the `aud` claim to the
+  *specific* peer being called on outbound requests `HTTPAuditabilityClient`
+  makes, the same fixed-audience-at-construction pattern used everywhere
+  else in this platform. `HTTPDecisionCallbackDispatcher` is the one
+  exception: its callback target (`requesting_module`) is only known per
+  call, not at construction time — a request originating from Workflow
+  Engine gets called back differently from one originating from Sentinel
+  Agents, decided fresh on every `notify()` call — so it can't bind to one
+  fixed `ServiceBearerAuth`. Instead it mints its own token inline inside
+  `notify()`, scoping the `aud` claim to that call's `requesting_module`
+  (kebab-cased to match this platform's service-name convention, e.g.
+  `"workflow_engine"` -> `"workflow-engine"`) on both its Workflow-Engine
+  and generic-callback branches. The shared secret
+  (`TECTONIC_JWT_SHARED_SECRET`, one Kubernetes Secret referenced by
+  every module's Helm chart under this same literal env var name, not a
+  per-module-prefixed one) defaults to an obviously-insecure placeholder
+  for zero-config local dev/tests; `main.py` logs a startup warning if
+  it's still active. This is service-to-service auth for inter-module
+  calls, not the platform's external-facing user-auth story — a real API
+  gateway/OAuth layer in front of the platform's own entry points is a
+  separate, larger concern, out of scope here.
 
 ## Running locally
 

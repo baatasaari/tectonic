@@ -16,6 +16,13 @@ directly when it looks like one (the common case for internal MCP servers
 registered with their own address); for a symbolic ref pointing at a
 server this deployment knows about under a friendlier name, register an
 alias via `set_server_aliases`.
+
+Deliberately excluded from this platform's service-to-service JWT auth
+(security/jwt_auth.py): this adapter calls arbitrary third-party MCP tool
+servers, not a platform peer module — those servers have their own
+(possibly nonexistent, possibly entirely different) auth scheme, and
+attaching this platform's shared-secret-signed token to them would be
+meaningless at best.
 """
 from __future__ import annotations
 

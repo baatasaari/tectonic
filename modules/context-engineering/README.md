@@ -27,6 +27,7 @@ src/context_engineering/
     context_assembly_service.py        The assembly orchestrator (this module's "scheduler")
   db/                      SQLAlchemy 2.0 async models + repository
   clients/                 HTTP clients for LLM Gateway and the Evaluation Framework feedback feed
+  security/                 Service-to-service JWT bearer auth (shared signing key)
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI routers — assemble, ontologies, weights
   schemas/                    Pydantic request/response models
@@ -52,6 +53,28 @@ src/context_engineering/
   metadata declares a `policy_tags` entry the tenant's ontology doesn't
   recognise is excluded outright, not merely left untagged — ungoverned
   content shouldn't silently reach the prompt.
+- **Service-to-service JWT auth.** Before this, no module authenticated
+  any of its inbound HTTP calls — any process able to reach a module's
+  port could call it, and every outbound call this module makes carried
+  no credential at all. `security/jwt_auth.py` adds shared-signing-key
+  (HS256) bearer auth: `ServiceAuthMiddleware` verifies every inbound
+  request's `Authorization: Bearer <JWT>` against this module's own
+  `service_name` as the required audience (except `/healthz` and
+  `/metrics` — Kubernetes probes and Prometheus scraping carry no auth
+  token); `ServiceBearerAuth` (an `httpx.Auth` flow) mints a fresh,
+  short-lived (5 min default) token scoped via the `aud` claim to the
+  *specific* peer being called on every outbound request each of
+  `HTTPLLMGatewayClient` and `HTTPEvaluationFeedbackClient` makes — a
+  token minted to call one peer is rejected if replayed against a
+  different one. The shared secret (`TECTONIC_JWT_SHARED_SECRET`, one
+  Kubernetes Secret referenced by every module's Helm chart under this
+  same literal env var name, not a per-module-prefixed one) defaults to
+  an obviously-insecure placeholder for zero-config local dev/tests;
+  `main.py` logs a startup warning if it's still active. This is
+  service-to-service auth for inter-module calls, not the platform's
+  external-facing user-auth story — a real API gateway/OAuth layer in
+  front of the platform's own entry points is a separate, larger
+  concern, out of scope here.
 
 ## Running locally
 

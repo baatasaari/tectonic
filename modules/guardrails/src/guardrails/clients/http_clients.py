@@ -8,10 +8,18 @@ from typing import Any
 
 import httpx
 
+from guardrails.security.jwt_auth import ServiceBearerAuth
+
 
 class HTTPLLMGatewayClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=30.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="llm-gateway", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=30.0, auth=auth)
 
     async def classify_intent(self, text: str, tenant_id: str) -> str:
         resp = await self._client.post("/v1/classify-intent", json={"text": text, "tenant_id": tenant_id})
@@ -25,8 +33,14 @@ class HTTPLLMGatewayClient:
 
 
 class HTTPSentinelAgentsClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=5.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="sentinel-agents", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=5.0, auth=auth)
 
     async def alert(self, event: dict[str, Any]) -> None:
         await self._client.post("/v1/sentinel-agents/external-alerts", json=event)

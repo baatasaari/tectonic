@@ -11,14 +11,21 @@ from typing import Any
 
 import httpx
 
+from sentinel_agents.security.jwt_auth import ServiceBearerAuth
 from sentinel_agents.telemetry.logging import get_logger
 
 logger = get_logger(component="http_clients")
 
 
 class HTTPWorkflowEngineClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="workflow-engine", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0, auth=auth)
 
     async def pause(self, instance_id: str, reason: str) -> None:
         resp = await self._client.post(f"/v1/workflow-engine/instances/{instance_id}/pause", json={"reason": reason})
@@ -32,8 +39,14 @@ class HTTPWorkflowEngineClient:
 
 
 class HTTPToolOrchestrationClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="tool-orchestration", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0, auth=auth)
 
     async def circuit_break(self, tool_ref: str, reason: str) -> None:
         try:
@@ -46,8 +59,14 @@ class HTTPToolOrchestrationClient:
 
 
 class HTTPHumanOversightClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="human-oversight", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0, auth=auth)
 
     async def escalate(self, context: dict[str, Any]) -> str:
         resp = await self._client.post(
@@ -62,8 +81,14 @@ class HTTPHumanOversightClient:
 
 
 class HTTPAuditabilityClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=5.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="auditability", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=5.0, auth=auth)
 
     async def emit(self, event: dict[str, Any]) -> None:
         await self._client.post("/v1/auditability/events", json=event)

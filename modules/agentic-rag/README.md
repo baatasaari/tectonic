@@ -27,6 +27,7 @@ src/agentic_rag/
     rag_service.py                     Persists the loop's request/hops/result
   db/                      SQLAlchemy 2.0 async models + repository
   clients/                 HTTP clients for Vector DB / Graph DB / Knowledge Base / LLM Gateway
+  security/                 Service-to-service JWT bearer auth (shared signing key)
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI routers — retrieve, request detail
   schemas/                    Pydantic request/response models
@@ -53,6 +54,28 @@ src/agentic_rag/
   clearing the groundedness threshold, the result returned is the
   best-scoring hop seen, not the last one tried — a partial answer with
   provenance beats silently returning the weakest attempt.
+- **Service-to-service JWT auth.** Before this, no module authenticated
+  any of its inbound HTTP calls — any process able to reach a module's
+  port could call it, and every outbound call this module makes carried
+  no credential at all. `security/jwt_auth.py` adds shared-signing-key
+  (HS256) bearer auth: `ServiceAuthMiddleware` verifies every inbound
+  request's `Authorization: Bearer <JWT>` against this module's own
+  `service_name` as the required audience (except `/healthz` and
+  `/metrics` — Kubernetes probes and Prometheus scraping carry no auth
+  token); `ServiceBearerAuth` (an `httpx.Auth` flow) mints a fresh,
+  short-lived (5 min default) token scoped via the `aud` claim to the
+  *specific* peer being called on every outbound request each of
+  `HTTPVectorDBClient`, `HTTPGraphDBClient`, `HTTPKnowledgeBaseClient` and
+  `HTTPLLMGatewayClient` makes — a token minted to call one peer is
+  rejected if replayed against a different one. The shared secret
+  (`TECTONIC_JWT_SHARED_SECRET`, one Kubernetes Secret referenced by
+  every module's Helm chart under this same literal env var name, not a
+  per-module-prefixed one) defaults to an obviously-insecure placeholder
+  for zero-config local dev/tests; `main.py` logs a startup warning if
+  it's still active. This is service-to-service auth for inter-module
+  calls, not the platform's external-facing user-auth story — a real API
+  gateway/OAuth layer in front of the platform's own entry points is a
+  separate, larger concern, out of scope here.
 
 ## Running locally
 
