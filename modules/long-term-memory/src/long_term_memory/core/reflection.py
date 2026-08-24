@@ -24,5 +24,7 @@ class ReflectionLoop:
         )
         return await self._repository.create_reflection(entry)
 
-    async def list_for_agent(self, tenant_id: str, agent_ref: str) -> list[ReflectionEntryRecord]:
-        return await self._repository.list_reflections(tenant_id, agent_ref)
+    async def list_for_agent(
+        self, tenant_id: str, agent_ref: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[ReflectionEntryRecord], int]:
+        return await self._repository.list_reflections(tenant_id, agent_ref, limit=limit, offset=offset)

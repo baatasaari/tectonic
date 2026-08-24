@@ -8,7 +8,7 @@ this module yet). See the module README's "Design notes vs. the LLD".
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from long_term_memory.api.deps import (
     build_consolidation_engine,
@@ -29,6 +29,7 @@ from long_term_memory.schemas.memory import (
     MemoryItemSchema,
     QueryRequest,
     RankedMemoryItemSchema,
+    ReflectionEntryListResponse,
     ReflectionEntrySchema,
     StoreItemRequest,
 )
@@ -71,6 +72,15 @@ async def store_item(
 
 @router.post("/query", response_model=list[RankedMemoryItemSchema])
 async def query_items(
+    # Deliberately NOT given limit/offset pagination: this is a
+    # ranked-results endpoint, not a listing endpoint. `body.top_k`
+    # (QueryRequest, default 10) already caps the result count the same
+    # way pagination would bound it — `MemoryService.query` ranks all
+    # candidate matches by relevance and slices to `results[:top_k]`
+    # before returning, so the response is already bounded and there is
+    # no "next page" of lower-ranked results a client would legitimately
+    # want to walk; they'd re-query with a larger top_k instead. See the
+    # module README's "Design notes vs. the LLD".
     body: QueryRequest,
     request: Request,
     ctx: AppContext = Depends(get_ctx),
@@ -85,22 +95,29 @@ async def query_items(
     return [RankedMemoryItemSchema(item=_item_schema(r.item), score=r.score) for r in ranked]
 
 
-@router.get("/reflections", response_model=list[ReflectionEntrySchema])
+@router.get("/reflections", response_model=ReflectionEntryListResponse)
 async def list_reflections(
     agent_ref: str,
     request: Request,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     ctx: AppContext = Depends(get_ctx),
     repository: LongTermMemoryRepository = Depends(get_repository),
-) -> list[ReflectionEntrySchema]:
+) -> ReflectionEntryListResponse:
     loop = build_reflection_loop(ctx, repository)
-    entries = await loop.list_for_agent(_tenant_id(request, ctx), agent_ref)
-    return [
-        ReflectionEntrySchema(
-            id=e.id, agent_ref=e.agent_ref, triggering_interaction_ref=e.triggering_interaction_ref,
-            reflection_content=e.reflection_content, applied=e.applied, created_at=e.created_at,
-        )
-        for e in entries
-    ]
+    entries, total = await loop.list_for_agent(_tenant_id(request, ctx), agent_ref, limit=limit, offset=offset)
+    return ReflectionEntryListResponse(
+        items=[
+            ReflectionEntrySchema(
+                id=e.id, agent_ref=e.agent_ref, triggering_interaction_ref=e.triggering_interaction_ref,
+                reflection_content=e.reflection_content, applied=e.applied, created_at=e.created_at,
+            )
+            for e in entries
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post("/reflections", response_model=ReflectionEntrySchema, status_code=201)

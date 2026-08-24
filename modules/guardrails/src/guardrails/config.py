@@ -49,6 +49,14 @@ class GuardrailsSettings(BaseSettings):
     telemetry: TelemetryConfig = TelemetryConfig()
 
     database_url: str = "postgresql+asyncpg://guardrails:guardrails@localhost:5432/guardrails"
+
+    # Pool sized against this module's own Helm chart (deploy/helm/guardrails/values.yaml):
+    # maxReplicas=30, targeting <=100 steady-state / <=150 burst connections to
+    # this module's own Postgres instance platform-wide at full autoscale.
+    db_pool_size: int = 4
+    db_max_overflow: int = 2
+    db_pool_timeout_seconds: int = 30
+    db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     service_name: str = "guardrails"
     http_port: int = 8093
     dependency_stub_base_url: str = "http://localhost:9114"

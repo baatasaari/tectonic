@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from regulatory_compliance.core.domain import (
@@ -132,14 +132,29 @@ class SQLAlchemyRegulatoryComplianceRepository:
 
     async def list_control_mappings(
         self, *, control_name: str | None = None, framework_name: str | None = None,
-    ) -> list[ControlMappingRecord]:
-        stmt = select(models.ControlMapping)
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[ControlMappingRecord], int]:
+        filters = []
         if control_name is not None:
-            stmt = stmt.where(models.ControlMapping.control_name == control_name)
+            filters.append(models.ControlMapping.control_name == control_name)
         if framework_name is not None:
-            stmt = stmt.where(models.ControlMapping.framework_name == framework_name)
+            filters.append(models.ControlMapping.framework_name == framework_name)
+
+        count_stmt = select(func.count(models.ControlMapping.id)).where(*filters)
+        total = (await self.session.execute(count_stmt)).scalar_one()
+
+        # No natural timestamp column on this table (see models.ControlMapping) — order by
+        # id ascending as a stable, deterministic last resort so limit/offset pagination is
+        # meaningful (without an explicit order, row order across pages is undefined).
+        stmt = (
+            select(models.ControlMapping)
+            .where(*filters)
+            .order_by(models.ControlMapping.id.asc())
+            .limit(limit)
+            .offset(offset)
+        )
         rows = await self.session.execute(stmt)
-        return [_mapping_to_domain(m) for m in rows.scalars().all()]
+        return [_mapping_to_domain(m) for m in rows.scalars().all()], total
 
     async def create_control_event(self, record: ControlImplementationEventRecord) -> ControlImplementationEventRecord:
         m = models.ControlImplementationEvent(

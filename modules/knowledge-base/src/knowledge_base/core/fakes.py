@@ -64,21 +64,32 @@ class InMemoryKnowledgeBaseRepository:
             self.chunks[record.id] = copy.deepcopy(record)
         return [copy.deepcopy(r) for r in records]
 
-    async def list_chunks_by_version(self, document_version_id: str) -> list[ChunkRecord]:
-        return sorted(
-            (copy.deepcopy(c) for c in self.chunks.values() if c.document_version_id == document_version_id),
+    async def list_chunks_by_version(
+        self, document_version_id: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[ChunkRecord], int]:
+        matching = sorted(
+            (c for c in self.chunks.values() if c.document_version_id == document_version_id),
             key=lambda c: c.chunk_index,
         )
+        sliced = [copy.deepcopy(c) for c in matching[offset : offset + limit]]
+        return sliced, len(matching)
 
-    async def list_chunks_by_policy_tag(self, tenant_id: str, policy_tag: str) -> list[ChunkRecord]:
+    async def list_chunks_by_policy_tag(
+        self, tenant_id: str, policy_tag: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[ChunkRecord], int]:
         version_ids_for_tenant = {
             v.id for v in self.versions.values()
             if self.documents.get(v.document_id) and self.documents[v.document_id].tenant_id == tenant_id
         }
-        return [
-            copy.deepcopy(c) for c in self.chunks.values()
-            if c.document_version_id in version_ids_for_tenant and policy_tag in c.policy_tags
-        ]
+        matching = sorted(
+            (
+                c for c in self.chunks.values()
+                if c.document_version_id in version_ids_for_tenant and policy_tag in c.policy_tags
+            ),
+            key=lambda c: (c.document_version_id, c.chunk_index),
+        )
+        sliced = [copy.deepcopy(c) for c in matching[offset : offset + limit]]
+        return sliced, len(matching)
 
     async def create_policy_tag(self, record: PolicyTagRecord) -> PolicyTagRecord:
         self.policy_tags[record.id] = copy.deepcopy(record)

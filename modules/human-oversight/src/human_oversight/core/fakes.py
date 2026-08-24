@@ -40,11 +40,18 @@ class InMemoryHumanOversightRepository:
         self.requests[record.id] = copy.deepcopy(record)
         return copy.deepcopy(record)
 
-    async def list_requests(self, tenant_id: str, status: str | None = None) -> list[OversightRequestRecord]:
-        return [
-            copy.deepcopy(r) for r in self.requests.values()
-            if r.tenant_id == tenant_id and (status is None or r.status.value == status)
-        ]
+    async def list_requests(
+        self, tenant_id: str, status: str | None = None, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[OversightRequestRecord], int]:
+        results = sorted(
+            (
+                r for r in self.requests.values()
+                if r.tenant_id == tenant_id and (status is None or r.status.value == status)
+            ),
+            key=lambda r: r.created_at, reverse=True,
+        )
+        sliced = [copy.deepcopy(r) for r in results[offset : offset + limit]]
+        return sliced, len(results)
 
     async def list_pending_expired(self, tenant_id: str, as_of: datetime) -> list[OversightRequestRecord]:
         return [

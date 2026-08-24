@@ -69,6 +69,35 @@ src/tool_orchestration/
   invisible under SQLite, but a real correctness bug against Postgres once a
   domain default (or an explicit value) is written. Found and fixed here too.
 
+- **`GET /tools` pagination.** Added `limit`/`offset` query params
+  (default `limit=50`, max `200`); the response shape changed from a
+  bare array to `ToolDefinitionListResponse`
+  (`items`/`total`/`limit`/`offset`). `ToolRepository.list_tool_definitions`
+  now returns `(items, total)`. No existing deterministic order — added
+  `ORDER BY created_at ASC, id ASC` (registration order, with `id` as a
+  tiebreaker) so limit/offset pagination is stable.
+
+- **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
+  the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
+  regardless of how many pods are running — at this module's own
+  `deploy/helm/tool-orchestration/values.yaml` `autoscaling.maxReplicas: 20`,
+  that's up to 300 connections to this module's own Postgres
+  instance from this module alone at full autoscale, with no one having
+  deliberately decided that number. `db/session.py`'s `make_engine` now
+  passes explicit, configurable `pool_size=5` /
+  `max_overflow=2` (`db_pool_size`/`db_max_overflow`
+  Settings, env-overridable) sized so this module's own steady-state
+  total stays at ~100 connections and its full-burst total at ~150,
+  even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
+  connections behind a cloud LB/proxy's own idle-connection timeout —
+  a real, independent gap, not just a replica-count one.
+- **Pagination on `GET /tools`.** Added `limit`/`offset` query params
+  (default 50, max 200) and a `ToolDefinitionListResponse` envelope
+  (`items`/`total`/`limit`/`offset`) — this endpoint previously returned
+  every registered tool for a tenant unbounded. Ordered by `created_at`
+  ascending (registration order) with `id` as a tiebreaker for a stable
+  page boundary.
+
 ## Running locally
 
 ```bash

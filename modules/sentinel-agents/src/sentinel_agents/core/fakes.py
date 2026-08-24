@@ -48,11 +48,19 @@ class InMemorySentinelRepository:
         self.alerts[record.id] = copy.deepcopy(record)
         return copy.deepcopy(record)
 
-    async def list_alerts(self, tenant_id: str, severity: str | None = None) -> list[AlertRecord]:
-        return [
-            copy.deepcopy(a) for a in self.alerts.values()
+    async def list_alerts(
+        self, tenant_id: str, severity: str | None = None, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[AlertRecord], int]:
+        results = [
+            a for a in self.alerts.values()
             if a.tenant_id == tenant_id and (severity is None or a.severity.value == severity)
         ]
+        # Matches the SQL repository's ORDER BY detected_at DESC, id ASC: sort by id ascending
+        # first, then stable-sort by detected_at descending — ties in detected_at keep their
+        # id-ascending relative order.
+        results = sorted(results, key=lambda a: a.id)
+        results = sorted(results, key=lambda a: a.detected_at, reverse=True)
+        return [copy.deepcopy(a) for a in results[offset:offset + limit]], len(results)
 
     async def create_intervention_record(self, record: InterventionRecord) -> InterventionRecord:
         self.intervention_records.append(copy.deepcopy(record))

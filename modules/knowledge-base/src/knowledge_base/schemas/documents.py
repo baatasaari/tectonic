@@ -45,6 +45,13 @@ class ChunkSchema(BaseModel):
     token_count: int
 
 
+class ChunkListResponse(BaseModel):
+    items: list[ChunkSchema]
+    total: int
+    limit: int
+    offset: int
+
+
 class ReviewRequest(BaseModel):
     reviewed_by: str
 

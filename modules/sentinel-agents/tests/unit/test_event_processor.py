@@ -1,11 +1,13 @@
 import math
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sentinel_agents.core.domain import (
     AgentActionEvent,
     AgentBaselineRecord,
+    AlertRecord,
     AlertStatus,
     AlertType,
+    Severity,
 )
 
 _MEAN = 10.0
@@ -108,3 +110,35 @@ async def test_swarm_detection_disabled_falls_back_to_single_agent_logic(harness
         event = AgentActionEvent(tenant_id="t1", agent_ref=agent, action_type="tool_call", value=moderate_value)
         alert = await harness.processor.process(event)
         assert alert is None  # moderate deviation alone never triggers single-agent alert either
+
+
+async def _make_alert(harness, tenant_id: str, *, detected_at: datetime) -> AlertRecord:
+    return await harness.repository.create_alert(
+        AlertRecord(
+            id=f"alert-{detected_at.isoformat()}", tenant_id=tenant_id, alert_type=AlertType.SINGLE_AGENT,
+            agent_refs=["agent-a"], severity=Severity.LOW, description="test alert", detected_at=detected_at,
+        )
+    )
+
+
+async def test_list_alerts_paginates_newest_first(harness):
+    base = datetime(2026, 1, 1, tzinfo=UTC)
+    for i in range(3):
+        await _make_alert(harness, "t1", detected_at=base + timedelta(hours=i))
+
+    first_page, total_1 = await harness.repository.list_alerts("t1", limit=2, offset=0)
+    second_page, total_2 = await harness.repository.list_alerts("t1", limit=2, offset=2)
+
+    assert total_1 == 3
+    assert total_2 == 3
+    assert len(first_page) == 2
+    assert len(second_page) == 1
+    # newest (highest detected_at) first
+    assert [a.detected_at for a in first_page] == sorted((a.detected_at for a in first_page), reverse=True)
+    assert first_page[0].detected_at > first_page[1].detected_at > second_page[0].detected_at
+
+
+async def test_list_alerts_empty_result_returns_zero_total(harness):
+    alerts, total = await harness.repository.list_alerts("t1")
+    assert alerts == []
+    assert total == 0

@@ -1,7 +1,7 @@
 """`/v1/evaluation-framework/*` routes (LLD §3)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from evaluation_framework.api.deps import (
     build_evaluator,
@@ -19,6 +19,7 @@ from evaluation_framework.schemas.evalfw import (
     EvaluateRequest,
     GateRequest,
     GateResultSchema,
+    MetricScoreListResponse,
     MetricScoreSchema,
     SampleRequest,
     SampleResponse,
@@ -94,14 +95,20 @@ async def create_domain_pack(
     )
 
 
-@router.get("/scores", response_model=list[MetricScoreSchema])
+@router.get("/scores", response_model=MetricScoreListResponse)
 async def list_scores(
     tenant_id: str,
     agent_ref: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     repository: EvaluationFrameworkRepository = Depends(get_repository),
-) -> list[MetricScoreSchema]:
-    scores = await repository.list_metric_scores_for_tenant(tenant_id, agent_ref=agent_ref)
-    return [_score_schema(s) for s in scores]
+) -> MetricScoreListResponse:
+    scores, total = await repository.list_metric_scores_for_tenant(
+        tenant_id, agent_ref=agent_ref, limit=limit, offset=offset,
+    )
+    return MetricScoreListResponse(
+        items=[_score_schema(s) for s in scores], total=total, limit=limit, offset=offset,
+    )
 
 
 @router.post("/sample", response_model=SampleResponse)

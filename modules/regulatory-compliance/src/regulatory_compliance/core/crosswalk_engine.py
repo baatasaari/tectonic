@@ -27,8 +27,14 @@ class CrosswalkEngine:
         profiles = await self._repository.list_framework_profiles(tenant_id, enabled_only=True)
         results: list[MappingResult] = []
         for profile in profiles:
-            mappings = await self._repository.list_control_mappings(
-                control_name=control_name, framework_name=profile.framework_name,
+            # `list_control_mappings` is now paginated (limit/offset) for the `GET /mappings`
+            # API, but this internal caller needs the *complete* matching set to crosswalk a
+            # control correctly — a truncated page here would silently drop mappings to some
+            # frameworks/clauses. limit=10_000 is an effectively-unbounded internal page size
+            # (mapping tables per control/framework are small, config-driven data, never a
+            # user-growable list), not a real pagination boundary.
+            mappings, _total = await self._repository.list_control_mappings(
+                control_name=control_name, framework_name=profile.framework_name, limit=10_000,
             )
             for m in mappings:
                 if m.framework_version != profile.version:
@@ -55,7 +61,10 @@ class CoverageCalculator:
         profile = await self._repository.get_framework_profile(tenant_id, framework_name)
         version = profile.version if profile else None
 
-        mappings = await self._repository.list_control_mappings(framework_name=framework_name)
+        # Same reasoning as CrosswalkEngine.map_control above: coverage calculation needs the
+        # complete set of mappings for this framework to compute an accurate percentage/gap
+        # list, so it deliberately bypasses the `GET /mappings` page size.
+        mappings, _total = await self._repository.list_control_mappings(framework_name=framework_name, limit=10_000)
         # Pinned to a version (the common case): match it exactly, deprecated or not, same
         # reasoning as CrosswalkEngine.map_control. No profile yet: fall back to whatever
         # the feed currently considers non-deprecated, i.e. the latest published version.

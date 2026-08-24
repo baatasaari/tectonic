@@ -76,6 +76,37 @@ src/llm_gateway/
   Postgres once a domain default (or an explicit value) is written. Found and
   fixed here too.
 
+- **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
+  the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
+  regardless of how many pods are running — at this module's own
+  `deploy/helm/llm-gateway/values.yaml` `autoscaling.maxReplicas: 30`,
+  that's up to 450 connections to this module's own Postgres
+  instance from this module alone at full autoscale, with no one having
+  deliberately decided that number. `db/session.py`'s `make_engine` now
+  passes explicit, configurable `pool_size=4` /
+  `max_overflow=2` (`db_pool_size`/`db_max_overflow`
+  Settings, env-overridable) sized so this module's own steady-state
+  total stays at ~100 connections and its full-burst total at ~150,
+  even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
+  connections behind a cloud LB/proxy's own idle-connection timeout —
+  a real, independent gap, not just a replica-count one.
+- **Pagination on `GET /virtual-keys`.** Added `limit`/`offset` query
+  params (default 50, max 200) and a `VirtualKeyListResponse` envelope
+  (`items`/`total`/`limit`/`offset`) — virtual keys are tenant-scoped and
+  accumulate over the life of a tenant, and this endpoint previously
+  returned every matching row unbounded. Ordered by `created_at`
+  descending (newest key first).
+- **`GET /providers` deliberately left unpaginated.** Provider configs
+  are a fixed, admin-configured set of LLM providers this gateway
+  integrates with — one row per provider it knows how to call
+  (OpenAI, Anthropic, etc.) — not a tenant-scoped dataset that grows
+  with usage. `ProviderConfigRecord` has no `tenant_id` and
+  `list_provider_configs()` takes no filters; in practice this is a
+  handful of rows, so `limit`/`offset` would add API surface without a
+  real bound to enforce. See the comment at the route in
+  `api/routes_admin.py`. Revisit if provider configs ever become
+  tenant-configurable.
+
 ## Running locally
 
 ```bash

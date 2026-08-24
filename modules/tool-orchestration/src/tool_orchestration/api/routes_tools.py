@@ -1,7 +1,7 @@
 """`/v1/tool-orchestration/*` routes (LLD §3.3, §3.5)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from tool_orchestration.api.deps import (
     build_orchestration_service,
@@ -27,6 +27,7 @@ from tool_orchestration.schemas.tools import (
     ReliabilityScoreSummary,
     SynthesiseToolRequest,
     ToolDefinitionDetail,
+    ToolDefinitionListResponse,
     ToolDefinitionSummary,
 )
 
@@ -37,18 +38,23 @@ def _tenant_id(request: Request, ctx: AppContext) -> str:
     return request.headers.get("X-Tenant-Id", ctx.settings.tenant_id)
 
 
-@router.get("/tools", response_model=list[ToolDefinitionSummary])
+@router.get("/tools", response_model=ToolDefinitionListResponse)
 async def list_tools(
     request: Request,
     status: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     ctx: AppContext = Depends(get_ctx),
     repository: ToolRepository = Depends(get_repository),
-) -> list[ToolDefinitionSummary]:
-    tools = await repository.list_tool_definitions(_tenant_id(request, ctx), status)
-    return [
-        ToolDefinitionSummary(id=t.id, name=t.name, mcp_server_ref=t.mcp_server_ref, status=t.status.value, synthesised=t.synthesised)
-        for t in tools
-    ]
+) -> ToolDefinitionListResponse:
+    tools, total = await repository.list_tool_definitions(_tenant_id(request, ctx), status, limit=limit, offset=offset)
+    return ToolDefinitionListResponse(
+        items=[
+            ToolDefinitionSummary(id=t.id, name=t.name, mcp_server_ref=t.mcp_server_ref, status=t.status.value, synthesised=t.synthesised)
+            for t in tools
+        ],
+        total=total, limit=limit, offset=offset,
+    )
 
 
 @router.get("/tools/{tool_id}", response_model=ToolDefinitionDetail)

@@ -49,3 +49,10 @@ class DriftReportSchema(BaseModel):
     drift_score: float
     flagged_intents: list[str]
     created_at: datetime
+
+
+class DriftReportListResponse(BaseModel):
+    items: list[DriftReportSchema]
+    total: int
+    limit: int
+    offset: int

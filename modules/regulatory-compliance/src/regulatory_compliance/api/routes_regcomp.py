@@ -22,6 +22,7 @@ from regulatory_compliance.core.ports import RegulatoryComplianceRepository
 from regulatory_compliance.schemas.regcomp import (
     ControlEventRequest,
     ControlEventResponse,
+    ControlMappingListResponse,
     ControlMappingSchema,
     CoverageResponse,
     CreateEvidencePackRequest,
@@ -64,21 +65,28 @@ async def create_framework_profile(
     return _profile_schema(record)
 
 
-@router.get("/mappings", response_model=list[ControlMappingSchema])
+@router.get("/mappings", response_model=ControlMappingListResponse)
 async def list_mappings(
     control_name: str | None = Query(None),
     framework_name: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     repository: RegulatoryComplianceRepository = Depends(get_repository),
-) -> list[ControlMappingSchema]:
-    mappings = await repository.list_control_mappings(control_name=control_name, framework_name=framework_name)
-    return [
-        ControlMappingSchema(
-            id=m.id, control_name=m.control_name, framework_name=m.framework_name,
-            framework_version=m.framework_version, clause_references=m.clause_references,
-            mapping_rationale=m.mapping_rationale, deprecated=m.deprecated,
-        )
-        for m in mappings
-    ]
+) -> ControlMappingListResponse:
+    mappings, total = await repository.list_control_mappings(
+        control_name=control_name, framework_name=framework_name, limit=limit, offset=offset,
+    )
+    return ControlMappingListResponse(
+        items=[
+            ControlMappingSchema(
+                id=m.id, control_name=m.control_name, framework_name=m.framework_name,
+                framework_version=m.framework_version, clause_references=m.clause_references,
+                mapping_rationale=m.mapping_rationale, deprecated=m.deprecated,
+            )
+            for m in mappings
+        ],
+        total=total, limit=limit, offset=offset,
+    )
 
 
 @router.post("/mappings/publish", response_model=PublishMappingsResponse)

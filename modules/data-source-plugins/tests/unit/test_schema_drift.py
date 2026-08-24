@@ -1,4 +1,6 @@
-from data_source_plugins.core.domain import DriftClassification
+from datetime import timedelta
+
+from data_source_plugins.core.domain import DriftClassification, DriftIncidentRecord, new_id, now
 from data_source_plugins.core.schema_drift import detect_drift, should_auto_adapt
 
 
@@ -56,3 +58,33 @@ def test_auto_adapt_disabled_always_false():
     assert should_auto_adapt(
         DriftClassification.ADDITIVE, auto_adapt_enabled=False, auto_adapt_scope="additive_and_type_widening"
     ) is False
+
+
+async def _seed_incident(harness, connector_id: str, *, age_seconds: int) -> DriftIncidentRecord:
+    record = DriftIncidentRecord(
+        id=new_id(), connector_id=connector_id, schema_diff={}, classification=DriftClassification.ADDITIVE,
+        auto_adapted=True, created_at=now() - timedelta(seconds=age_seconds),
+    )
+    return await harness.repository.create_drift_incident(record)
+
+
+async def test_list_drift_incidents_paginates_newest_first(harness):
+    connector = await harness.seed_connector()
+    oldest = await _seed_incident(harness, connector.id, age_seconds=200)
+    middle = await _seed_incident(harness, connector.id, age_seconds=100)
+    newest = await _seed_incident(harness, connector.id, age_seconds=0)
+
+    page1, total = await harness.repository.list_drift_incidents(connector.id, limit=2, offset=0)
+    assert total == 3
+    assert [i.id for i in page1] == [newest.id, middle.id]
+
+    page2, total = await harness.repository.list_drift_incidents(connector.id, limit=2, offset=2)
+    assert total == 3
+    assert [i.id for i in page2] == [oldest.id]
+
+
+async def test_list_drift_incidents_empty_returns_no_error(harness):
+    connector = await harness.seed_connector()
+    incidents, total = await harness.repository.list_drift_incidents(connector.id)
+    assert incidents == []
+    assert total == 0

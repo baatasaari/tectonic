@@ -15,7 +15,7 @@ async def test_publish_new_version_deprecates_prior(harness):
     }
     await harness.feed_manager.publish([new_mapping], deprecate_prior=True)
 
-    all_mappings = await harness.repository.list_control_mappings(control_name="human_oversight", framework_name="eu_ai_act")
+    all_mappings, _total = await harness.repository.list_control_mappings(control_name="human_oversight", framework_name="eu_ai_act")
     old = [m for m in all_mappings if m.framework_version == "2024"]
     new = [m for m in all_mappings if m.framework_version == "2025"]
     assert old and all(m.deprecated for m in old)
@@ -63,6 +63,34 @@ async def test_publish_upsert_does_not_duplicate_same_version(harness):
     mapping["mapping_rationale"] = "v1 updated rationale"
     await harness.feed_manager.publish([mapping], deprecate_prior=False)
 
-    mappings = await harness.repository.list_control_mappings(control_name="human_oversight", framework_name="eu_ai_act")
+    mappings, total = await harness.repository.list_control_mappings(control_name="human_oversight", framework_name="eu_ai_act")
     assert len(mappings) == 1
+    assert total == 1
     assert mappings[0].mapping_rationale == "v1 updated rationale"
+
+
+async def test_list_control_mappings_paginates_with_stable_order(harness):
+    await harness.feed_manager.seed_defaults()
+
+    first_page, total_1 = await harness.repository.list_control_mappings(limit=2, offset=0)
+    second_page, total_2 = await harness.repository.list_control_mappings(limit=2, offset=2)
+
+    assert total_1 == total_2
+    assert total_1 > 2  # seeded default mapping table has more than 2 rows
+    assert len(first_page) == 2
+
+    # ordering (id ascending) is stable across calls/pages: no overlap, and re-fetching the
+    # first page again returns the exact same rows in the exact same order.
+    ids_page_1 = [m.id for m in first_page]
+    ids_page_2 = [m.id for m in second_page]
+    assert set(ids_page_1).isdisjoint(ids_page_2)
+
+    repeat_first_page, _ = await harness.repository.list_control_mappings(limit=2, offset=0)
+    assert [m.id for m in repeat_first_page] == ids_page_1
+    assert ids_page_1 == sorted(ids_page_1)
+
+
+async def test_list_control_mappings_empty_result_returns_zero_total(harness):
+    mappings, total = await harness.repository.list_control_mappings(control_name="no_such_control")
+    assert mappings == []
+    assert total == 0

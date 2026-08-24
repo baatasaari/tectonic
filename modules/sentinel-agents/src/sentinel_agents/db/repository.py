@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sentinel_agents.core.domain import (
@@ -92,6 +92,9 @@ class SQLAlchemySentinelRepository:
         return _baseline_to_domain(m)
 
     async def list_baselines_for_agent(self, tenant_id: str, agent_ref: str) -> list[AgentBaselineRecord]:
+        # Deliberately NOT limit/offset paginated — see the Protocol docstring in
+        # core/ports.py: one row per (tenant_id, agent_ref, action_type), updated in place,
+        # so this is bounded by an agent's small, fixed set of distinct action types.
         rows = await self.session.execute(
             select(models.AgentBaseline).where(
                 models.AgentBaseline.tenant_id == tenant_id, models.AgentBaseline.agent_ref == agent_ref,
@@ -125,12 +128,28 @@ class SQLAlchemySentinelRepository:
         await self.session.refresh(m)
         return _alert_to_domain(m)
 
-    async def list_alerts(self, tenant_id: str, severity: str | None = None) -> list[AlertRecord]:
-        stmt = select(models.Alert).where(models.Alert.tenant_id == tenant_id)
+    async def list_alerts(
+        self, tenant_id: str, severity: str | None = None, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[AlertRecord], int]:
+        filters = [models.Alert.tenant_id == tenant_id]
         if severity:
-            stmt = stmt.where(models.Alert.severity == severity)
+            filters.append(models.Alert.severity == severity)
+
+        count_stmt = select(func.count(models.Alert.id)).where(*filters)
+        total = (await self.session.execute(count_stmt)).scalar_one()
+
+        # Alerts are a genuinely growing history — order by detected_at (newest first is the
+        # useful default for an alert feed), with id as a tiebreaker for rows sharing a
+        # timestamp, so limit/offset pagination is stable.
+        stmt = (
+            select(models.Alert)
+            .where(*filters)
+            .order_by(models.Alert.detected_at.desc(), models.Alert.id.asc())
+            .limit(limit)
+            .offset(offset)
+        )
         rows = await self.session.execute(stmt)
-        return [_alert_to_domain(m) for m in rows.scalars().all()]
+        return [_alert_to_domain(m) for m in rows.scalars().all()], total
 
     async def create_intervention_record(self, record: InterventionRecord) -> InterventionRecord:
         m = models.InterventionRecordModel(

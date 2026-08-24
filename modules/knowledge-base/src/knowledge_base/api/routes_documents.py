@@ -19,6 +19,7 @@ from knowledge_base.app_context import AppContext
 from knowledge_base.core.domain import DocumentNotFoundError, SourceType
 from knowledge_base.core.ports import KnowledgeBaseRepository
 from knowledge_base.schemas.documents import (
+    ChunkListResponse,
     ChunkSchema,
     DocumentSchema,
     DocumentVersionSchema,
@@ -124,28 +125,37 @@ async def get_document(
     )
 
 
-@router.get("/chunks", response_model=list[ChunkSchema])
+@router.get("/chunks", response_model=ChunkListResponse)
 async def list_chunks(
     document_version_id: str | None = Query(None),
     policy_tag: str | None = Query(None),
     tenant_id: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     repository: KnowledgeBaseRepository = Depends(get_repository),
-) -> list[ChunkSchema]:
+) -> ChunkListResponse:
     if document_version_id:
-        chunks = await repository.list_chunks_by_version(document_version_id)
+        chunks, total = await repository.list_chunks_by_version(document_version_id, limit=limit, offset=offset)
     elif policy_tag and tenant_id:
-        chunks = await repository.list_chunks_by_policy_tag(tenant_id, policy_tag)
+        chunks, total = await repository.list_chunks_by_policy_tag(
+            tenant_id, policy_tag, limit=limit, offset=offset
+        )
     else:
         raise HTTPException(
             status_code=422, detail="either document_version_id, or policy_tag plus tenant_id, is required"
         )
-    return [
-        ChunkSchema(
-            id=c.id, document_version_id=c.document_version_id, content=c.content,
-            chunk_index=c.chunk_index, policy_tags=c.policy_tags, token_count=c.token_count,
-        )
-        for c in chunks
-    ]
+    return ChunkListResponse(
+        items=[
+            ChunkSchema(
+                id=c.id, document_version_id=c.document_version_id, content=c.content,
+                chunk_index=c.chunk_index, policy_tags=c.policy_tags, token_count=c.token_count,
+            )
+            for c in chunks
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post("/documents/{document_id}/review", response_model=ReviewResponse)

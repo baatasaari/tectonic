@@ -47,8 +47,8 @@ on its own:
 |---|---|---|---|
 | 1 | `claude/resiliency-retries` | Retries + circuit breakers on every outbound HTTP call | Built — merged |
 | 2 | `claude/postgres-integration-tests` | Repository layer tested against a real Postgres, not just SQLite | Built — merged |
-| 3 | `claude/durable-background-jobs` | Module 17's evidence-pack generation surviving a pod restart | Built (this branch) |
-| 4 | Connection pooling + pagination | Pool sizing tuned to Helm replica counts; pagination on list endpoints | Built — separate PR |
+| 3 | `claude/durable-background-jobs` | Module 17's evidence-pack generation surviving a pod restart | Built — merged |
+| 4 | `claude/pooling-and-pagination` | Connection pooling tuned to Helm replica counts + pagination on list endpoints | Built (this branch) |
 | 5 | CI/CD pipeline | Lint + test gating via GitHub Actions | Built — separate PR |
 | 6 | JWT bearer auth | Shared-signing-key service-to-service auth (final, dedicated push) | Built — separate PR |
 
@@ -121,9 +121,42 @@ concurrent claims never double-claiming the same row — is proven against
 a genuine Postgres instance in
 `modules/regulatory-compliance/tests/integration/test_evidence_worker_postgres.py`.
 
-**Branches 4–6** (connection pooling + pagination, CI/CD, JWT bearer
-auth) are built and merging in this same sequence; see each branch's own
-PR for details until this section is updated with their narratives too.
+**Branch 4 — connection pooling + pagination**, two parts:
+
+- **Connection pooling.** SQLAlchemy's out-of-the-box async engine
+  defaults (`pool_size=5`, `max_overflow=10`) applied identically
+  everywhere regardless of how many pods are actually running — at each
+  module's own Helm chart's `autoscaling.maxReplicas` (10/20/30
+  depending on the module), that meant up to 150–450 connections to a
+  single module's own Postgres instance from that module alone at full
+  autoscale, with no one having deliberately decided the number. Across
+  all 17 Postgres-backed modules, `db/session.py`'s `make_engine` now
+  passes explicit `pool_size`/`max_overflow`/`pool_timeout`/
+  `pool_recycle`, computed per module from its own `maxReplicas` so
+  steady-state stays around 100 connections and full-burst around 150
+  even at max autoscale, plus `pool_recycle=1800s` everywhere to avoid
+  stale connections behind a cloud LB/proxy's own idle timeout — a real,
+  independent gap. All four values are now env-overridable Settings
+  fields, with a regression test per module asserting `make_engine`
+  actually applies them.
+- **Pagination.** Audited every list-returning API endpoint platform-wide
+  (15 found across 12 modules); added `limit`/`offset` query params
+  (default 50, max 200) and a `<Resource>ListResponse` envelope
+  (`items`/`total`/`limit`/`offset`) to the ones that were genuinely
+  unbounded growing lists. A handful were deliberately left unpaginated
+  — llm-gateway's `GET /providers` (a small, fixed, admin-configured
+  set) and long-term-memory's `POST /query` (already bounded via its own
+  `top_k` ranking) — each justified in a code comment and its module's
+  README, not silently skipped. Where a list method is also called
+  internally by core logic needing the *complete* set (regulatory-
+  compliance's crosswalk/coverage calculation, workflow-engine's
+  instance-detail view embedding its full step list), those call sites
+  pass an effectively-unbounded internal page size rather than silently
+  truncating to the API's default page.
+
+**Branches 5–6** (CI/CD, JWT bearer auth) are built and merging in this
+same sequence; see each branch's own PR for details until this section
+is updated with their narratives too.
 
 ## Repository layout
 

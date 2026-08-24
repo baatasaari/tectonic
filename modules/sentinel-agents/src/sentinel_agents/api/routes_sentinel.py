@@ -14,6 +14,7 @@ from sentinel_agents.app_context import AppContext
 from sentinel_agents.core.domain import AgentActionEvent, now
 from sentinel_agents.core.ports import SentinelRepository
 from sentinel_agents.schemas.sentinel import (
+    AlertListResponse,
     AlertSchema,
     BaselineSchema,
     ConfigureRequest,
@@ -56,14 +57,16 @@ async def ingest_event(
     return IngestEventResponse(alert_id=alert.id, alert_type=alert.alert_type.value, severity=alert.severity.value)
 
 
-@router.get("/alerts", response_model=list[AlertSchema])
+@router.get("/alerts", response_model=AlertListResponse)
 async def list_alerts(
     tenant_id: str = Query(...),
     severity: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     repository: SentinelRepository = Depends(get_repository),
-) -> list[AlertSchema]:
-    alerts = await repository.list_alerts(tenant_id, severity)
-    return [_alert_schema(a) for a in alerts]
+) -> AlertListResponse:
+    alerts, total = await repository.list_alerts(tenant_id, severity, limit=limit, offset=offset)
+    return AlertListResponse(items=[_alert_schema(a) for a in alerts], total=total, limit=limit, offset=offset)
 
 
 @router.get("/alerts/{alert_id}", response_model=AlertSchema)
@@ -85,6 +88,10 @@ async def get_baselines(
     ctx: AppContext = Depends(get_ctx),
     repository: SentinelRepository = Depends(get_repository),
 ) -> list[BaselineSchema]:
+    # Deliberately NOT limit/offset paginated (see core/ports.py's list_baselines_for_agent
+    # docstring and the README): one AgentBaseline row per (agent, action_type), upserted in
+    # place by SentinelEventProcessor, never appended to — bounded by an agent's small,
+    # fixed set of distinct action types, not an unbounded growing history like /alerts.
     tenant_id = request.headers.get("X-Tenant-Id", ctx.settings.tenant_id)
     baselines = await repository.list_baselines_for_agent(tenant_id, agent_ref)
     return [_baseline_schema(b) for b in baselines]

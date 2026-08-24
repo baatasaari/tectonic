@@ -1,7 +1,7 @@
 """SQLAlchemy-backed implementation of ConnectorRepository (LLD §3)."""
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from data_source_plugins.core.domain import (
@@ -161,8 +161,18 @@ class SQLAlchemyConnectorRepository:
         await self.session.refresh(m)
         return _drift_incident_to_domain(m)
 
-    async def list_drift_incidents(self, connector_id: str) -> list[DriftIncidentRecord]:
+    async def list_drift_incidents(
+        self, connector_id: str, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[DriftIncidentRecord], int]:
+        where_clause = models.DriftIncident.connector_id == connector_id
         rows = await self.session.execute(
-            select(models.DriftIncident).where(models.DriftIncident.connector_id == connector_id)
+            select(models.DriftIncident)
+            .where(where_clause)
+            .order_by(models.DriftIncident.created_at.desc())
+            .limit(limit)
+            .offset(offset)
         )
-        return [_drift_incident_to_domain(m) for m in rows.scalars().all()]
+        total = await self.session.execute(
+            select(func.count(models.DriftIncident.id)).where(where_clause)
+        )
+        return [_drift_incident_to_domain(m) for m in rows.scalars().all()], total.scalar_one()

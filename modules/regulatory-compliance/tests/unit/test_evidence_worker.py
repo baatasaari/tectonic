@@ -131,11 +131,13 @@ async def test_a_transient_generation_failure_is_requeued_while_attempts_remain(
             super().__init__()
             self._boomed = False
 
-        async def list_control_mappings(self, *, control_name=None, framework_name=None):
+        async def list_control_mappings(self, *, control_name=None, framework_name=None, limit=50, offset=0):
             if not self._boomed:
                 self._boomed = True
                 raise RuntimeError("transient db hiccup")
-            return await super().list_control_mappings(control_name=control_name, framework_name=framework_name)
+            return await super().list_control_mappings(
+                control_name=control_name, framework_name=framework_name, limit=limit, offset=offset,
+            )
 
     repository = BoomOnFirstCallRepository()
     await repository.create_evidence_pack(
@@ -162,7 +164,7 @@ async def test_a_pack_that_exhausts_max_attempts_is_permanently_failed_not_retri
     the single place that decides a pack has had its last chance, so it takes one poll
     beyond max_attempts failures to converge to the permanent-failed state."""
     class AlwaysBoomRepository(InMemoryRegulatoryComplianceRepository):
-        async def list_control_mappings(self, *, control_name=None, framework_name=None):
+        async def list_control_mappings(self, *, control_name=None, framework_name=None, limit=50, offset=0):
             raise RuntimeError("permanently broken")
 
     repository = AlwaysBoomRepository()

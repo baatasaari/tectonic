@@ -26,7 +26,8 @@ class RegulatoryComplianceRepository(Protocol):
 
     async def list_control_mappings(
         self, *, control_name: str | None = None, framework_name: str | None = None,
-    ) -> list[ControlMappingRecord]: ...
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[ControlMappingRecord], int]: ...
 
     async def create_control_event(self, record: ControlImplementationEventRecord) -> ControlImplementationEventRecord: ...
 
