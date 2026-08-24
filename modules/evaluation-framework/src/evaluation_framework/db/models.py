@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CHAR, JSON, Boolean, Float, Index, String, func
+from sqlalchemy import CHAR, JSON, Boolean, DateTime, Float, Index, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,8 +31,8 @@ class EvalRun(Base):
     agent_ref: Mapped[str] = mapped_column(String(255))
     metrics_evaluated: Mapped[list[str]] = mapped_column(JSONType, default=list)
     status: Mapped[str] = mapped_column(String(24), default="running")
-    started_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class MetricScore(Base):
@@ -50,7 +50,7 @@ class MetricScore(Base):
     score: Mapped[float] = mapped_column(Float())
     threshold: Mapped[float] = mapped_column(Float())
     passed: Mapped[bool] = mapped_column(Boolean())
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class GateResult(Base):
@@ -62,7 +62,7 @@ class GateResult(Base):
     overall_passed: Mapped[bool] = mapped_column(Boolean())
     blocking_failures: Mapped[list[str]] = mapped_column(JSONType, default=list)
     environment: Mapped[str] = mapped_column(String(32), default="production")
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class DomainMetricPack(Base):

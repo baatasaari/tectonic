@@ -32,7 +32,7 @@ class AgentBaseline(Base):
     mean: Mapped[float] = mapped_column(Float(), default=0.0)
     m2: Mapped[float] = mapped_column(Float(), default=0.0)
     sample_count: Mapped[int] = mapped_column(Integer(), default=0)
-    last_updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    last_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Alert(Base):
@@ -46,7 +46,7 @@ class Alert(Base):
     severity: Mapped[str] = mapped_column(String(16))
     description: Mapped[str] = mapped_column(String(2048))
     status: Mapped[str] = mapped_column(String(32), default="detected")
-    detected_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class InterventionRecordModel(Base):
@@ -58,7 +58,7 @@ class InterventionRecordModel(Base):
     intervention_type: Mapped[str] = mapped_column(String(16))
     target_ref: Mapped[str] = mapped_column(String(255), default="")
     outcome: Mapped[str] = mapped_column(String(64), default="")
-    executed_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    executed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class SwarmCorrelationWindowModel(Base):

@@ -1,7 +1,7 @@
 """`/v1/regulatory-compliance/*` routes (LLD §3)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from regulatory_compliance.api.deps import (
     build_coverage_calculator,
@@ -9,7 +9,6 @@ from regulatory_compliance.api.deps import (
     build_feed_manager,
     get_ctx,
     get_repository,
-    run_evidence_generation,
 )
 from regulatory_compliance.app_context import AppContext
 from regulatory_compliance.core.domain import (
@@ -50,7 +49,7 @@ def _pack_schema(p: EvidencePackRecord, *, include_document: bool = False) -> Ev
         id=p.id, tenant_id=p.tenant_id, framework_name=p.framework_name, status=p.status.value,
         generated_at=p.generated_at, coverage_percentage=p.coverage_percentage, document_ref=p.document_ref,
         document_format=p.document_format, document_bytes_b64=p.document_bytes_b64 if include_document else None,
-        created_at=p.created_at,
+        created_at=p.created_at, attempts=p.attempts, last_error=p.last_error,
     )
 
 
@@ -140,16 +139,20 @@ async def coverage(
 @router.post("/evidence-packs", response_model=EvidencePackSchema, status_code=202)
 async def create_evidence_pack(
     body: CreateEvidencePackRequest,
-    background_tasks: BackgroundTasks,
     ctx: AppContext = Depends(get_ctx),
     repository: RegulatoryComplianceRepository = Depends(get_repository),
 ) -> EvidencePackSchema:
+    """Enqueues generation and returns immediately — the record itself, at
+    status=generating, IS the queue entry. `EvidencePackWorker` (started in main.py's
+    lifespan) picks it up via a durable Postgres SELECT FOR UPDATE SKIP LOCKED poll
+    loop, not an in-process FastAPI BackgroundTasks job, so a pod restart between this
+    202 response and the job completing no longer loses the work: the pack stays
+    claimable by any worker instance until it actually finishes."""
     record = EvidencePackRecord(
         id=new_id(), tenant_id=body.tenant_id, framework_name=body.framework_name, status=EvidencePackStatus.GENERATING,
         document_format=ctx.settings.evidence.output_format,
     )
     record = await repository.create_evidence_pack(record)
-    background_tasks.add_task(run_evidence_generation, ctx, record.id, body.tenant_id, body.framework_name)
     return _pack_schema(record)
 
 

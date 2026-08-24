@@ -1,15 +1,20 @@
 """HTTP adapter for this module's LLM Gateway dependency (reasoning-trace
-narrative generation)."""
+narrative generation).
+
+`HTTPLLMGatewayClient` is a `ResilientHTTPClient` (retry + circuit
+breaker on every outbound call — see resilience.py).
+"""
 from __future__ import annotations
 
 import httpx
 
+from observability.clients.resilience import ResilientHTTPClient
 
-class HTTPLLMGatewayClient:
+
+class HTTPLLMGatewayClient(ResilientHTTPClient):
     def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=30.0)
+        super().__init__(base_url, client=client, breaker_name="llm-gateway")
 
     async def narrate(self, trace_summary: list[dict]) -> str:
-        resp = await self._client.post("/v1/narrate", json={"trace_summary": trace_summary})
-        resp.raise_for_status()
+        resp = await self._post("/v1/narrate", json={"trace_summary": trace_summary})
         return resp.json()["narrative"]

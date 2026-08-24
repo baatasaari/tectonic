@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CHAR, JSON, Boolean, Float, ForeignKey, Index, String, func
+from sqlalchemy import CHAR, JSON, Boolean, DateTime, Float, ForeignKey, Index, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -34,7 +34,7 @@ class ToolDefinition(Base):
     schema_: Mapped[dict] = mapped_column("schema", JSONType, default=dict)
     status: Mapped[str] = mapped_column(String(32), default="active")
     synthesised: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ToolInvocation(Base):
@@ -48,7 +48,7 @@ class ToolInvocation(Base):
     status: Mapped[str] = mapped_column(String(32), default="pending")
     retry_count: Mapped[int] = mapped_column(default=0)
     latency_ms: Mapped[float] = mapped_column(Float(), default=0.0)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ReliabilityScore(Base):
@@ -57,4 +57,4 @@ class ReliabilityScore(Base):
     tool_id: Mapped[str] = mapped_column(UUIDType, primary_key=True)
     rolling_success_rate: Mapped[float] = mapped_column(Float(), default=1.0)
     rolling_avg_latency_ms: Mapped[float] = mapped_column(Float(), default=0.0)
-    last_updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    last_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

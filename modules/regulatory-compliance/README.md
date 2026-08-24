@@ -24,6 +24,7 @@ src/regulatory_compliance/
     crosswalk_engine.py           Crosswalk Engine + Coverage Calculator
     regulatory_feed.py             Regulatory Feed Manager — publishes/deprecates mapping-table versions
     evidence_generator.py           Evidence Pack Generator — real PDF (fpdf2) or JSON output
+    evidence_worker.py               Durable evidence-pack worker — SELECT FOR UPDATE SKIP LOCKED poll loop
   db/                      SQLAlchemy 2.0 async models + repository
   clients/                 HTTP client for Auditability
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
@@ -32,6 +33,8 @@ src/regulatory_compliance/
 ```
 
 ## Design notes vs. the LLD
+
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
 
 - **Evidence pack PDF generation.** The LLD's "PDF (via the platform's
   own PDF generation approach)" is realised with `fpdf2` — a genuinely
@@ -50,12 +53,30 @@ src/regulatory_compliance/
   available," never as a reason to fail generation, since this module's
   own `ControlImplementationEvent` rows remain the evidence source of
   record either way.
-- **Async evidence generation.** Implemented as a real FastAPI
-  `BackgroundTasks` job (not a queue/worker deployment) — `POST
-  /evidence-packs` returns immediately with `status=generating`, and the
-  background job opens its own DB session (the request-scoped one is
-  already torn down by the time background tasks run) before flipping
-  the record to `completed` or `failed`.
+- **Async evidence generation — durable, not in-process.** `POST
+  /evidence-packs` returns immediately with `status=generating`; that
+  record IS the queue entry. This used to be a real FastAPI
+  `BackgroundTasks` job — genuine async work, but non-durable: a pod
+  restart between the 202 response and the background task finishing
+  left the pack stuck at `status=generating` forever, since nothing else
+  would ever pick it back up. Fixed by `core/evidence_worker.py`'s
+  `EvidencePackWorker`: an asyncio poll loop (started in `main.py`'s
+  lifespan) claiming pending packs via a real Postgres `SELECT ... FOR
+  UPDATE SKIP LOCKED` query, so multiple worker instances/pods can poll
+  the same table concurrently without ever double-claiming a row. Each
+  claim gets a time-bounded lease; a worker that crashes mid-generation
+  simply lets that lease expire, and the next poll (from any instance)
+  reclaims the job — no separate liveness check needed. A startup
+  recovery sweep force-expires every held lease immediately, so anything
+  left mid-flight by a now-dead previous process instance is reclaimed
+  on the very next poll tick rather than waiting out its lease. A
+  generation failure with attempts remaining is requeued for retry;
+  once `evidence.worker_max_attempts` is exhausted the pack is marked
+  `failed` for good (`last_error` explains why) instead of being retried
+  forever. See `tests/integration/test_evidence_worker_postgres.py` for
+  the concurrency property this actually depends on, proven against a
+  real Postgres — `FOR UPDATE SKIP LOCKED` can't be meaningfully tested
+  against SQLite or an in-memory fake.
 - **Crosswalk mapping table.** `core/mapping_data.py` ships a default
   crosswalk covering the controls this platform's other governance
   modules already implement (human oversight, guardrails policy checks,
@@ -77,6 +98,22 @@ src/regulatory_compliance/
   frameworks it touches, so a tenant pinned to an older
   `FrameworkProfile.version` is unaffected until they explicitly opt in
   to the newer version.
+- **Postgres integration tests.** The repository layer is now also
+  tested against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering real
+  JSONB list round-tripping of `ControlMapping.clause_references`, the
+  `deprecate_control_mappings` multi-row update touching only the
+  targeted framework version, and a real UUID primary key round trip
+  through `FrameworkProfile`/`EvidencePack` — none of which SQLite's
+  unit-tier fakes can reliably prove. See `tests/integration/conftest.py`
+  for how the Postgres instance is obtained. This tier's presence
+  prompted a platform-wide sweep of every module's `db/models.py` for
+  the same class of bug: `Mapped[datetime]` columns missing
+  `DateTime(timezone=True)` despite the Alembic migration already
+  defining them as timestamptz and the domain layer's defaults being
+  tz-aware — invisible under SQLite, but a real correctness bug against
+  Postgres once a domain default (or an explicit value) is written.
+  Found and fixed here too.
 
 - **`GET /mappings` pagination.** Added `limit`/`offset` query params
   (default `limit=50`, max `200`) — the response shape changed from a bare

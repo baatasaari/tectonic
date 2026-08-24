@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CHAR, JSON, Index, Integer, String, func
+from sqlalchemy import CHAR, JSON, DateTime, Index, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -41,7 +41,7 @@ class PrioritisationWeights(Base):
     tenant_id: Mapped[str] = mapped_column(String(255))
     task_type: Mapped[str] = mapped_column(String(255))
     feature_weights: Mapped[dict] = mapped_column(JSONType, default=dict)
-    last_updated_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    last_updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ContextAssembly(Base):
@@ -55,4 +55,4 @@ class ContextAssembly(Base):
     items_dropped: Mapped[list[dict]] = mapped_column(JSONType, default=list)
     items_summarised: Mapped[list[dict]] = mapped_column(JSONType, default=list)
     total_tokens_used: Mapped[int] = mapped_column(Integer(), default=0)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

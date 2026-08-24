@@ -45,14 +45,83 @@ on its own:
 
 | # | Branch | Scope | Status |
 |---|---|---|---|
-| 1 | `claude/resiliency-retries` | Retries + circuit breakers on every outbound HTTP call | Built — separate PR |
-| 2 | `claude/postgres-integration-tests` | Repository layer tested against a real Postgres, not just SQLite | Built — separate PR |
-| 3 | `claude/durable-background-jobs` | Module 17's evidence-pack generation surviving a pod restart | Built — separate PR |
+| 1 | `claude/resiliency-retries` | Retries + circuit breakers on every outbound HTTP call | Built — merged |
+| 2 | `claude/postgres-integration-tests` | Repository layer tested against a real Postgres, not just SQLite | Built — merged |
+| 3 | `claude/durable-background-jobs` | Module 17's evidence-pack generation surviving a pod restart | Built — merged |
 | 4 | `claude/pooling-and-pagination` | Connection pooling tuned to Helm replica counts + pagination on list endpoints | Built (this branch) |
-| 5 | CI/CD pipeline | Lint + test gating via GitHub Actions | Not started |
-| 6 | JWT bearer auth | Shared-signing-key service-to-service auth (final, dedicated push) | Not started |
+| 5 | CI/CD pipeline | Lint + test gating via GitHub Actions | Built — separate PR |
+| 6 | JWT bearer auth | Shared-signing-key service-to-service auth (final, dedicated push) | Built — separate PR |
 
-**This branch (4/6), two parts:**
+**Branch 1 — resiliency.** Every module gets a `ResilientHTTPClient` base
+class (`clients/resilience.py`) built on real, off-the-shelf libraries —
+`tenacity` for exponential-backoff retry, `aiobreaker` for a proper
+Release-It!-pattern circuit breaker — not hand-rolled equivalents. Every
+one of the ~50 client classes across the platform's `clients/http_clients.py`
+files now retries network failures and 5xx responses (never 4xx) and
+opens its breaker after repeated failures, so a struggling peer gets a
+break instead of a retry storm and callers fail fast instead of piling up
+against a peer that's already down. LLM Gateway's real provider-calling
+path (`http_provider_client.py`) gets its own per-provider breaker, so one
+provider being down never blocks calls to a different one. Verified with
+a live reproduction, not just wired and assumed to work: confirmed retry
+count on a flaky-then-recovers backend, confirmed zero retries on a 4xx,
+and confirmed the breaker actually opens after repeated failures and then
+short-circuits without a further network call.
+
+**Branch 2 — real-Postgres integration tests.** 17 of the 19 built
+modules (all but Vector DB, which is Qdrant-only with no SQLAlchemy/
+Postgres usage, and Short-Term Memory, whose Redis backend is already
+covered by `fakeredis`-based unit tests) now have a `tests/integration/`
+tier exercising the real `SQLAlchemy*Repository` against genuine Postgres
+— not part of the default `pytest` run, opt-in via either
+`TECTONIC_TEST_POSTGRES_URL` (an admin connection string to an
+already-running Postgres; the fixture creates and drops an isolated
+database per test-module run) or Docker + `testcontainers` as a
+zero-config fallback, skipping the whole tier cleanly when neither is
+available. Each module's suite targets something SQLite's unit tier can't
+reliably prove: real JSONB list/dict round-tripping with exact type and
+order preservation, real UUID primary keys, and multi-row update/filter
+queries hitting only the intended rows.
+
+Actually running these for real — several had never executed against a
+genuine Postgres before, including one written earlier in this project
+that only supported a Docker-only fixture — surfaced a real, platform-wide
+schema-drift bug: in every one of those 17 modules, one or more
+`Mapped[datetime]` columns in `db/models.py` were missing
+`DateTime(timezone=True)`, even though the corresponding Alembic
+migration already defines the column as `timestamptz` and the domain
+layer's own defaults are timezone-aware (`datetime.now(UTC)`). SQLite
+never enforces the mismatch, so it was invisible in the unit tier; against
+real Postgres, asyncpg rejects the write outright
+(`can't subtract offset-naive and offset-aware datetimes`) the moment a
+tz-aware value is written to what it believes is a naive column. Fixed
+across all 17 modules' `db/models.py`, with regression tests added where
+the integration suite already exercised the affected column.
+
+**Branch 3 — durable background jobs.** Module 17 (Regulatory and
+Compliance)'s evidence-pack generation used to run as an in-process
+FastAPI `BackgroundTasks` job — genuine async work, but non-durable: a
+pod restart between the `202 Accepted` response and the background task
+finishing left the pack permanently stuck at `status=generating`, with
+nothing else ever picking the job back up. Fixed with a Postgres-backed
+job queue (`core/evidence_worker.py`'s `EvidencePackWorker`), reusing the
+`evidence_packs` table itself as the queue: an asyncio poll loop claims
+pending packs via `SELECT ... FOR UPDATE SKIP LOCKED`, so multiple worker
+instances/pods can poll the same table concurrently without ever
+double-claiming a row; each claim gets a time-bounded lease so a crash
+mid-generation is recovered automatically once the lease expires, with no
+separate liveness check; a startup recovery sweep force-expires every
+held lease immediately so anything left mid-flight by a now-dead previous
+process instance is reclaimed on the very next poll tick; and a
+transient generation failure is requeued for retry, with a
+`worker_max_attempts` ceiling so a permanently-broken job stops being
+retried forever instead of spinning indefinitely. The one property here
+that neither SQLite nor an in-memory fake can prove for real —
+concurrent claims never double-claiming the same row — is proven against
+a genuine Postgres instance in
+`modules/regulatory-compliance/tests/integration/test_evidence_worker_postgres.py`.
+
+**Branch 4 — connection pooling + pagination**, two parts:
 
 - **Connection pooling.** SQLAlchemy's out-of-the-box async engine
   defaults (`pool_size=5`, `max_overflow=10`) applied identically
@@ -85,8 +154,9 @@ on its own:
   pass an effectively-unbounded internal page size rather than silently
   truncating to the API's default page.
 
-Full regression: all 19 modules' unit tiers green, 517 tests total, ruff
-clean across every touched module.
+**Branches 5–6** (CI/CD, JWT bearer auth) are built and merging in this
+same sequence; see each branch's own PR for details until this section
+is updated with their narratives too.
 
 ## Repository layout
 

@@ -2,9 +2,9 @@
 §3)."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from regulatory_compliance.core.domain import (
@@ -13,6 +13,7 @@ from regulatory_compliance.core.domain import (
     EvidencePackRecord,
     EvidencePackStatus,
     FrameworkProfileRecord,
+    now,
 )
 from regulatory_compliance.db import models
 
@@ -51,7 +52,8 @@ def _pack_to_domain(m: models.EvidencePack) -> EvidencePackRecord:
         status=EvidencePackStatus(m.status), generated_at=_as_utc(m.generated_at),
         coverage_percentage=m.coverage_percentage, document_ref=m.document_ref,
         document_format=m.document_format, document_bytes_b64=m.document_bytes_b64,
-        created_at=_as_utc(m.created_at),
+        created_at=_as_utc(m.created_at), worker_id=m.worker_id,
+        lease_expires_at=_as_utc(m.lease_expires_at), attempts=m.attempts, last_error=m.last_error,
     )
 
 
@@ -191,6 +193,7 @@ class SQLAlchemyRegulatoryComplianceRepository:
         m.document_ref = record.document_ref
         m.document_format = record.document_format
         m.document_bytes_b64 = record.document_bytes_b64
+        m.last_error = record.last_error
         await self.session.commit()
         await self.session.refresh(m)
         return _pack_to_domain(m)
@@ -200,3 +203,68 @@ class SQLAlchemyRegulatoryComplianceRepository:
         if m is None or m.tenant_id != tenant_id:
             return None
         return _pack_to_domain(m)
+
+    async def claim_next_evidence_pack(self, worker_id: str, lease_seconds: int) -> EvidencePackRecord | None:
+        """`SELECT ... FOR UPDATE SKIP LOCKED`: the row-level lock this takes is what
+        lets multiple worker processes/pods poll concurrently without two of them ever
+        claiming the same pending pack — a competing claimant simply skips a row another
+        transaction already has locked, rather than blocking on it or double-claiming it."""
+        moment = now()
+        stmt = (
+            select(models.EvidencePack)
+            .where(
+                models.EvidencePack.status == EvidencePackStatus.GENERATING.value,
+                (models.EvidencePack.lease_expires_at.is_(None))
+                | (models.EvidencePack.lease_expires_at < moment),
+            )
+            .order_by(models.EvidencePack.created_at)
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+        rows = await self.session.execute(stmt)
+        m = rows.scalars().first()
+        if m is None:
+            return None
+        m.worker_id = worker_id
+        m.attempts += 1
+        m.lease_expires_at = moment + timedelta(seconds=lease_seconds)
+        await self.session.commit()
+        await self.session.refresh(m)
+        return _pack_to_domain(m)
+
+    async def requeue_evidence_pack_for_retry(self, pack_id: str) -> None:
+        m = await self.session.get(models.EvidencePack, pack_id)
+        if m is None:
+            return
+        m.status = EvidencePackStatus.GENERATING.value
+        m.lease_expires_at = None
+        await self.session.commit()
+
+    async def fail_exhausted_evidence_packs(self, max_attempts: int) -> int:
+        result = await self.session.execute(
+            update(models.EvidencePack)
+            .where(
+                models.EvidencePack.status == EvidencePackStatus.GENERATING.value,
+                models.EvidencePack.attempts >= max_attempts,
+            )
+            .values(
+                status=EvidencePackStatus.FAILED.value,
+                last_error=f"exceeded max attempts ({max_attempts})",
+            )
+        )
+        await self.session.commit()
+        return result.rowcount or 0
+
+    async def force_expire_stale_leases(self) -> int:
+        moment = now()
+        result = await self.session.execute(
+            update(models.EvidencePack)
+            .where(
+                models.EvidencePack.status == EvidencePackStatus.GENERATING.value,
+                models.EvidencePack.lease_expires_at.is_not(None),
+                models.EvidencePack.lease_expires_at > moment,
+            )
+            .values(lease_expires_at=moment)
+        )
+        await self.session.commit()
+        return result.rowcount or 0

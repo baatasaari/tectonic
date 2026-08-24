@@ -38,8 +38,8 @@ class MemoryItem(Base):
     graph_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="active")
     relevance_score: Mapped[float] = mapped_column(Float(), default=1.0)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    last_accessed_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_accessed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ConsolidationRun(Base):
@@ -50,7 +50,7 @@ class ConsolidationRun(Base):
     tenant_id: Mapped[str] = mapped_column(String(255))
     items_merged_count: Mapped[int] = mapped_column(Integer(), default=0)
     items_decayed_count: Mapped[int] = mapped_column(Integer(), default=0)
-    run_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ReflectionEntry(Base):
@@ -63,7 +63,7 @@ class ReflectionEntry(Base):
     triggering_interaction_ref: Mapped[str] = mapped_column(String(255))
     reflection_content: Mapped[str] = mapped_column(Text())
     applied: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class DeletionRecordModel(Base):
