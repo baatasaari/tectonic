@@ -1,7 +1,7 @@
 """`/v1/data-source-plugins/*` routes (LLD §3)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from data_source_plugins.api.deps import build_sync_service, get_ctx, get_repository
 from data_source_plugins.app_context import AppContext
@@ -10,6 +10,7 @@ from data_source_plugins.core.ports import ConnectorRepository
 from data_source_plugins.schemas.connectors import (
     ConnectorConfigSchema,
     CreateConnectorRequest,
+    DriftIncidentListResponse,
     DriftIncidentSchema,
     QualityScoreSchema,
     QueryRequest,
@@ -100,16 +101,22 @@ async def get_quality(
     )
 
 
-@router.get("/connectors/{connector_id}/drift-incidents", response_model=list[DriftIncidentSchema])
+@router.get("/connectors/{connector_id}/drift-incidents", response_model=DriftIncidentListResponse)
 async def list_drift_incidents(
     connector_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     repository: ConnectorRepository = Depends(get_repository),
-) -> list[DriftIncidentSchema]:
-    incidents = await repository.list_drift_incidents(connector_id)
-    return [
-        DriftIncidentSchema(
-            id=i.id, connector_id=i.connector_id, schema_diff=i.schema_diff, classification=i.classification.value,
-            auto_adapted=i.auto_adapted, resolved_by=i.resolved_by, created_at=i.created_at,
-        )
-        for i in incidents
-    ]
+) -> DriftIncidentListResponse:
+    incidents, total = await repository.list_drift_incidents(connector_id, limit=limit, offset=offset)
+    return DriftIncidentListResponse(
+        items=[
+            DriftIncidentSchema(
+                id=i.id, connector_id=i.connector_id, schema_diff=i.schema_diff,
+                classification=i.classification.value, auto_adapted=i.auto_adapted,
+                resolved_by=i.resolved_by, created_at=i.created_at,
+            )
+            for i in incidents
+        ],
+        total=total, limit=limit, offset=offset,
+    )

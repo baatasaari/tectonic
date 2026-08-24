@@ -49,6 +49,13 @@ class ReflectionEntrySchema(BaseModel):
     created_at: datetime
 
 
+class ReflectionEntryListResponse(BaseModel):
+    items: list[ReflectionEntrySchema]
+    total: int
+    limit: int
+    offset: int
+
+
 class GenerateReflectionRequest(BaseModel):
     agent_ref: str
     triggering_interaction_ref: str

@@ -85,6 +85,12 @@ src/evaluation_framework/
   component: a deterministic hash of `interaction_id` against the
   configured `sample_rate`, not `random()`, so a given interaction always
   samples the same way.
+- **Pagination on `GET /scores`.** Added `limit`/`offset` query params
+  (default 50, max 200) and a `MetricScoreListResponse` envelope
+  (`items`/`total`/`limit`/`offset`) — this endpoint previously returned
+  every matching score row unbounded, a real scaling gap for a tenant
+  with a large evaluation history. Ordered by `created_at` descending
+  (newest score first) for stable pagination.
 - **CLI.** `agenteval run --gate` reimplements the LLD's described
   AgentEval CLI pattern against this module's own HTTP API (`click` +
   `httpx`, both real, lightweight dependencies) rather than porting

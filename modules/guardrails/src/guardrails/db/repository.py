@@ -1,7 +1,7 @@
 """SQLAlchemy-backed implementation of GuardrailsRepository (LLD §3)."""
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from guardrails.core.domain import (
@@ -97,9 +97,19 @@ class SQLAlchemyGuardrailsRepository:
         await self.session.refresh(m)
         return _run_to_domain(m)
 
-    async def list_red_team_runs(self, tenant_id: str) -> list[RedTeamRunRecord]:
-        rows = await self.session.execute(select(models.RedTeamRun).where(models.RedTeamRun.tenant_id == tenant_id))
-        return [_run_to_domain(m) for m in rows.scalars().all()]
+    async def list_red_team_runs(
+        self, tenant_id: str, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[RedTeamRunRecord], int]:
+        where_clause = models.RedTeamRun.tenant_id == tenant_id
+        rows = await self.session.execute(
+            select(models.RedTeamRun)
+            .where(where_clause)
+            .order_by(models.RedTeamRun.run_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        total = await self.session.execute(select(func.count(models.RedTeamRun.id)).where(where_clause))
+        return [_run_to_domain(m) for m in rows.scalars().all()], total.scalar_one()
 
     async def create_bypass_incident(self, record: BypassIncidentRecord) -> BypassIncidentRecord:
         m = models.BypassIncident(

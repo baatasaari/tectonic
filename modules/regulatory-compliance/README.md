@@ -78,6 +78,18 @@ src/regulatory_compliance/
   `FrameworkProfile.version` is unaffected until they explicitly opt in
   to the newer version.
 
+- **`GET /mappings` pagination.** Added `limit`/`offset` query params
+  (default `limit=50`, max `200`) — the response shape changed from a bare
+  array to `ControlMappingListResponse` (`items`/`total`/`limit`/`offset`).
+  Results are ordered by `id` ascending for a stable page boundary (there's
+  no timestamp column on `control_mappings` to order by instead). The
+  repository-level `list_control_mappings` method itself gained
+  `limit`/`offset` and now returns `(items, total)`; its two internal
+  callers — `CrosswalkEngine.map_control` and `CoverageCalculator.coverage`
+  — need the *complete* matching set to crosswalk/score correctly, so they
+  call it with `limit=10_000` (an effectively-unbounded internal page size
+  for this small, config-driven mapping table) rather than truncating to
+  the API's default page size.
 - **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
   the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
   regardless of how many pods are running — at this module's own

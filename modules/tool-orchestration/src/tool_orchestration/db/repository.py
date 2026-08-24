@@ -1,7 +1,7 @@
 """SQLAlchemy-backed implementation of ToolRepository (LLD §3.1)."""
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from tool_orchestration.core.domain import (
@@ -55,12 +55,27 @@ class SQLAlchemyToolRepository:
         await self.session.refresh(m)
         return _tool_to_domain(m)
 
-    async def list_tool_definitions(self, tenant_id: str, status: str | None = None) -> list[ToolDefinitionRecord]:
-        stmt = select(models.ToolDefinition).where(models.ToolDefinition.tenant_id == tenant_id)
+    async def list_tool_definitions(
+        self, tenant_id: str, status: str | None = None, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[ToolDefinitionRecord], int]:
+        filters = [models.ToolDefinition.tenant_id == tenant_id]
         if status is not None:
-            stmt = stmt.where(models.ToolDefinition.status == status)
+            filters.append(models.ToolDefinition.status == status)
+
+        count_stmt = select(func.count(models.ToolDefinition.id)).where(*filters)
+        total = (await self.session.execute(count_stmt)).scalar_one()
+
+        # No existing deterministic order — order by created_at ascending (registration
+        # order) with id as a tiebreaker, so limit/offset pagination is stable.
+        stmt = (
+            select(models.ToolDefinition)
+            .where(*filters)
+            .order_by(models.ToolDefinition.created_at.asc(), models.ToolDefinition.id.asc())
+            .limit(limit)
+            .offset(offset)
+        )
         rows = await self.session.execute(stmt)
-        return [_tool_to_domain(m) for m in rows.scalars().all()]
+        return [_tool_to_domain(m) for m in rows.scalars().all()], total
 
     async def create_tool_invocation(self, record: ToolInvocationRecord) -> ToolInvocationRecord:
         m = models.ToolInvocation(

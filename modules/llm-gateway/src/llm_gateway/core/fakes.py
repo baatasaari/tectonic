@@ -33,8 +33,13 @@ class InMemoryGatewayRepository:
         rec = self.virtual_keys.get(virtual_key_id)
         return copy.deepcopy(rec) if rec else None
 
-    async def list_virtual_keys(self, tenant_id: str) -> list[VirtualKeyRecord]:
-        return [copy.deepcopy(v) for v in self.virtual_keys.values() if v.tenant_id == tenant_id]
+    async def list_virtual_keys(
+        self, tenant_id: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[VirtualKeyRecord], int]:
+        matching = [v for v in self.virtual_keys.values() if v.tenant_id == tenant_id]
+        matching.sort(key=lambda v: v.created_at, reverse=True)
+        sliced = [copy.deepcopy(v) for v in matching[offset : offset + limit]]
+        return sliced, len(matching)
 
     async def get_budget_policy(self, budget_policy_id: str) -> BudgetPolicyRecord | None:
         rec = self.budget_policies.get(budget_policy_id)

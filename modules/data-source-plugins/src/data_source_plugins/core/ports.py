@@ -44,7 +44,9 @@ class ConnectorRepository(Protocol):
 
     async def create_drift_incident(self, record: DriftIncidentRecord) -> DriftIncidentRecord: ...
 
-    async def list_drift_incidents(self, connector_id: str) -> list[DriftIncidentRecord]: ...
+    async def list_drift_incidents(
+        self, connector_id: str, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[DriftIncidentRecord], int]: ...
 
 
 class SourceConnectorRuntime(Protocol):

@@ -1,7 +1,7 @@
 """SQLAlchemy-backed implementation of KnowledgeBaseRepository (LLD §3)."""
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_base.core.domain import (
@@ -127,31 +127,46 @@ class SQLAlchemyKnowledgeBaseRepository:
             await self.session.refresh(m)
         return [_chunk_to_domain(m) for m in models_list]
 
-    async def list_chunks_by_version(self, document_version_id: str) -> list[ChunkRecord]:
-        rows = await self.session.execute(
-            select(models.Chunk)
-            .where(models.Chunk.document_version_id == document_version_id)
-            .order_by(models.Chunk.chunk_index)
-        )
-        return [_chunk_to_domain(m) for m in rows.scalars().all()]
+    async def list_chunks_by_version(
+        self, document_version_id: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[ChunkRecord], int]:
+        where_clause = models.Chunk.document_version_id == document_version_id
+        total_rows = await self.session.execute(select(func.count(models.Chunk.id)).where(where_clause))
+        total = total_rows.scalar_one()
 
-    async def list_chunks_by_policy_tag(self, tenant_id: str, policy_tag: str) -> list[ChunkRecord]:
+        rows = await self.session.execute(
+            select(models.Chunk).where(where_clause).order_by(models.Chunk.chunk_index).limit(limit).offset(offset)
+        )
+        return [_chunk_to_domain(m) for m in rows.scalars().all()], total
+
+    async def list_chunks_by_policy_tag(
+        self, tenant_id: str, policy_tag: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[ChunkRecord], int]:
         doc_rows = await self.session.execute(
             select(models.Document.id).where(models.Document.tenant_id == tenant_id)
         )
         document_ids = {str(d) for d in doc_rows.scalars().all()}
         if not document_ids:
-            return []
+            return [], 0
         version_rows = await self.session.execute(
             select(models.DocumentVersion.id).where(models.DocumentVersion.document_id.in_(document_ids))
         )
         version_ids = {str(v) for v in version_rows.scalars().all()}
         if not version_ids:
-            return []
+            return [], 0
+        # policy_tags is a JSON array column; membership isn't filterable at
+        # the SQL level in a backend-portable way (JSONB vs. SQLite JSON), so
+        # we filter in Python after the version-scoped fetch, then paginate
+        # the filtered, deterministically ordered result in memory.
         chunk_rows = await self.session.execute(
-            select(models.Chunk).where(models.Chunk.document_version_id.in_(version_ids))
+            select(models.Chunk)
+            .where(models.Chunk.document_version_id.in_(version_ids))
+            .order_by(models.Chunk.document_version_id, models.Chunk.chunk_index)
         )
-        return [_chunk_to_domain(m) for m in chunk_rows.scalars().all() if policy_tag in (m.policy_tags or [])]
+        matching = [
+            _chunk_to_domain(m) for m in chunk_rows.scalars().all() if policy_tag in (m.policy_tags or [])
+        ]
+        return matching[offset : offset + limit], len(matching)
 
     async def create_policy_tag(self, record: PolicyTagRecord) -> PolicyTagRecord:
         m = models.PolicyTag(id=record.id, tenant_id=record.tenant_id, name=record.name, description=record.description)

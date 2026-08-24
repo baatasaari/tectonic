@@ -72,6 +72,25 @@ src/sentinel_agents/
   configuration is sourced from this module's own YAML/env at startup,
   with `baselining.sensitivity` marked hot-reloadable there.
 
+- **`GET /alerts` pagination.** Added `limit`/`offset` query params
+  (default `limit=50`, max `200`); the response shape changed from a
+  bare array to `AlertListResponse` (`items`/`total`/`limit`/`offset`).
+  Alerts are a genuinely growing per-tenant history, so this is real
+  limit/offset pagination end to end (`SentinelRepository.list_alerts`
+  now returns `(items, total)`). Ordered by `detected_at` descending
+  (newest first, the useful default for an alert feed) with `id`
+  ascending as a tiebreaker, since multiple alerts can share a
+  `detected_at` timestamp.
+- **`GET /baselines/{agent_ref}` pagination deliberately skipped.**
+  `AgentBaselineRecord` rows are keyed by `(tenant_id, agent_ref,
+  action_type)` and updated in place by `upsert_baseline` (Welford's
+  running mean/variance) — never appended to. One agent's baseline list
+  is therefore bounded by its small, fixed set of distinct action types,
+  not an unbounded growing history the way `/alerts` is, so it was left
+  returning a bare `list[BaselineSchema]` rather than adding limit/offset
+  pagination that would add API surface with no real capacity problem to
+  solve. See the docstring on `SentinelRepository.list_baselines_for_agent`
+  in `core/ports.py`.
 - **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
   the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
   regardless of how many pods are running — at this module's own

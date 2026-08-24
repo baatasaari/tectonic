@@ -3,9 +3,12 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from human_oversight.core.domain import (
+    OversightRequestRecord,
     RequestNotClaimableError,
     RequestNotFoundError,
     RequestStatus,
+    new_id,
+    now,
 )
 
 
@@ -74,3 +77,31 @@ async def test_sweep_expired_leaves_fresh_requests_alone(harness):
     )
     expired = await harness.queue_manager.sweep_expired("t1")
     assert expired == []
+
+
+async def _seed_request(harness, *, age_seconds: int):
+    record = OversightRequestRecord(
+        id=new_id(), tenant_id="t1", requesting_module="guardrails", requesting_ref="ref-1",
+        created_at=now() - timedelta(seconds=age_seconds),
+    )
+    return await harness.repository.create_request(record)
+
+
+async def test_list_requests_paginates_newest_first(harness):
+    oldest = await _seed_request(harness, age_seconds=200)
+    middle = await _seed_request(harness, age_seconds=100)
+    newest = await _seed_request(harness, age_seconds=0)
+
+    page1, total = await harness.repository.list_requests("t1", limit=2, offset=0)
+    assert total == 3
+    assert [r.id for r in page1] == [newest.id, middle.id]
+
+    page2, total = await harness.repository.list_requests("t1", limit=2, offset=2)
+    assert total == 3
+    assert [r.id for r in page2] == [oldest.id]
+
+
+async def test_list_requests_empty_returns_no_error(harness):
+    requests, total = await harness.repository.list_requests("no-such-tenant")
+    assert requests == []
+    assert total == 0

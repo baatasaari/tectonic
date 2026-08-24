@@ -59,6 +59,13 @@ src/data_source_plugins/
   `type_widening` only for a fixed table of safe generalisations
   (int→number, int/number/bool→string) and `breaking` otherwise. Auto-
   adapt then follows `drift.auto_adapt_scope` exactly as configured.
+- **Pagination on `GET /connectors/{connector_id}/drift-incidents`.**
+  Added `limit`/`offset` query params (default 50, max 200) and a
+  `DriftIncidentListResponse` envelope (`items`/`total`/`limit`/`offset`)
+  — this endpoint previously returned every drift incident ever recorded
+  for a connector unbounded, a real scaling gap for a long-lived
+  connector with a large drift history. Ordered by `created_at`
+  descending (newest incident first) for stable pagination.
 
 - **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
   the-box defaults (`pool_size=5`, `max_overflow=10`) are the same

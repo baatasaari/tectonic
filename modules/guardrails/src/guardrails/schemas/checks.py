@@ -57,5 +57,12 @@ class RedTeamRunSchema(BaseModel):
     bypass_incidents: list[BypassIncidentSchema] = []
 
 
+class RedTeamRunListResponse(BaseModel):
+    items: list[RedTeamRunSchema]
+    total: int
+    limit: int
+    offset: int
+
+
 class TriggerRedTeamRunResponse(BaseModel):
     run_id: str

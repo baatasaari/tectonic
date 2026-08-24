@@ -80,6 +80,19 @@ src/knowledge_base/
   even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
   connections behind a cloud LB/proxy's own idle-connection timeout —
   a real, independent gap, not just a replica-count one.
+- **Pagination on `GET /chunks`.** Added `limit`/`offset` query params
+  (default 50, max 200) and a `ChunkListResponse` envelope
+  (`items`/`total`/`limit`/`offset`) — this endpoint previously returned
+  every matching chunk unbounded for both of its lookup modes
+  (`document_version_id` and `policy_tag`+`tenant_id`). Ordered by
+  `chunk_index` ascending (by `document_version_id` then `chunk_index`
+  for the policy-tag lookup, which can span multiple versions). The
+  policy-tag path filters chunk membership in Python after the
+  version-scoped fetch, since JSON-array containment isn't filterable
+  at the SQL level in a way that's portable between the JSONB (Postgres)
+  and JSON (SQLite) column variants this module already uses — so it
+  paginates the filtered, deterministically ordered in-memory list
+  rather than pushing `LIMIT`/`OFFSET` into that query.
 
 ## Running locally
 

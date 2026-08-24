@@ -55,6 +55,12 @@ src/human_oversight/
   build sources it from static YAML/env like the rest of this module's
   config, consistent with how other modules in this platform handle
   config not yet backed by dynamic per-tenant storage.
+- **Pagination on `GET /requests`.** Added `limit`/`offset` query params
+  (default 50, max 200) and an `OversightRequestListResponse` envelope
+  (`items`/`total`/`limit`/`offset`) — this endpoint previously returned
+  every matching row unbounded, a real scaling gap for a tenant with a
+  large oversight request history. Ordered by `created_at` descending
+  (newest request first) for stable pagination.
 
 - **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
   the-box defaults (`pool_size=5`, `max_overflow=10`) are the same

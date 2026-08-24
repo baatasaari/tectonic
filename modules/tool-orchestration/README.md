@@ -53,6 +53,14 @@ src/tool_orchestration/
   tool always passes through Guardrails and gets a Sentinel Agents review
   ticket before it can ever be approved.
 
+- **`GET /tools` pagination.** Added `limit`/`offset` query params
+  (default `limit=50`, max `200`); the response shape changed from a
+  bare array to `ToolDefinitionListResponse`
+  (`items`/`total`/`limit`/`offset`). `ToolRepository.list_tool_definitions`
+  now returns `(items, total)`. No existing deterministic order — added
+  `ORDER BY created_at ASC, id ASC` (registration order, with `id` as a
+  tiebreaker) so limit/offset pagination is stable.
+
 - **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
   the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
   regardless of how many pods are running — at this module's own

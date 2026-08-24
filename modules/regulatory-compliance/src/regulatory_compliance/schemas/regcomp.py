@@ -31,6 +31,13 @@ class ControlMappingSchema(BaseModel):
     deprecated: bool
 
 
+class ControlMappingListResponse(BaseModel):
+    items: list[ControlMappingSchema]
+    total: int
+    limit: int
+    offset: int
+
+
 class ControlEventRequest(BaseModel):
     tenant_id: str
     control_name: str

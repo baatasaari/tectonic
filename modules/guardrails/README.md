@@ -71,6 +71,12 @@ src/guardrails/
   this module falls back to an ephemeral profile built directly from its
   own YAML config defaults, so `/check` works immediately without
   requiring a `POST /policy-profiles` call first.
+- **Pagination on `GET /red-team-runs`.** Added `limit`/`offset` query
+  params (default 50, max 200) and a `RedTeamRunListResponse` envelope
+  (`items`/`total`/`limit`/`offset`) — this endpoint previously returned
+  every matching row unbounded, a real scaling gap for a tenant with a
+  large red-team run history. Ordered by `run_at` descending (newest run
+  first) for stable pagination.
 
 - **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
   the-box defaults (`pool_size=5`, `max_overflow=10`) are the same

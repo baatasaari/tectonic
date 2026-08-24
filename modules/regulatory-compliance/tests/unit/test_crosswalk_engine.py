@@ -3,8 +3,9 @@ async def test_seed_defaults_is_idempotent(harness):
     second = await harness.feed_manager.seed_defaults()
     assert first > 0
     assert second == first
-    mappings = await harness.repository.list_control_mappings()
+    mappings, total = await harness.repository.list_control_mappings(limit=10_000)
     assert len(mappings) == first  # no duplicates on the second seed
+    assert total == first
 
 
 async def test_map_control_returns_mappings_for_enabled_frameworks(harness):

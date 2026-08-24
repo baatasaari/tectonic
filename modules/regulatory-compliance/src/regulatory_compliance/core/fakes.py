@@ -59,13 +59,17 @@ class InMemoryRegulatoryComplianceRepository:
 
     async def list_control_mappings(
         self, *, control_name: str | None = None, framework_name: str | None = None,
-    ) -> list[ControlMappingRecord]:
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[ControlMappingRecord], int]:
         results = list(self.control_mappings.values())
         if control_name is not None:
             results = [m for m in results if m.control_name == control_name]
         if framework_name is not None:
             results = [m for m in results if m.framework_name == framework_name]
-        return results
+        # id ascending, matching the SQL repository's ORDER BY id (no timestamp column exists
+        # on ControlMapping to order by instead).
+        results = sorted(results, key=lambda m: m.id)
+        return results[offset:offset + limit], len(results)
 
     async def create_control_event(self, record: ControlImplementationEventRecord) -> ControlImplementationEventRecord:
         self.control_events.append(record)

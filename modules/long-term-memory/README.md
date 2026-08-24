@@ -86,6 +86,20 @@ src/long_term_memory/
   even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
   connections behind a cloud LB/proxy's own idle-connection timeout —
   a real, independent gap, not just a replica-count one.
+- **Pagination on `GET /reflections`.** Added `limit`/`offset` query
+  params (default 50, max 200) and a `ReflectionEntryListResponse`
+  envelope (`items`/`total`/`limit`/`offset`) — reflections accumulate
+  per agent over time and this endpoint previously returned every
+  matching row unbounded. Ordered by `created_at` descending (newest
+  reflection first).
+- **`POST /query` deliberately left unpaginated.** This is a
+  ranked-results endpoint, not a listing endpoint: `QueryRequest.top_k`
+  (default 10) already caps the response the same way limit/offset
+  would bound a list — `MemoryService.query` ranks all candidate matches
+  by relevance and slices to `results[:top_k]` before returning. There's
+  no "next page" of lower-ranked results a client would legitimately
+  page through; a client wanting more results re-queries with a larger
+  `top_k`. See the comment at the route in `api/routes_memory.py`.
 
 ## Running locally
 
