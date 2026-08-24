@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CHAR, JSON, Boolean, Float, Index, Integer, String, func
+from sqlalchemy import CHAR, JSON, Boolean, DateTime, Float, Index, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,7 +30,7 @@ class IntentTaxonomy(Base):
     version: Mapped[int] = mapped_column(Integer())
     intents: Mapped[list[dict]] = mapped_column(JSONType, default=list)
     status: Mapped[str] = mapped_column(String(16), default="draft")
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ClassificationLog(Base):
@@ -43,7 +43,7 @@ class ClassificationLog(Base):
     taxonomy_version: Mapped[int] = mapped_column(Integer())
     intents_detected: Mapped[list[dict]] = mapped_column(JSONType, default=list)
     fallback_used: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class DriftReport(Base):
@@ -55,4 +55,4 @@ class DriftReport(Base):
     taxonomy_version: Mapped[int] = mapped_column(Integer())
     drift_score: Mapped[float] = mapped_column(Float())
     flagged_intents: Mapped[list[str]] = mapped_column(JSONType, default=list)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

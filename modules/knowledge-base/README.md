@@ -73,7 +73,14 @@ src/knowledge_base/
   a multi-table filter (`list_chunks_by_policy_tag`) that must return
   only the intended chunks — things SQLite's unit-tier fakes can't
   reliably prove. See `tests/integration/conftest.py` for how the
-  Postgres instance is obtained.
+  Postgres instance is obtained. This tier caught a real schema-drift
+  bug: `Document.last_reviewed_at` was mapped without
+  `DateTime(timezone=True)` even though the Alembic migration (and the
+  domain default, `datetime.now(UTC)`) both assume a timestamptz
+  column — invisible under SQLite, but asyncpg rejected every
+  `create_document` call using the domain default against real
+  Postgres. Fixed in `db/models.py`; the integration suite now has a
+  dedicated regression test for it.
 
 ## Running locally
 

@@ -15,12 +15,18 @@ from __future__ import annotations
 import os
 
 import pytest
-from alembic import command
 from alembic.config import Config as AlembicConfig
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from sentinel_agents.core.domain import AgentBaselineRecord, AlertRecord, AlertType, Severity, new_id
+from alembic import command
+from sentinel_agents.core.domain import (
+    AgentBaselineRecord,
+    AlertRecord,
+    AlertType,
+    Severity,
+    new_id,
+)
 from sentinel_agents.db import models
 from sentinel_agents.db.repository import SQLAlchemySentinelRepository
 

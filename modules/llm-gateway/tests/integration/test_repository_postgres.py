@@ -13,10 +13,10 @@ from __future__ import annotations
 import os
 
 import pytest
-from alembic import command
 from alembic.config import Config as AlembicConfig
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from alembic import command
 from llm_gateway.core.domain import ProviderConfigRecord, VirtualKeyRecord, new_id
 from llm_gateway.db import models
 from llm_gateway.db.repository import SQLAlchemyGatewayRepository

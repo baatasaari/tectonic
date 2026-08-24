@@ -15,11 +15,11 @@ from __future__ import annotations
 import os
 
 import pytest
-from alembic import command
 from alembic.config import Config as AlembicConfig
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from alembic import command
 from context_engineering.core.domain import (
     AssembledItem,
     ContextAssemblyRecord,

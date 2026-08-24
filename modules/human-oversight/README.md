@@ -55,16 +55,22 @@ src/human_oversight/
   build sources it from static YAML/env like the rest of this module's
   config, consistent with how other modules in this platform handle
   config not yet backed by dynamic per-tenant storage.
-- **Postgres integration tests** — the repository layer is now also
-  tested against a real Postgres (`tests/integration/`, opt-in via
+- **Postgres integration tests** — the repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
   `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
   nested-dict/list JSONB round-tripping on `context` and the paired
-  `original_agent_proposal`/`human_override_action` columns, a real
-  UUID primary key round trip through `get_request`, and a multi-row
-  filtered query (`list_pending_expired`) hitting only rows matching
-  tenant, status *and* expiry cutoff — none of which SQLite's unit-tier
-  fakes can reliably prove. See `tests/integration/conftest.py` for how
-  the Postgres instance is obtained.
+  `original_agent_proposal`/`human_override_action` columns, a real UUID
+  primary key round trip through `get_request`, and a multi-row filtered query
+  (`list_pending_expired`) hitting only rows matching tenant, status *and*
+  expiry cutoff — none of which SQLite's unit-tier fakes can reliably prove.
+  See `tests/integration/conftest.py` for how the Postgres instance is
+  obtained. This tier's presence prompted a platform-wide sweep of every
+  module's `db/models.py` for the same class of bug: `Mapped[datetime]`
+  columns missing `DateTime(timezone=True)` despite the Alembic migration
+  already defining them as timestamptz and the domain layer's defaults being
+  tz-aware — invisible under SQLite, but a real correctness bug against
+  Postgres once a domain default (or an explicit value) is written. Found and
+  fixed here too.
 
 ## Running locally
 

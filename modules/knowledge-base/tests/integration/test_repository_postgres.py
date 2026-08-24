@@ -13,13 +13,12 @@ same tables.
 from __future__ import annotations
 
 import os
-from datetime import datetime
 
 import pytest
-from alembic import command
 from alembic.config import Config as AlembicConfig
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from alembic import command
 from knowledge_base.core.domain import (
     ChunkRecord,
     DocumentRecord,
@@ -43,12 +42,7 @@ def migrated_url(postgres_url):
 
 async def _make_document_version(repo, tenant_id: str) -> DocumentVersionRecord:
     document = await repo.create_document(
-        DocumentRecord(
-            id=new_id(), tenant_id=tenant_id, title="doc", source_type=SourceType.UPLOAD,
-            # The Document model's last_reviewed_at column is a naive TIMESTAMP; the
-            # domain default (tz-aware UTC via now()) is deliberately not used here.
-            last_reviewed_at=datetime(2024, 1, 1),
-        )
+        DocumentRecord(id=new_id(), tenant_id=tenant_id, title="doc", source_type=SourceType.UPLOAD)
     )
     return await repo.create_version(
         DocumentVersionRecord(
@@ -129,10 +123,7 @@ async def test_document_current_version_id_round_trips_as_real_uuid(migrated_url
         async with engine.connect() as conn, AsyncSession(conn) as session:
             repo = SQLAlchemyKnowledgeBaseRepository(session)
             document = await repo.create_document(
-                DocumentRecord(
-                    id=new_id(), tenant_id="acme", title="policy.pdf", source_type=SourceType.UPLOAD,
-                    last_reviewed_at=datetime(2024, 1, 1),
-                )
+                DocumentRecord(id=new_id(), tenant_id="acme", title="policy.pdf", source_type=SourceType.UPLOAD)
             )
             version = await repo.create_version(
                 DocumentVersionRecord(
@@ -148,5 +139,31 @@ async def test_document_current_version_id_round_trips_as_real_uuid(migrated_url
             fetched = await repo.get_document(document.id)
             assert fetched is not None
             assert fetched.current_version_id == version.id
+    finally:
+        await engine.dispose()
+
+
+async def test_document_last_reviewed_at_accepts_the_domain_default_timezone_aware_datetime(migrated_url):
+    """Regression test for a real schema-drift bug: `Document.last_reviewed_at`
+    lacked `DateTime(timezone=True)` in the ORM model even though the Alembic
+    migration (and the domain default, `datetime.now(UTC)`) both assume a
+    timestamptz column. Under SQLite the mismatch was invisible; against real
+    Postgres, asyncpg raised `DataError: can't subtract offset-naive and
+    offset-aware datetimes` on every `create_document` call using the domain's
+    own default. This exercises the domain default path directly, with no
+    explicit `last_reviewed_at` override, to prove the fix holds.
+    """
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyKnowledgeBaseRepository(session)
+            document = await repo.create_document(
+                DocumentRecord(id=new_id(), tenant_id="acme", title="tz-check", source_type=SourceType.UPLOAD)
+            )
+            assert document.last_reviewed_at.tzinfo is not None
+
+            fetched = await repo.get_document(document.id)
+            assert fetched is not None
+            assert fetched.last_reviewed_at.tzinfo is not None
     finally:
         await engine.dispose()

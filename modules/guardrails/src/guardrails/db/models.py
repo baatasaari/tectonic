@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CHAR, JSON, Boolean, Float, Index, Integer, String, func
+from sqlalchemy import CHAR, JSON, Boolean, DateTime, Float, Index, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -33,7 +33,7 @@ class PolicyProfile(Base):
     denied_topics: Mapped[list[str]] = mapped_column(JSONType, default=list)
     groundedness_threshold: Mapped[float] = mapped_column(Float(), default=0.85)
     status: Mapped[str] = mapped_column(String(16), default="active")
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class InterventionLog(Base):
@@ -48,7 +48,7 @@ class InterventionLog(Base):
     decision: Mapped[str] = mapped_column(String(16))
     violation_category: Mapped[str | None] = mapped_column(String(64), nullable=True)
     latency_ms: Mapped[float] = mapped_column(Float(), default=0.0)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class RedTeamRun(Base):
@@ -59,7 +59,7 @@ class RedTeamRun(Base):
     tenant_id: Mapped[str] = mapped_column(String(255))
     attempts_generated: Mapped[int] = mapped_column(Integer(), default=0)
     successful_bypasses: Mapped[int] = mapped_column(Integer(), default=0)
-    run_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class BypassIncident(Base):

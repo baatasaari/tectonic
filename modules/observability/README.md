@@ -100,7 +100,12 @@ src/observability/
   `list_traces_for_tenant`'s `DISTINCT` across many spans per trace —
   hitting only the intended rows, none of which SQLite's unit-tier fakes
   can reliably prove. See `tests/integration/conftest.py` for how the
-  Postgres instance is obtained.
+  Postgres instance is obtained. This tier caught a real schema-drift
+  bug: `Span.start_time`/`end_time`/`ingested_at` were mapped without
+  `DateTime(timezone=True)` even though the Alembic migration (and the
+  domain's own tz-aware `now()` default) both assume a timestamptz
+  column — invisible under SQLite, but asyncpg rejected every write
+  using an aware datetime against real Postgres. Fixed in `db/models.py`.
 
 ## Running locally
 

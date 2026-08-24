@@ -16,10 +16,10 @@ import os
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from alembic import command
 from alembic.config import Config as AlembicConfig
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from alembic import command
 from human_oversight.core.domain import (
     DecisionRecord,
     DecisionType,

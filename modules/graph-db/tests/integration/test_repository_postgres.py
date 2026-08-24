@@ -14,10 +14,10 @@ from __future__ import annotations
 import os
 
 import pytest
-from alembic import command
 from alembic.config import Config as AlembicConfig
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from alembic import command
 from graph_db.core.domain import EdgeKind, EdgeRecord, NodeRecord, new_id
 from graph_db.db.repository import SQLAlchemyGraphRepository
 

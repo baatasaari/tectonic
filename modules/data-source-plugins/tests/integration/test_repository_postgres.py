@@ -14,10 +14,10 @@ from __future__ import annotations
 import os
 
 import pytest
-from alembic import command
 from alembic.config import Config as AlembicConfig
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from alembic import command
 from data_source_plugins.core.domain import (
     ConnectorConfigRecord,
     ConnectorStatus,

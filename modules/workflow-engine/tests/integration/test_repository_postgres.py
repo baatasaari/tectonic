@@ -1,36 +1,15 @@
 """Integration tier (LLD §4.8): the SQLAlchemy repository against a real
-Postgres, via testcontainers. Not part of the default unit-test run — this
-tier needs a Docker daemon, which the sandbox this module was scaffolded in
-does not have; it runs in CI or any environment with Docker available.
+Postgres — not part of the default unit-test run. See `conftest.py` for how
+the Postgres instance is obtained (either `TECTONIC_TEST_POSTGRES_URL`
+against an already-running Postgres, or testcontainers/Docker as fallback).
 """
 from __future__ import annotations
 
-import shutil
-import subprocess
+import os
 
 import pytest
-
-pytestmark = pytest.mark.asyncio
-
-
-def _docker_available() -> bool:
-    if shutil.which("docker") is None:
-        return False
-    try:
-        subprocess.run(["docker", "info"], capture_output=True, timeout=5, check=True)
-        return True
-    except Exception:
-        return False
-
-
-pytest.importorskip("testcontainers")
-
-if not _docker_available():
-    pytest.skip("Docker daemon not available", allow_module_level=True)
-
 from alembic.config import Config as AlembicConfig
-from sqlalchemy.ext.asyncio import create_async_engine
-from testcontainers.postgres import PostgresContainer
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from alembic import command
 from workflow_engine.core.domain import (
@@ -41,28 +20,22 @@ from workflow_engine.core.domain import (
 )
 from workflow_engine.db.repository import SQLAlchemyWorkflowRepository
 
+pytestmark = pytest.mark.asyncio
+
 
 @pytest.fixture(scope="module")
-def postgres_url():
-    with PostgresContainer("postgres:16-alpine") as pg:
-        url = pg.get_connection_url().replace("psycopg2", "asyncpg")
-
-        alembic_cfg = AlembicConfig("alembic.ini")
-        alembic_cfg.set_main_option("sqlalchemy.url", url)
-        import os
-
-        os.environ["WORKFLOW_ENGINE_DATABASE_URL"] = url
-        command.upgrade(alembic_cfg, "head")
-
-        yield url
+def migrated_url(postgres_url):
+    alembic_cfg = AlembicConfig("alembic.ini")
+    alembic_cfg.set_main_option("sqlalchemy.url", postgres_url)
+    os.environ["WORKFLOW_ENGINE_DATABASE_URL"] = postgres_url
+    command.upgrade(alembic_cfg, "head")
+    return postgres_url
 
 
-async def test_create_and_fetch_definition_round_trips(postgres_url):
-    engine = create_async_engine(postgres_url)
-    async with engine.connect() as conn:
-        from sqlalchemy.ext.asyncio import AsyncSession
-
-        async with AsyncSession(conn) as session:
+async def test_create_and_fetch_definition_round_trips(migrated_url):
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
             repo = SQLAlchemyWorkflowRepository(session)
             record = WorkflowDefinitionRecord(
                 id=new_id(),
@@ -77,6 +50,9 @@ async def test_create_and_fetch_definition_round_trips(postgres_url):
             fetched = await repo.get_definition(created.id)
             assert fetched is not None
             assert fetched.name == "test-def"
+            # A real JSONB round trip of a nested dict-of-lists — SQLite's JSON-as-TEXT
+            # variant can silently get element type/order wrong in a way Postgres won't.
+            assert fetched.graph_schema == record.graph_schema
 
             published = await repo.publish_definition(created.id)
             assert published.status == DefinitionStatus.PUBLISHED
@@ -92,4 +68,5 @@ async def test_create_and_fetch_definition_round_trips(postgres_url):
             fetched_instance = await repo.get_instance(created_instance.id)
             assert fetched_instance is not None
             assert fetched_instance.trace_id == "trace-xyz"
-    await engine.dispose()
+    finally:
+        await engine.dispose()

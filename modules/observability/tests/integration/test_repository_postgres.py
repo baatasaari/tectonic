@@ -17,10 +17,10 @@ import os
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from alembic import command
 from alembic.config import Config as AlembicConfig
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from alembic import command
 from observability.core.domain import SpanRecord
 from observability.db.repository import SQLAlchemyObservabilityRepository
 
@@ -37,16 +37,13 @@ def migrated_url(postgres_url):
 
 
 def _span(**overrides) -> SpanRecord:
-    # The `spans` table's time columns are TIMESTAMP WITHOUT TIME ZONE (see
-    # db/models.py) — asyncpg rejects tz-aware datetimes against a naive
-    # column, so tests build naive-UTC datetimes here, same as production
-    # code paths that write to this table are expected to.
-    start = datetime.now(UTC).replace(tzinfo=None)
-    defaults = dict(
-        id=f"span-{overrides.get('span_id', 'x')}", tenant_id="acme", trace_id="trace-1", span_id="span-1",
-        parent_span_id=None, name="llm_gateway.complete", service_name="llm-gateway",
-        start_time=start, end_time=start + timedelta(milliseconds=250), ingested_at=start,
-    )
+    start = datetime.now(UTC)
+    defaults = {
+        "id": f"span-{overrides.get('span_id', 'x')}", "tenant_id": "acme", "trace_id": "trace-1",
+        "span_id": "span-1", "parent_span_id": None, "name": "llm_gateway.complete",
+        "service_name": "llm-gateway", "start_time": start,
+        "end_time": start + timedelta(milliseconds=250), "ingested_at": start,
+    }
     defaults.update(overrides)
     return SpanRecord(**defaults)
 
@@ -84,6 +81,15 @@ async def test_span_attributes_round_trip_as_real_jsonb_with_real_trace_span_ids
             assert fetched.trace_id == "trace-abc123"
             assert fetched.span_id == "span-def456"
             assert fetched.attributes == attributes
+
+            # Regression check for a real schema-drift bug: the span time columns
+            # were mapped without `DateTime(timezone=True)` even though the Alembic
+            # migration (and the domain's own tz-aware `now()` default) both assume
+            # a timestamptz column — invisible under SQLite, but asyncpg rejected
+            # every write using an aware datetime against real Postgres. Fixed in
+            # db/models.py; this asserts the round trip stays timezone-aware.
+            assert created.start_time.tzinfo is not None
+            assert fetched.start_time.tzinfo is not None
     finally:
         await engine.dispose()
 

@@ -14,7 +14,6 @@ from __future__ import annotations
 import os
 
 import pytest
-from alembic import command
 from alembic.config import Config as AlembicConfig
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
@@ -29,6 +28,7 @@ from agentic_rag.core.domain import (
     new_id,
 )
 from agentic_rag.db.repository import SQLAlchemyRAGRepository
+from alembic import command
 
 pytestmark = pytest.mark.asyncio
 

@@ -35,6 +35,52 @@ subtree under `modules/`, own README, own CI-shaped test tiers), then
 integrated. See a module's low-level design doc under `docs/` before
 building against it.
 
+## Enterprise-readiness hardening
+
+A dedicated review pass across all 19 built modules — gaps, technical
+depth, edge cases, and custom code that open-source frameworks could
+replace — is landing as a series of independent, foundational-risk-first
+branches/PRs, each scoped to one concern so it can be reviewed and merged
+on its own:
+
+| # | Branch | Scope | Status |
+|---|---|---|---|
+| 1 | `claude/resiliency-retries` | Retries + circuit breakers on every outbound HTTP call | Built — separate PR |
+| 2 | `claude/postgres-integration-tests` | Repository layer tested against a real Postgres, not just SQLite | Built (this branch) |
+| 3 | Durable background jobs | Module 17's evidence-pack generation surviving a pod restart | Not started |
+| 4 | Connection pooling + pagination | Pool sizing tuned to Helm replica counts; pagination on list endpoints | Not started |
+| 5 | CI/CD pipeline | Lint + test gating via GitHub Actions | Not started |
+| 6 | JWT bearer auth | Shared-signing-key service-to-service auth (final, dedicated push) | Not started |
+
+**This branch (2/6):** 17 of the 19 built modules (all but Vector DB,
+which is Qdrant-only with no SQLAlchemy/Postgres usage, and Short-Term
+Memory, whose Redis backend is already covered by `fakeredis`-based unit
+tests) now have a `tests/integration/` tier exercising the real
+`SQLAlchemy*Repository` against genuine Postgres — not part of the
+default `pytest` run, opt-in via either `TECTONIC_TEST_POSTGRES_URL`
+(an admin connection string to an already-running Postgres; the fixture
+creates and drops an isolated database per test-module run) or
+Docker + `testcontainers` as a zero-config fallback, skipping the whole
+tier cleanly when neither is available. Each module's suite targets
+something SQLite's unit tier can't reliably prove: real JSONB list/dict
+round-tripping with exact type and order preservation, real UUID primary
+keys, and multi-row update/filter queries hitting only the intended rows.
+
+Actually running these for real — several had never executed against a
+genuine Postgres before, including one written earlier in this project
+that only supported a Docker-only fixture — surfaced a real, platform-wide
+schema-drift bug: in every one of those 17 modules, one or more
+`Mapped[datetime]` columns in `db/models.py` were missing
+`DateTime(timezone=True)`, even though the corresponding Alembic
+migration already defines the column as `timestamptz` and the domain
+layer's own defaults are timezone-aware (`datetime.now(UTC)`). SQLite
+never enforces the mismatch, so it was invisible in the unit tier; against
+real Postgres, asyncpg rejects the write outright
+(`can't subtract offset-naive and offset-aware datetimes`) the moment a
+tz-aware value is written to what it believes is a naive column. Fixed
+across all 17 modules' `db/models.py`, with regression tests added where
+the integration suite already exercised the affected column.
+
 ## Repository layout
 
 ```

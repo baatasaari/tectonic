@@ -66,6 +66,19 @@ tests/integration/        Real-Postgres tier via testcontainers (needs Docker)
   falling back to the deployment's configured default tenant. A real
   deployment sits this behind whatever the platform's auth layer resolves
   tenant from.
+- **Postgres integration tests, now dual-path.** `tests/integration/`
+  previously required Docker/testcontainers only; it now also accepts
+  `TECTONIC_TEST_POSTGRES_URL` against an already-running Postgres (see
+  `tests/integration/conftest.py`), matching the pattern used across the
+  rest of the platform. Running it for real for the first time (Docker
+  was never available in the environment this module was originally
+  built in) surfaced a genuine schema-drift bug: every `Mapped[datetime]`
+  column in `db/models.py` (`published_at`, `started_at`, `completed_at`,
+  `requested_at`, `resolved_at`, `created_at`) was missing
+  `DateTime(timezone=True)`, even though every Alembic migration already
+  defines them as timestamptz and the domain layer's defaults are all
+  tz-aware. Invisible under SQLite; asyncpg rejected the mismatch for
+  real. Fixed in `db/models.py`.
 
 ## Running locally
 

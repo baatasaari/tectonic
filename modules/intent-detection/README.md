@@ -57,7 +57,13 @@ src/intent_detection/
   `get_active_taxonomy` query that must select only the intended
   tenant+version/status row among several taxonomies — all things SQLite's
   unit-tier fakes can't reliably prove. See `tests/integration/conftest.py`
-  for how the Postgres instance is obtained.
+  for how the Postgres instance is obtained. This tier's presence prompted a
+  platform-wide sweep of every module's `db/models.py` for the same class of
+  bug: `Mapped[datetime]` columns missing `DateTime(timezone=True)` despite
+  the Alembic migration already defining them as timestamptz and the domain
+  layer's defaults being tz-aware — invisible under SQLite, but a real
+  correctness bug against Postgres once a domain default (or an explicit
+  value) is written. Found and fixed here too.
 
 ## Running locally
 

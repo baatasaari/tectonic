@@ -14,11 +14,16 @@ from __future__ import annotations
 import os
 
 import pytest
-from alembic import command
 from alembic.config import Config as AlembicConfig
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from guardrails.core.domain import BypassIncidentRecord, PolicyProfileRecord, RedTeamRunRecord, new_id
+from alembic import command
+from guardrails.core.domain import (
+    BypassIncidentRecord,
+    PolicyProfileRecord,
+    RedTeamRunRecord,
+    new_id,
+)
 from guardrails.db.repository import SQLAlchemyGuardrailsRepository
 
 pytestmark = pytest.mark.asyncio
