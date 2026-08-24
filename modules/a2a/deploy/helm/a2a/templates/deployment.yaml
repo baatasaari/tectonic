@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-a2a
+  labels:
+    app.kubernetes.io/name: a2a
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: a2a
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: a2a
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: a2a
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8101
+          env:
+            - name: A2A_GATEWAY_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: A2A_GATEWAY_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: A2A_GATEWAY_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: A2A_GATEWAY_AGENT_NAME
+              value: {{ .Values.config.agentName | quote }}
+            - name: A2A_GATEWAY_AGENT_DESCRIPTION
+              value: {{ .Values.config.agentDescription | quote }}
+            - name: A2A_GATEWAY_SELF_BASE_URL
+              value: {{ .Values.config.selfBaseUrl | quote }}
+            - name: A2A_GATEWAY_SKILL_DEFINITION_MAP
+              value: {{ .Values.config.skillDefinitionMap | quote }}
+            - name: A2A_GATEWAY_WORKFLOW_ENGINE_BASE_URL
+              value: {{ .Values.workflowEngineBaseUrl | quote }}
+            {{- if .Values.database.existingSecret }}
+            - name: A2A_GATEWAY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: A2A_GATEWAY_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}

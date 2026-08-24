@@ -1,0 +1,61 @@
+image:
+  repository: tectonic/a2a-gateway
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  # Sits at this platform's cross-vendor federation boundary -- both directions of A2A
+  # traffic proxy through it -- so this scales aggressively, the same formula as MCP's own chart.
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8101
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  agentName: "tectonic-platform-agent"
+  agentDescription: "Tectonic Agentic AI Platform's own A2A-addressable agent."
+  selfBaseUrl: "http://a2a:8101"
+  # JSON-encoded skill -> Workflow Engine definition_id map -- also exactly the set of
+  # skills this platform's own Agent Card advertises (core/local_card.py).
+  skillDefinitionMap: "{}"
+
+database:
+  url: "postgresql+asyncpg://a2a_gateway:a2a_gateway@postgres:5432/a2a_gateway"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+workflowEngineBaseUrl: "http://workflow-engine:8080"
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8101
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8101
+  initialDelaySeconds: 5
+  periodSeconds: 10

@@ -32,7 +32,8 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 19 — Observability | Built — [`modules/observability`](modules/observability) |
 | 20 — Auditability | Built — [`modules/auditability`](modules/auditability) |
 | 21 — MCP | Built — [`modules/mcp`](modules/mcp) |
-| 22–34 | Not yet started |
+| 22 — A2A | Built — [`modules/a2a`](modules/a2a) |
+| 23–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -260,6 +261,7 @@ modules/
   observability/                                               Module 19
   auditability/                                                  Module 20
   mcp/                                                              Module 21
+  a2a/                                                                Module 22
 ```
 
 ## Cross-module integration, once deployed together
@@ -611,6 +613,25 @@ can discover and be governed calling it, with Tool Orchestration itself a
 natural (optional) caller of this module once a tool is registered here.
 Design doc: [`docs/module-21-mcp.md`](docs/module-21-mcp.md).
 Build: [`modules/mcp`](modules/mcp).
+
+### Module 22: A2A
+
+The platform's standardised agent-to-agent delegation boundary: lets
+this platform's own agents hand a task to another autonomous agent —
+this platform's own or a genuinely external, cross-vendor one — and lets
+external agents hand a task to this platform in return, both over the
+A2A protocol. `DelegationService` (outbound) does a card-fetch handshake
+against the target's `/.well-known/agent.json` and checks the requested
+skill is actually advertised before sending; `InboundGateway` (inbound)
+enforces a deny-by-default Access Policy Engine — the same shape as
+MCP's own (Module 21), applied here to "per-skill, not just
+per-caller" — before dispatching an accepted task into Workflow Engine
+(Module 1) as the real execution engine. The skills this platform
+advertises and the skills it accepts inbound are the same set by
+construction: both are read from one `skill_definition_map` config
+value, so there's no separate list either side could drift from.
+Design doc: [`docs/module-22-a2a.md`](docs/module-22-a2a.md).
+Build: [`modules/a2a`](modules/a2a).
 
 ## Running any module locally
 

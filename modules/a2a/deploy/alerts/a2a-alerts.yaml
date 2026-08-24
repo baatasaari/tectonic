@@ -1,0 +1,39 @@
+# Prometheus Alertmanager rule definitions for the A2A module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: a2a
+    rules:
+      - alert: A2ADelegationErrorRateHigh
+        expr: |
+          sum(rate(a2a_tasks_total{direction="outbound",outcome="failed"}[10m]))
+            /
+          sum(rate(a2a_tasks_total{direction="outbound"}[10m]))
+          > 0.05
+        labels:
+          severity: warning
+        annotations:
+          summary: "Outbound A2A delegation failure rate above 5%"
+
+      - alert: A2AInboundDeniedRateHigh
+        expr: |
+          sum(rate(a2a_tasks_total{direction="inbound",outcome="denied"}[15m]))
+            /
+          sum(rate(a2a_tasks_total{direction="inbound"}[15m]))
+          > 0.2
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 20% of inbound A2A tasks are being denied by the access policy"
+          description: "Could be a caller misconfiguration or a genuine policy-enforcement spike -- check which caller_agent_id/tenant is driving it before assuming either."
+
+      - alert: A2ACardFetchErrorRateHigh
+        expr: |
+          sum(rate(a2a_card_fetch_total{outcome="error"}[15m]))
+            /
+          sum(rate(a2a_card_fetch_total[15m]))
+          > 0.1
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 10% of outbound Agent Card fetches are failing"
+          description: "Outbound delegation fails fast locally when a target's card can't be fetched -- this is the leading indicator before A2ADelegationErrorRateHigh fires."
