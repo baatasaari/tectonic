@@ -51,6 +51,7 @@ jobs:
         module:
           - a2a
           - agent-cards
+          - agent-marketplace
           - agentic-rag
           - auditability
           - context-engineering

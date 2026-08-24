@@ -1,0 +1,23 @@
+# Prometheus Alertmanager rule definitions for the Agent Marketplace
+# module (LLD §Level 4 "Alerting").
+groups:
+  - name: agent-marketplace
+    rules:
+      - alert: AgentMarketplaceSyncErrorRateHigh
+        expr: |
+          sum(rate(agent_marketplace_sync_total{outcome="error"}[15m]))
+            /
+          sum(rate(agent_marketplace_sync_total[15m]))
+          > 0.05
+        labels:
+          severity: warning
+        annotations:
+          summary: "Catalogue sync (against Agent Cards) error rate above 5%"
+
+      - alert: AgentMarketplacePendingReviewBacklogHigh
+        expr: agent_marketplace_pending_review_backlog > 10
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 10 listings have sat in pending_review for over a week"
+          description: "A governance backlog signal -- someone needs to review the queue, not a system failure."

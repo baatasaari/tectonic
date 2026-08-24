@@ -34,7 +34,8 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 21 — MCP | Built — [`modules/mcp`](modules/mcp) |
 | 22 — A2A | Built — [`modules/a2a`](modules/a2a) |
 | 23 — Agent Cards | Built — [`modules/agent-cards`](modules/agent-cards) |
-| 24–34 | Not yet started |
+| 24 — Agent Marketplace / Registry | Built — [`modules/agent-marketplace`](modules/agent-marketplace) |
+| 25–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -264,6 +265,7 @@ modules/
   mcp/                                                              Module 21
   a2a/                                                                Module 22
   agent-cards/                                                          Module 23
+  agent-marketplace/                                                      Module 24
 ```
 
 ## Cross-module integration, once deployed together
@@ -657,6 +659,29 @@ registry/direct-call split already drawn between MCP (Module 21) and
 Tool Orchestration (Module 4).
 Design doc: [`docs/module-23-agent-cards.md`](docs/module-23-agent-cards.md).
 Build: [`modules/agent-cards`](modules/agent-cards).
+
+### Module 24: Agent Marketplace / Registry
+
+The platform's internal catalogue of built agents: a team publishes a
+listing referencing an existing Agent Card (Module 23), it goes through
+an explicit governance approval (`pending_review → published`, or
+`rejected` with a reason — any other transition is a `409`) before
+appearing in search, and every genuine reuse by a different team is
+tracked. Catalogue search sorts by `reuse_count` descending by default,
+recomputed from the real usage-event log on every `record-usage` call
+rather than just incremented, so the denormalized counter and the log
+it's derived from can never drift apart — "prevents duplicate
+agent-building across teams" as the literal search order, not just
+prose. Card data itself is never owned here: `CatalogueSyncService`
+snapshots it from Agent Cards' own `GET /agent-cards/{id}` and
+wholesale-replaces the listing's copy, the same "always a replace,
+never a merge" convention MCP's own Capability Sync Service already
+established. External monetisation (`external_listing_enabled`) is a
+real field with no billing logic behind it — a documented placeholder
+for Module 33 (Billing and Metering) once it exists, not a half-built
+feature.
+Design doc: [`docs/module-24-agent-marketplace.md`](docs/module-24-agent-marketplace.md).
+Build: [`modules/agent-marketplace`](modules/agent-marketplace).
 
 ## Running any module locally
 
