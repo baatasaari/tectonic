@@ -35,6 +35,81 @@ subtree under `modules/`, own README, own CI-shaped test tiers), then
 integrated. See a module's low-level design doc under `docs/` before
 building against it.
 
+## Enterprise-readiness hardening
+
+A dedicated review pass across all 19 built modules — gaps, technical
+depth, edge cases, and custom code that open-source frameworks could
+replace — landed as a series of six independent, foundational-risk-first
+branches/PRs, each scoped to one concern so it could be reviewed and
+merged on its own:
+
+| # | Branch | Scope | Status |
+|---|---|---|---|
+| 1 | `claude/resiliency-retries` | Retries + circuit breakers on every outbound HTTP call | Built — separate PR |
+| 2 | `claude/postgres-integration-tests` | Repository layer tested against a real Postgres, not just SQLite | Built — separate PR |
+| 3 | `claude/durable-background-jobs` | Module 17's evidence-pack generation surviving a pod restart | Built — separate PR |
+| 4 | `claude/pooling-and-pagination` | Connection pooling tuned to Helm replica counts + pagination on list endpoints | Built — separate PR |
+| 5 | `claude/ci-cd-pipeline` | Lint + test gating via GitHub Actions | Built — separate PR |
+| 6 | `claude/jwt-service-auth` | Shared-signing-key service-to-service bearer auth | Built (this branch) |
+
+**This branch (6/6, final):** before this, no module authenticated any of
+its inbound HTTP calls — any process able to reach a module's port could
+call it, and every outbound call a module makes to a peer carried no
+credential at all. Every one of the 19 built modules now has:
+
+- **`security/jwt_auth.py`** (identical pattern across all 19 modules,
+  first built and fully verified on Module 17 as the reference
+  implementation): `mint_service_token`/`verify_service_token` (pure
+  HS256 functions), `ServiceBearerAuth` (an `httpx.Auth` flow attaching a
+  fresh, audience-scoped bearer token to every outbound request an HTTP
+  client makes), and `ServiceAuthMiddleware` (verifies every inbound
+  request's bearer token against the module's own `service_name` as the
+  required audience — except `/healthz` and `/metrics`, which Kubernetes
+  probes and Prometheus scraping reach with no auth token).
+- **Audience-scoped tokens**: minted with an `aud` claim naming the
+  specific peer being called, via each module's own outbound HTTP client
+  classes wired to their real target — e.g. Workflow Engine's LLM Gateway
+  client mints a token audienced to `llm-gateway`, its Guardrails client
+  one audienced to `guardrails`, and so on across ~45 client classes
+  platform-wide. A token minted to call one peer is rejected if replayed
+  against a different one, limiting a leaked/intercepted token's blast
+  radius to the one peer it was meant for.
+- **One genuinely shared secret**: `TECTONIC_JWT_SHARED_SECRET` — a
+  single, non-module-prefixed env var name every module's config reads
+  via a pydantic `Field(validation_alias=...)`, so every Helm chart
+  injects the same Kubernetes Secret under this same literal name rather
+  than 19 separately-configured ones. Defaults to an obviously-insecure
+  placeholder for zero-config local dev/tests; every module logs a
+  startup warning if it's still active in a running process.
+- **Deliberate exclusions, documented not silent**: a handful of HTTP
+  clients call systems outside this platform's shared-secret trust
+  boundary — llm-gateway's real external LLM provider calls, tool-
+  orchestration's arbitrary third-party MCP tool servers, data-source-
+  plugins' external Airbyte/PyAirbyte-style connector runtime — each left
+  unwired with a code comment explaining why, not silently skipped.
+- **One genuine special case**: human-oversight's decision-callback
+  dispatcher calls back to whichever module raised the original oversight
+  request — a target only known per-call, not at client-construction
+  time — so it mints a token scoped to that call's specific target
+  inline in `notify()`, instead of the fixed-audience pattern every other
+  client uses, with its own dedicated tests.
+
+Full regression: all 19 modules' unit tiers green, **648 tests total**
+(up from 517 before this branch — 131 new, covering mint/verify
+round-trips, middleware accept/reject behavior for every failure mode,
+and the outbound `ServiceBearerAuth` flow, plus human-oversight's
+dynamic-audience dispatcher), `ruff check` clean everywhere. Every
+module's reference implementation was additionally verified live against
+a real `TestClient`, not just its own unit tests in isolation:
+`/healthz`/`/metrics` reachable with no token, a real protected route
+rejecting a missing/wrong-audience/wrong-secret/expired/non-Bearer token
+and accepting a valid one.
+
+This is service-to-service auth for inter-module calls, not the
+platform's external-facing user-auth story — a real API gateway/OAuth
+layer in front of the platform's own entry points is a separate, larger
+concern, out of scope for this fix.
+
 ## Repository layout
 
 ```
