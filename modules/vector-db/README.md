@@ -23,6 +23,7 @@ src/vector_db/
     vector_service.py                Vector Service — index/delete/query, hybrid fusion via Qdrant itself
     migration_manager.py              Migration Manager — zero-downtime re-embedding + alias cutover
   clients/                 HTTP client for the LLM Gateway embeddings dependency
+  security/                 Service-to-service JWT bearer auth (shared signing key)
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — points, query, migrations
   schemas/                    Pydantic request/response models
@@ -84,6 +85,29 @@ persistence layer.
   `embedding_model_version`) — the minimal addition needed to make
   automatic migration actually operable without a synchronous round trip
   back to the owning module by `source_ref`.
+- **Service-to-service JWT auth.** Before this, no module authenticated
+  any of its inbound HTTP calls — any process able to reach a module's
+  port could call it, and every outbound call this module makes carried
+  no credential at all. `security/jwt_auth.py` adds shared-signing-key
+  (HS256) bearer auth: `ServiceAuthMiddleware` verifies every inbound
+  request's `Authorization: Bearer <JWT>` against this module's own
+  `service_name` as the required audience (except `/healthz` and
+  `/metrics` — Kubernetes probes and Prometheus scraping carry no auth
+  token); `ServiceBearerAuth` (an `httpx.Auth` flow) mints a fresh,
+  short-lived (5 min default) token scoped via the `aud` claim to the
+  *specific* peer being called on every outbound request this module's
+  `HTTPEmbeddingProvider` makes — targeting LLM Gateway's
+  OpenAI-compatible embeddings endpoint, so its audience is `llm-gateway`
+  — a token minted to call one peer is rejected if replayed against a
+  different one. The shared secret (`TECTONIC_JWT_SHARED_SECRET`, one
+  Kubernetes Secret referenced by every module's Helm chart under this
+  same literal env var name, not a per-module-prefixed one) defaults to
+  an obviously-insecure placeholder for zero-config local dev/tests;
+  `main.py` logs a startup warning if it's still active. This is
+  service-to-service auth for inter-module calls, not the platform's
+  external-facing user-auth story — a real API gateway/OAuth layer in
+  front of the platform's own entry points is a separate, larger
+  concern, out of scope here.
 
 ## Running locally
 

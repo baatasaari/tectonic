@@ -18,13 +18,20 @@ from typing import Any
 import httpx
 
 from workflow_engine.clients.resilience import ResilientHTTPClient
+from workflow_engine.security.jwt_auth import ServiceBearerAuth
 
 _SHORT_TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
 
 
 class HTTPLLMGatewayClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, breaker_name="llm-gateway")
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="llm-gateway", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, breaker_name="llm-gateway", auth=auth)
 
     async def complete(
         self, *, agent_ref: str, prompt_context: dict[str, Any], tenant_id: str, trace_id: str
@@ -39,8 +46,14 @@ class HTTPLLMGatewayClient(ResilientHTTPClient):
 
 
 class HTTPToolOrchestrationClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, breaker_name="tool-orchestration")
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="tool-orchestration", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, breaker_name="tool-orchestration", auth=auth)
 
     async def invoke(
         self, *, tool_ref: str, arguments: dict[str, Any], tenant_id: str, trace_id: str
@@ -54,8 +67,14 @@ class HTTPToolOrchestrationClient(ResilientHTTPClient):
 
 
 class HTTPGuardrailsClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="guardrails")
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="guardrails", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="guardrails", auth=auth)
 
     async def check(
         self, *, content: dict[str, Any], policy_profile: str, tenant_id: str
@@ -69,8 +88,14 @@ class HTTPGuardrailsClient(ResilientHTTPClient):
 
 
 class HTTPHumanOversightClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="human-oversight")
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="human-oversight", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="human-oversight", auth=auth)
 
     async def request_approval(
         self, *, approval_request_id: str, step_execution_id: str, context: dict[str, Any], tenant_id: str

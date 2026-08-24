@@ -17,16 +17,22 @@ import httpx
 
 from long_term_memory.clients.resilience import CircuitBreakerError, ResilientHTTPClient
 from long_term_memory.core.ports import GraphHit, VectorHit
+from long_term_memory.security.jwt_auth import ServiceBearerAuth
 from long_term_memory.telemetry.logging import get_logger
 
 logger = get_logger(component="http_clients")
 
 _SHORT_TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
 
-
 class HTTPVectorDBClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, breaker_name="vector-db")
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="vector-db", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, breaker_name="vector-db", auth=auth)
 
     async def index(self, *, content: str, tenant_id: str, source_ref: str) -> str:
         resp = await self._post(
@@ -52,8 +58,14 @@ class HTTPVectorDBClient(ResilientHTTPClient):
 
 
 class HTTPGraphDBClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, breaker_name="graph-db")
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="graph-db", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, breaker_name="graph-db", auth=auth)
 
     async def create_node(self, *, name: str, tenant_id: str, source_ref: str) -> str:
         resp = await self._post(
@@ -79,8 +91,14 @@ class HTTPGraphDBClient(ResilientHTTPClient):
 
 
 class HTTPLLMGatewayClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, breaker_name="llm-gateway")
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="llm-gateway", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, breaker_name="llm-gateway", auth=auth)
 
     async def reflect(self, context: str, tenant_id: str) -> str:
         resp = await self._post("/v1/reflect", json={"context": context, "tenant_id": tenant_id})
@@ -88,8 +106,14 @@ class HTTPLLMGatewayClient(ResilientHTTPClient):
 
 
 class HTTPGuardrailsClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="guardrails")
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="guardrails", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="guardrails", auth=auth)
 
     async def check_visibility(self, *, scope: str, requesting_agent: str, policy_ref: str) -> bool:
         resp = await self._post(

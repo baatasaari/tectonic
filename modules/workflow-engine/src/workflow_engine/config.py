@@ -94,6 +94,17 @@ class WorkflowEngineSettings(BaseSettings):
     # each real module exists.
     dependency_stub_base_url: str = "http://localhost:9100"
 
+    # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
+    # every module, so this field's env var name is NOT prefixed like the rest of this
+    # settings class: every module's Helm chart injects the same Kubernetes Secret under
+    # this same literal env var name. The default is an insecure, obviously-a-placeholder
+    # value so local dev/tests work with zero config; main.py logs a startup warning if
+    # it's still active.
+    jwt_shared_secret: str = Field(
+        default="dev-insecure-shared-secret-change-me", validation_alias="TECTONIC_JWT_SHARED_SECRET",
+    )
+    jwt_ttl_seconds: int = 300
+
     # Hot-reloadable field names, for the config API to validate against.
     HOT_RELOADABLE_PATHS: tuple[str, ...] = (
         "execution.default_confidence_threshold",

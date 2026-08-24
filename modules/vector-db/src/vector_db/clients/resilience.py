@@ -61,8 +61,9 @@ class ResilientHTTPClient:
         self, base_url: str, *, client: httpx.AsyncClient | None = None,
         timeout: httpx.Timeout | None = None, breaker_name: str = "http-client",
         fail_max: int = 5, breaker_timeout_seconds: float = 30.0,
+        auth: httpx.Auth | None = None,
     ) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=timeout or DEFAULT_TIMEOUT)
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=timeout or DEFAULT_TIMEOUT, auth=auth)
         self._breaker = CircuitBreaker(
             fail_max=fail_max, timeout_duration=timedelta(seconds=breaker_timeout_seconds), name=breaker_name,
         )

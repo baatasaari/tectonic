@@ -24,6 +24,7 @@ from sentinel_agents.clients.http_clients import (
 from sentinel_agents.config import SentinelAgentsSettings, load_settings
 from sentinel_agents.core.swarm_correlation import SwarmWindowTracker
 from sentinel_agents.db.session import make_engine, make_session_factory
+from sentinel_agents.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from sentinel_agents.telemetry.logging import configure_logging, get_logger
 from sentinel_agents.telemetry.tracing import configure_tracing
 
@@ -33,23 +34,33 @@ logger = get_logger(component="main")
 def build_app_context(settings: SentinelAgentsSettings) -> AppContext:
     engine = make_engine(settings)
     dep_url = settings.dependency_stub_base_url
+    auth_kwargs = {
+        "issuer": settings.service_name, "shared_secret": settings.jwt_shared_secret,
+        "ttl_seconds": settings.jwt_ttl_seconds,
+    }
     return AppContext(
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
-        workflow_engine=HTTPWorkflowEngineClient(dep_url),
-        tool_orchestration=HTTPToolOrchestrationClient(dep_url),
-        human_oversight=HTTPHumanOversightClient(dep_url),
-        auditability=HTTPAuditabilityClient(dep_url),
+        workflow_engine=HTTPWorkflowEngineClient(dep_url, **auth_kwargs),
+        tool_orchestration=HTTPToolOrchestrationClient(dep_url, **auth_kwargs),
+        human_oversight=HTTPHumanOversightClient(dep_url, **auth_kwargs),
+        auditability=HTTPAuditabilityClient(dep_url, **auth_kwargs),
         window_tracker=SwarmWindowTracker(),
     )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = load_settings()
+    settings: SentinelAgentsSettings = app.state.settings
     configure_logging(settings.telemetry.log_level)
     configure_tracing(settings.service_name, settings.telemetry.otlp_endpoint)
+
+    if settings.jwt_shared_secret == INSECURE_DEFAULT_SECRET:
+        logger.warning(
+            "jwt_shared_secret_is_insecure_default",
+            hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
+        )
 
     ctx = build_app_context(settings)
     app.state.ctx = ctx
@@ -63,12 +74,18 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = load_settings()
+
     app = FastAPI(
         title="Sentinel Agents",
         version="0.1.0",
         description="Tectonic Agentic AI Platform — Module 15: runtime agents monitoring other "
         "agents, with per-agent behavioural baselining and swarm-level anomaly detection.",
         lifespan=lifespan,
+    )
+    app.state.settings = settings
+    app.add_middleware(
+        ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )
     app.include_router(sentinel_router)
 

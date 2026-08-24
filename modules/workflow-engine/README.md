@@ -28,6 +28,7 @@ src/workflow_engine/
     events.py                    Event topic/payload builders
   db/                     SQLAlchemy 2.0 async models + repository
   clients/                Kafka publisher, HTTP clients for the 4 external modules
+  security/                Service-to-service JWT bearer auth (shared signing key)
   telemetry/               OTel tracing, Prometheus metrics, structlog logging
   api/                     FastAPI routers (LLD §3.3)
   schemas/                  Pydantic request/response models
@@ -110,6 +111,29 @@ tests/integration/        Real-Postgres tier via testcontainers (needs Docker)
   call against the same repository method (`limit=10_000`, an
   effectively-unbounded internal page size) — that view genuinely needs
   the complete list, not one page of it.
+
+- **Service-to-service JWT auth.** Before this, no module authenticated
+  any of its inbound HTTP calls — any process able to reach a module's
+  port could call it, and every outbound call this module makes carried
+  no credential at all. `security/jwt_auth.py` adds shared-signing-key
+  (HS256) bearer auth: `ServiceAuthMiddleware` verifies every inbound
+  request's `Authorization: Bearer <JWT>` against this module's own
+  `service_name` as the required audience (except `/healthz` and
+  `/metrics` — Kubernetes probes and Prometheus scraping carry no auth
+  token); `ServiceBearerAuth` (an `httpx.Auth` flow) mints a fresh,
+  short-lived (5 min default) token scoped via the `aud` claim to the
+  *specific* peer being called on every outbound request this module's
+  four HTTP clients (`HTTPLLMGatewayClient`, `HTTPToolOrchestrationClient`,
+  `HTTPGuardrailsClient`, `HTTPHumanOversightClient`) make — a token
+  minted to call one peer is rejected if replayed against a different
+  one. The shared secret (`TECTONIC_JWT_SHARED_SECRET`, one Kubernetes
+  Secret referenced by every module's Helm chart under this same literal
+  env var name, not a per-module-prefixed one) defaults to an obviously-
+  insecure placeholder for zero-config local dev/tests; `main.py` logs a
+  startup warning if it's still active. This is service-to-service auth
+  for inter-module calls, not the platform's external-facing user-auth
+  story — a real API gateway/OAuth layer in front of the platform's own
+  entry points is a separate, larger concern, out of scope here.
 
 ## Running locally
 

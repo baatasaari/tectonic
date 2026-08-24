@@ -17,13 +17,20 @@ from __future__ import annotations
 import httpx
 
 from regulatory_compliance.clients.resilience import ResilientHTTPClient
+from regulatory_compliance.security.jwt_auth import ServiceBearerAuth
 
 _SHORT_TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
 
 
 class HTTPAuditabilityClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="auditability", fail_max=10)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="auditability", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="auditability", fail_max=10, auth=auth)
 
     async def query_control_events(self, tenant_id: str, control_name: str, date_range: dict | None = None) -> list[dict]:
         resp = await self._get(

@@ -18,6 +18,7 @@ from graph_db.app_context import AppContext
 from graph_db.clients.http_clients import HTTPAuditabilityClient
 from graph_db.config import GraphDbSettings, load_settings
 from graph_db.db.session import make_engine, make_session_factory
+from graph_db.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from graph_db.telemetry.logging import configure_logging, get_logger
 from graph_db.telemetry.tracing import configure_tracing
 
@@ -30,15 +31,24 @@ def build_app_context(settings: GraphDbSettings) -> AppContext:
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
-        auditability=HTTPAuditabilityClient(settings.dependency_stub_base_url),
+        auditability=HTTPAuditabilityClient(
+            settings.dependency_stub_base_url, issuer=settings.service_name,
+            shared_secret=settings.jwt_shared_secret, ttl_seconds=settings.jwt_ttl_seconds,
+        ),
     )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = load_settings()
+    settings: GraphDbSettings = app.state.settings
     configure_logging(settings.telemetry.log_level)
     configure_tracing(settings.service_name, settings.telemetry.otlp_endpoint)
+
+    if settings.jwt_shared_secret == INSECURE_DEFAULT_SECRET:
+        logger.warning(
+            "jwt_shared_secret_is_insecure_default",
+            hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
+        )
 
     ctx = build_app_context(settings)
     app.state.ctx = ctx
@@ -52,12 +62,18 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = load_settings()
+
     app = FastAPI(
         title="Graph DB",
         version="0.1.0",
         description="Tectonic Agentic AI Platform — Module 11: temporal, causally-typed "
         "entity/relationship storage for graph-based reasoning and memory.",
         lifespan=lifespan,
+    )
+    app.state.settings = settings
+    app.add_middleware(
+        ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )
     app.include_router(graph_router)
 

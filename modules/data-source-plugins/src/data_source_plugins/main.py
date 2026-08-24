@@ -17,6 +17,7 @@ from data_source_plugins.app_context import AppContext
 from data_source_plugins.clients.http_clients import HTTPSecretsClient, HTTPSourceConnectorRuntime
 from data_source_plugins.config import DataSourcePluginsSettings, load_settings
 from data_source_plugins.db.session import make_engine, make_session_factory
+from data_source_plugins.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from data_source_plugins.telemetry.logging import configure_logging, get_logger
 from data_source_plugins.telemetry.tracing import configure_tracing
 
@@ -30,16 +31,27 @@ def build_app_context(settings: DataSourcePluginsSettings) -> AppContext:
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
+        # HTTPSourceConnectorRuntime deliberately excluded from service-to-service JWT
+        # auth -- see the comment on that class in clients/http_clients.py.
         connector_runtime=HTTPSourceConnectorRuntime(dep_url),
-        secrets_client=HTTPSecretsClient(dep_url),
+        secrets_client=HTTPSecretsClient(
+            dep_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
     )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = load_settings()
+    settings: DataSourcePluginsSettings = app.state.settings
     configure_logging(settings.telemetry.log_level)
     configure_tracing(settings.service_name, settings.telemetry.otlp_endpoint)
+
+    if settings.jwt_shared_secret == INSECURE_DEFAULT_SECRET:
+        logger.warning(
+            "jwt_shared_secret_is_insecure_default",
+            hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
+        )
 
     ctx = build_app_context(settings)
     app.state.ctx = ctx
@@ -53,12 +65,18 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = load_settings()
+
     app = FastAPI(
         title="Data Source Plugins",
         version="0.1.0",
         description="Tectonic Agentic AI Platform — Module 8: connectivity to external data "
         "systems with schema drift auto-adaptation and data quality scoring.",
         lifespan=lifespan,
+    )
+    app.state.settings = settings
+    app.add_middleware(
+        ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )
     app.include_router(connectors_router)
 

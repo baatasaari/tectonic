@@ -12,13 +12,20 @@ from typing import Any
 import httpx
 
 from tool_orchestration.clients.resilience import ResilientHTTPClient
+from tool_orchestration.security.jwt_auth import ServiceBearerAuth
 
 _SHORT_TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
 
 
 class HTTPLLMGatewayClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, breaker_name="llm-gateway")
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="llm-gateway", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, breaker_name="llm-gateway", auth=auth)
 
     async def complete(self, *, prompt_context: dict[str, Any], tenant_id: str) -> dict[str, Any]:
         resp = await self._post("/v1/completions", json={"context": prompt_context, "tenant_id": tenant_id})
@@ -26,8 +33,14 @@ class HTTPLLMGatewayClient(ResilientHTTPClient):
 
 
 class HTTPGuardrailsClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="guardrails")
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="guardrails", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="guardrails", auth=auth)
 
     async def check(
         self, *, content: dict[str, Any], policy_profile: str, tenant_id: str
@@ -40,8 +53,14 @@ class HTTPGuardrailsClient(ResilientHTTPClient):
 
 
 class HTTPSentinelAgentsClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="sentinel-agents")
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="sentinel-agents", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="sentinel-agents", auth=auth)
 
     async def submit_for_review(self, *, tool_id: str, proposed_schema: dict[str, Any], tenant_id: str) -> str:
         resp = await self._post(

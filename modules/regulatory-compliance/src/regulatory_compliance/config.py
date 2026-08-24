@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,6 +50,17 @@ class RegulatoryComplianceSettings(BaseSettings):
     http_port: int = 8096
     dependency_stub_base_url: str = "http://localhost:9117"
     mapping_table_path: str = ""  # empty = use bundled default; see core/mapping_data.py
+
+    # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
+    # every module, so this field's env var name is NOT prefixed like the rest of this
+    # settings class: every module's Helm chart injects the same Kubernetes Secret under
+    # this same literal env var name. The default is an insecure, obviously-a-placeholder
+    # value so local dev/tests work with zero config; main.py logs a startup warning if
+    # it's still active.
+    jwt_shared_secret: str = Field(
+        default="dev-insecure-shared-secret-change-me", validation_alias="TECTONIC_JWT_SHARED_SECRET",
+    )
+    jwt_ttl_seconds: int = 300
 
 
 _HOT_RELOADABLE = {"frameworks.enabled"}

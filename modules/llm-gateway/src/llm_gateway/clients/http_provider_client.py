@@ -23,6 +23,14 @@ breaker (`_breaker_for`) — Provider A being down must never trip requests
 to Provider B, which is also exactly what this module's own quality-aware
 routing and failover manager need: a per-provider health signal, not one
 global one.
+
+**Auth.** Deliberately excluded from this platform's service-to-service
+JWT auth (security/jwt_auth.py): this client calls real external LLM
+provider APIs (OpenAI, Anthropic, etc.), not a platform peer module.
+Those providers authenticate via their own API keys (see
+`_auth_headers`/`SecretsClient` above), which have nothing to do with the
+shared HS256 signing key every platform module holds for calling *each
+other*.
 """
 from __future__ import annotations
 

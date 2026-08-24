@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 
 from sentinel_agents.clients.resilience import CircuitBreakerError, ResilientHTTPClient
+from sentinel_agents.security.jwt_auth import ServiceBearerAuth
 from sentinel_agents.telemetry.logging import get_logger
 
 logger = get_logger(component="http_clients")
@@ -22,10 +23,15 @@ logger = get_logger(component="http_clients")
 _SHORT_TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
 _VERY_SHORT_TIMEOUT = httpx.Timeout(connect=5.0, read=5.0, write=5.0, pool=5.0)
 
-
 class HTTPWorkflowEngineClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="workflow-engine")
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="workflow-engine", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="workflow-engine", auth=auth)
 
     async def pause(self, instance_id: str, reason: str) -> None:
         await self._post(f"/v1/workflow-engine/instances/{instance_id}/pause", json={"reason": reason})
@@ -35,8 +41,16 @@ class HTTPWorkflowEngineClient(ResilientHTTPClient):
 
 
 class HTTPToolOrchestrationClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="tool-orchestration", fail_max=10)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="tool-orchestration", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(
+            base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="tool-orchestration", fail_max=10, auth=auth,
+        )
 
     async def circuit_break(self, tool_ref: str, reason: str) -> None:
         try:
@@ -48,8 +62,14 @@ class HTTPToolOrchestrationClient(ResilientHTTPClient):
 
 
 class HTTPHumanOversightClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="human-oversight")
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="human-oversight", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="human-oversight", auth=auth)
 
     async def escalate(self, context: dict[str, Any]) -> str:
         resp = await self._post(
@@ -63,8 +83,16 @@ class HTTPHumanOversightClient(ResilientHTTPClient):
 
 
 class HTTPAuditabilityClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, timeout=_VERY_SHORT_TIMEOUT, breaker_name="auditability", fail_max=10)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="auditability", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(
+            base_url, client=client, timeout=_VERY_SHORT_TIMEOUT, breaker_name="auditability", fail_max=10, auth=auth,
+        )
 
     async def emit(self, event: dict[str, Any]) -> None:
         try:

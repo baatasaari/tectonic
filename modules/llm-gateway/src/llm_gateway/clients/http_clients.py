@@ -7,13 +7,20 @@ from __future__ import annotations
 import httpx
 
 from llm_gateway.clients.resilience import ResilientHTTPClient
+from llm_gateway.security.jwt_auth import ServiceBearerAuth
 
 _SHORT_TIMEOUT = httpx.Timeout(connect=5.0, read=5.0, write=5.0, pool=5.0)
 
 
 class HTTPSecretsClient(ResilientHTTPClient):
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="secrets")
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="secrets-credential-management", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, timeout=_SHORT_TIMEOUT, breaker_name="secrets", auth=auth)
 
     async def get_provider_api_key(self, provider: str, tenant_id: str) -> str:
         resp = await self._get("/v1/secrets/provider-key", params={"provider": provider, "tenant_id": tenant_id})
