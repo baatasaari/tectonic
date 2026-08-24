@@ -35,7 +35,8 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 22 — A2A | Built — [`modules/a2a`](modules/a2a) |
 | 23 — Agent Cards | Built — [`modules/agent-cards`](modules/agent-cards) |
 | 24 — Agent Marketplace / Registry | Built — [`modules/agent-marketplace`](modules/agent-marketplace) |
-| 25–34 | Not yet started |
+| 25 — LLMOps | Built — [`modules/llmops`](modules/llmops) |
+| 26–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -266,6 +267,7 @@ modules/
   a2a/                                                                Module 22
   agent-cards/                                                          Module 23
   agent-marketplace/                                                      Module 24
+  llmops/                                                                   Module 25
 ```
 
 ## Cross-module integration, once deployed together
@@ -682,6 +684,28 @@ for Module 33 (Billing and Metering) once it exists, not a half-built
 feature.
 Design doc: [`docs/module-24-agent-marketplace.md`](docs/module-24-agent-marketplace.md).
 Build: [`modules/agent-marketplace`](modules/agent-marketplace).
+
+### Module 25: LLMOps
+
+The platform's model registry and staged-rollout controller: a new
+model version is registered, deployed to a target at some canary
+traffic percentage, and only promoted to `active` — automatically
+superseding whatever was active before — once real evidence from
+Evaluation Framework (Module 18)'s own `GET /scores` clears a
+configurable bar (a minimum sample size, so a canary can't pass on a
+timer or on volume alone, and a minimum pass rate). `promote` always
+re-runs that gate rather than trusting an earlier pass, and any
+transition outside the legal set (`canary → active`/`rolled_back`,
+`active → rolled_back`/`superseded`) is a `409` — the same explicit
+legal-transition-table shape Agent Marketplace (Module 24)'s own
+governance workflow already established. Distinct from LLM Gateway
+(Module 3): this module is the decision-and-record-keeping layer for
+*which* model version should be active, not the request-routing layer
+itself — actually wiring that decision into LLM Gateway's live routing
+is real future work this LLD calls out explicitly rather than quietly
+half-wiring it here.
+Design doc: [`docs/module-25-llmops.md`](docs/module-25-llmops.md).
+Build: [`modules/llmops`](modules/llmops).
 
 ## Running any module locally
 

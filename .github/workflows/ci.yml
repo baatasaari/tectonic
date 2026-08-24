@@ -64,6 +64,7 @@ jobs:
           - intent-detection
           - knowledge-base
           - llm-gateway
+          - llmops
           - long-term-memory
           - mcp
           - observability

@@ -1,0 +1,58 @@
+image:
+  repository: tectonic/llmops
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: 256Mi
+  limits:
+    cpu: "500m"
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  # Operator/CI-driven rollout traffic, not per-request serving volume -- a lighter
+  # ceiling than the high-QPS registries (MCP/Agent Cards), same reasoning as Agent
+  # Marketplace's own chart.
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8104
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  minCanarySampleSize: "10"
+  minCanaryPassRate: "0.95"
+
+database:
+  url: "postgresql+asyncpg://llmops:llmops@postgres:5432/llmops"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+evaluationFrameworkBaseUrl: "http://evaluation-framework:8097"
+
+podDisruptionBudget:
+  minAvailable: 1
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8104
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8104
+  initialDelaySeconds: 5
+  periodSeconds: 10

@@ -1,0 +1,23 @@
+# Prometheus Alertmanager rule definitions for the LLMOps module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: llmops
+    rules:
+      - alert: LLMOpsRollbackRateHigh
+        expr: sum(increase(llmops_rollbacks_total[3h])) > 3
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 3 rollbacks in the last 3 hours"
+          description: "A real operational signal, not a support ticket count someone had to go dig up -- check which model_name is driving it."
+
+      - alert: LLMOpsCanaryGateFailureRateHigh
+        expr: |
+          sum(rate(llmops_canary_gate_evaluations_total{outcome="failed"}[15m]))
+            /
+          sum(rate(llmops_canary_gate_evaluations_total[15m]))
+          > 0.3
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 30% of canary gate evaluations are failing outright (not just insufficient_data)"

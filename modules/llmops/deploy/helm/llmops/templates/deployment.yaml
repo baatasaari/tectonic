@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-llmops
+  labels:
+    app.kubernetes.io/name: llmops
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: llmops
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: llmops
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: llmops
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8104
+          env:
+            - name: LLMOPS_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: LLMOPS_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: LLMOPS_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: LLMOPS_MIN_CANARY_SAMPLE_SIZE
+              value: {{ .Values.config.minCanarySampleSize | quote }}
+            - name: LLMOPS_MIN_CANARY_PASS_RATE
+              value: {{ .Values.config.minCanaryPassRate | quote }}
+            - name: LLMOPS_EVALUATION_FRAMEWORK_BASE_URL
+              value: {{ .Values.evaluationFrameworkBaseUrl | quote }}
+            {{- if .Values.database.existingSecret }}
+            - name: LLMOPS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: LLMOPS_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
