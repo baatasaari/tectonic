@@ -81,6 +81,20 @@ tests/integration/        Real-Postgres tier via testcontainers (needs Docker)
   even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
   connections behind a cloud LB/proxy's own idle-connection timeout —
   a real, independent gap, not just a replica-count one.
+- **Pagination on `GET /{instance_id}/steps`.** Added `limit`/`offset`
+  query params (default 50, max 200) and a `StepExecutionListResponse`
+  envelope (`items`/`total`/`limit`/`offset`) — this endpoint previously
+  returned every step execution for an instance unbounded, a real
+  scaling gap for a long-running or heavily-replanned workflow instance.
+  Neither `started_at` nor `completed_at` is a reliable ordering column
+  (both are nullable — a pending step has neither), so this orders by
+  `id` ascending instead, a stable, deterministic tiebreaker so
+  limit/offset pagination is actually meaningful. `GET
+  /{instance_id}` (the instance detail view, which embeds the complete
+  step list inline) is a distinct, intentionally-unpaginated internal
+  call against the same repository method (`limit=10_000`, an
+  effectively-unbounded internal page size) — that view genuinely needs
+  the complete list, not one page of it.
 
 ## Running locally
 

@@ -207,3 +207,27 @@ async def test_conditional_edges_route_correctly(harness):
     steps, _total = await harness.repository.list_step_executions(result.id)
     step_ids = {s.step_id for s in steps}
     assert step_ids == {"step_1", "step_high"}
+
+
+async def test_list_step_executions_paginates_in_id_order(harness):
+    instance = await harness.repository.create_instance(_instance())
+    created = []
+    for i in range(3):
+        rec = await harness.repository.create_step_execution(
+            StepExecutionRecord(id=f"step-exec-{i}", instance_id=instance.id, step_id=f"s{i}", execution_mode=ExecutionMode.SYMBOLIC)
+        )
+        created.append(rec)
+
+    first_page, total_1 = await harness.repository.list_step_executions(instance.id, limit=2, offset=0)
+    second_page, total_2 = await harness.repository.list_step_executions(instance.id, limit=2, offset=2)
+
+    assert total_1 == 3
+    assert total_2 == 3
+    assert [s.id for s in first_page] == ["step-exec-0", "step-exec-1"]
+    assert [s.id for s in second_page] == ["step-exec-2"]
+
+
+async def test_list_step_executions_empty_result_returns_zero_total(harness):
+    steps, total = await harness.repository.list_step_executions("no-such-instance")
+    assert steps == []
+    assert total == 0
