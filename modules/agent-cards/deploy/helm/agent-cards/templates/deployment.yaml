@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-agent-cards
+  labels:
+    app.kubernetes.io/name: agent-cards
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent-cards
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agent-cards
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: agent-cards
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8102
+          env:
+            - name: AGENT_CARDS_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: AGENT_CARDS_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: AGENT_CARDS_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: AGENT_CARDS_PERFORMANCE_WEIGHT
+              value: {{ .Values.config.performanceWeight | quote }}
+            - name: AGENT_CARDS_COMPLIANCE_WEIGHT
+              value: {{ .Values.config.complianceWeight | quote }}
+            - name: AGENT_CARDS_COMPLIANCE_FRAMEWORK_NAME
+              value: {{ .Values.config.complianceFrameworkName | quote }}
+            - name: AGENT_CARDS_CARD_STALENESS_TTL_SECONDS
+              value: {{ .Values.config.cardStalenessTtlSeconds | quote }}
+            - name: AGENT_CARDS_EVALUATION_FRAMEWORK_BASE_URL
+              value: {{ .Values.evaluationFrameworkBaseUrl | quote }}
+            - name: AGENT_CARDS_REGULATORY_COMPLIANCE_BASE_URL
+              value: {{ .Values.regulatoryComplianceBaseUrl | quote }}
+            {{- if .Values.database.existingSecret }}
+            - name: AGENT_CARDS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: AGENT_CARDS_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}

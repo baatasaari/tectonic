@@ -33,7 +33,8 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 20 — Auditability | Built — [`modules/auditability`](modules/auditability) |
 | 21 — MCP | Built — [`modules/mcp`](modules/mcp) |
 | 22 — A2A | Built — [`modules/a2a`](modules/a2a) |
-| 23–34 | Not yet started |
+| 23 — Agent Cards | Built — [`modules/agent-cards`](modules/agent-cards) |
+| 24–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -262,6 +263,7 @@ modules/
   auditability/                                                  Module 20
   mcp/                                                              Module 21
   a2a/                                                                Module 22
+  agent-cards/                                                          Module 23
 ```
 
 ## Cross-module integration, once deployed together
@@ -632,6 +634,29 @@ construction: both are read from one `skill_definition_map` config
 value, so there's no separate list either side could drift from.
 Design doc: [`docs/module-22-a2a.md`](docs/module-22-a2a.md).
 Build: [`modules/a2a`](modules/a2a).
+
+### Module 23: Agent Cards
+
+The platform's trust-scored discovery registry for Agent Cards: any
+agent gets a published, machine-readable capability manifest here, and
+any orchestrator platform-wide can search that registry by skill and get
+results ranked by a genuine, cross-module trust signal — `GET
+/agent-cards` sorts by `trust_score` descending, not registration order.
+`TrustScoreCalculator` computes that score from two real peers,
+Evaluation Framework (Module 18)'s own per-agent metric-score history
+and Regulatory Compliance (Module 17)'s own per-tenant control-coverage
+percentage, weighted and renormalized over whichever signal(s) actually
+have data — a component with no data is excluded, never defaulted to a
+fake neutral number, and a down peer degrades that one signal instead of
+failing the whole computation. Distinct from A2A (Module 22)'s own card
+handling: A2A publishes and consumes cards scoped to its own protocol
+mechanics (this platform's one outbound card, one target's card cached
+per delegation), while this module is the platform-wide, governed,
+trust-scored catalogue a discovery *search* runs against — the same
+registry/direct-call split already drawn between MCP (Module 21) and
+Tool Orchestration (Module 4).
+Design doc: [`docs/module-23-agent-cards.md`](docs/module-23-agent-cards.md).
+Build: [`modules/agent-cards`](modules/agent-cards).
 
 ## Running any module locally
 

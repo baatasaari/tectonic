@@ -1,0 +1,23 @@
+# Prometheus Alertmanager rule definitions for the Agent Cards module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: agent-cards
+    rules:
+      - alert: AgentCardsTrustScoreComputationErrorRateHigh
+        expr: |
+          sum(rate(agent_cards_trust_score_computations_total{outcome="error"}[15m]))
+            /
+          sum(rate(agent_cards_trust_score_computations_total[15m]))
+          > 0.05
+        labels:
+          severity: warning
+        annotations:
+          summary: "Trust score computation error rate above 5%"
+          description: "Distinct from insufficient_data (an agent with no history yet, expected) -- this fires on genuine failures computing a score."
+
+      - alert: AgentCardsDiscoveryLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(http_server_duration_milliseconds_bucket{route="/v1/agent-cards"}[15m])) by (le)) > 500
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 discovery (GET /agent-cards) latency above 500ms"

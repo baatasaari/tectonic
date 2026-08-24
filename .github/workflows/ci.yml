@@ -50,6 +50,7 @@ jobs:
       matrix:
         module:
           - a2a
+          - agent-cards
           - agentic-rag
           - auditability
           - context-engineering

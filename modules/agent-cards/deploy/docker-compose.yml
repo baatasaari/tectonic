@@ -1,0 +1,50 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# standalone with both its outbound dependencies (Evaluation Framework's
+# /scores, Regulatory Compliance's /coverage) stubbed by one dependency-stub
+# service. Real Postgres runs here.
+name: agent-cards
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: agent_cards
+      POSTGRES_PASSWORD: agent_cards
+      POSTGRES_DB: agent_cards
+    ports:
+      - "5450:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent_cards"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9123:9123"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      AGENT_CARDS_DATABASE_URL: postgresql+asyncpg://agent_cards:agent_cards@postgres:5432/agent_cards
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  agent-cards:
+    build: ..
+    ports:
+      - "8102:8102"
+    environment:
+      AGENT_CARDS_DATABASE_URL: postgresql+asyncpg://agent_cards:agent_cards@postgres:5432/agent_cards
+      AGENT_CARDS_EVALUATION_FRAMEWORK_BASE_URL: http://dependency-stub:9123
+      AGENT_CARDS_REGULATORY_COMPLIANCE_BASE_URL: http://dependency-stub:9123
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

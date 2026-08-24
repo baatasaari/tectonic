@@ -1,0 +1,60 @@
+image:
+  repository: tectonic/agent-cards
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  # Every orchestrator's discovery query and every card publish/refresh routes through
+  # here -- scales aggressively, the same formula as MCP/A2A's own charts.
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8102
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  performanceWeight: "0.6"
+  complianceWeight: "0.4"
+  complianceFrameworkName: "eu_ai_act"
+  cardStalenessTtlSeconds: "86400"
+
+database:
+  url: "postgresql+asyncpg://agent_cards:agent_cards@postgres:5432/agent_cards"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+evaluationFrameworkBaseUrl: "http://evaluation-framework:8097"
+regulatoryComplianceBaseUrl: "http://regulatory-compliance:8096"
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8102
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8102
+  initialDelaySeconds: 5
+  periodSeconds: 10
