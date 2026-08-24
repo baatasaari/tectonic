@@ -44,14 +44,15 @@ src/regulatory_compliance/
   json` is also supported per the LLD's config (`evidence.output_format`).
 - **Control events source.** The LLD's Level 2 diagram has Human
   Oversight/Guardrails/Workflow Engine publish control events to
-  Auditability, which this module then queries. Auditability is Module
-  20 and hasn't been built yet in this platform, so `POST
-  /control-events` accepts direct ingestion from source modules instead
-  — a drop-in swap for a real Auditability-event consumer once Module 20
-  exists. `HTTPAuditabilityClient.query_control_events` still targets a
-  plausible Auditability endpoint for best-effort evidence-pack
-  enrichment; every call site treats a failure as "no enrichment
-  available," never as a reason to fail generation, since this module's
+  Auditability, which this module then queries. This module's own `POST
+  /control-events` still accepts direct ingestion from source modules —
+  kept as its own path rather than being retired now that Module 20
+  (Auditability) exists, since it's the same shape either way and gives
+  a source module a choice of where to write. `HTTPAuditabilityClient.
+  query_control_events` targets Auditability's real `GET /v1/
+  auditability/events` for best-effort evidence-pack enrichment; every
+  call site treats a failure as "no enrichment available," never as a
+  reason to fail generation, since this module's
   own `ControlImplementationEvent` rows remain the evidence source of
   record either way.
 - **Async evidence generation — durable, not in-process.** `POST

@@ -30,7 +30,8 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 17 — Regulatory and Compliance | Built — [`modules/regulatory-compliance`](modules/regulatory-compliance) |
 | 18 — Evaluation Framework | Built — [`modules/evaluation-framework`](modules/evaluation-framework) |
 | 19 — Observability | Built — [`modules/observability`](modules/observability) |
-| 20–34 | Not yet started |
+| 20 — Auditability | Built — [`modules/auditability`](modules/auditability) |
+| 21–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -256,6 +257,7 @@ modules/
   regulatory-compliance/                                   Module 17
   evaluation-framework/                                      Module 18
   observability/                                               Module 19
+  auditability/                                                  Module 20
 ```
 
 ## Cross-module integration, once deployed together

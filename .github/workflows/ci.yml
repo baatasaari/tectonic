@@ -50,6 +50,7 @@ jobs:
       matrix:
         module:
           - agentic-rag
+          - auditability
           - context-engineering
           - conversational-engine
           - data-source-plugins

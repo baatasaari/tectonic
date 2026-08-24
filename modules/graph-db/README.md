@@ -96,9 +96,8 @@ src/graph_db/
   token); `ServiceBearerAuth` (an `httpx.Auth` flow) mints a fresh,
   short-lived (5 min default) token scoped via the `aud` claim to the
   *specific* peer being called on every outbound request this module's
-  `HTTPAuditabilityClient` makes (audience `auditability` — Module 20,
-  not yet built in this platform, same documented-gap/aspirational-target
-  pattern used elsewhere) — a token minted to call one peer is rejected
+  `HTTPAuditabilityClient` makes (audience `auditability`, Module 20)
+  — a token minted to call one peer is rejected
   if replayed against a different one. The shared secret
   (`TECTONIC_JWT_SHARED_SECRET`, one Kubernetes Secret referenced by
   every module's Helm chart under this same literal env var name, not a

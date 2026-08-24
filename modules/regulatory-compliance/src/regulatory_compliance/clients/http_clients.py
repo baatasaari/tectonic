@@ -1,9 +1,7 @@
 """HTTP client adapters.
 
-**Auditability.** Module 20 (Auditability) hasn't been built yet in this
-platform, so `HTTPAuditabilityClient` targets a plausible-but-unverified
-endpoint — the same documented-gap pattern used elsewhere (e.g. Sentinel
-Agents' Tool Orchestration circuit-break call). Every call site wraps this
+**Auditability.** `HTTPAuditabilityClient` targets Module 20's real
+`GET /v1/auditability/events` endpoint. Every call site still wraps this
 in try/except and treats a failure as "no enrichment available," never as
 a reason to fail evidence-pack generation — this module's own recorded
 `ControlImplementationEvent` rows remain the evidence source of record

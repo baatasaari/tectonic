@@ -45,9 +45,9 @@ class EvidencePackGenerator:
             coverage_pct, gaps = await self._coverage.coverage(tenant_id, framework_name)
             events = await self._repository.list_control_events(tenant_id)
 
-            # Best-effort enrichment. Auditability is Module 20, not yet built in this
-            # platform — this call targets a plausible-but-unverified endpoint, wrapped so
-            # a failure never blocks evidence generation from this module's own records.
+            # Best-effort enrichment from Module 20 (Auditability)'s real event log,
+            # wrapped so a failure never blocks evidence generation from this module's
+            # own records.
             for e in events:
                 try:
                     await self._auditability.query_control_events(tenant_id, e.control_name)

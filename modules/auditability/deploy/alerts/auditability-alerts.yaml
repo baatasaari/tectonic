@@ -1,0 +1,30 @@
+# Prometheus Alertmanager rule definitions for the Auditability module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: auditability
+    rules:
+      - alert: AuditabilityChainBroken
+        expr: increase(auditability_chain_verification_total{result="broken"}[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Chain verification reported a break for tenant {{ $labels.tenant_id }}"
+          description: "This is the platform's tamper-evidence signal firing for real -- investigate immediately."
+
+      - alert: AuditabilityIngestionErrorRateHigh
+        expr: |
+          sum(rate(auditability_events_ingested_total{outcome="error"}[5m]))
+            /
+          sum(rate(auditability_events_ingested_total[5m]))
+          > 0.01
+        labels:
+          severity: warning
+        annotations:
+          summary: "Audit event ingestion error rate above 1%"
+
+      - alert: AuditabilityAuditPackGenerationSlow
+        expr: histogram_quantile(0.95, sum(rate(auditability_audit_pack_generation_seconds_bucket[15m])) by (le)) > 300
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 audit pack generation time above 5 minutes"

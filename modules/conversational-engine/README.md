@@ -98,8 +98,7 @@ src/conversational_engine/
   six HTTP clients (`HTTPLLMGatewayClient`, `HTTPGuardrailsClient`,
   `HTTPLongTermMemoryClient`, `HTTPHumanOversightClient`,
   `HTTPObservabilityClient`, `HTTPAuditabilityClient` — the last targets
-  Module 20, Auditability, which hasn't been built yet, same
-  aspirational-target pattern used elsewhere) make — a token minted to
+  Module 20, Auditability) make — a token minted to
   call one peer is rejected if replayed against a different one. The
   shared secret (`TECTONIC_JWT_SHARED_SECRET`, one Kubernetes Secret
   referenced by every module's Helm chart under this same literal env

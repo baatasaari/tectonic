@@ -1,0 +1,57 @@
+image:
+  repository: tectonic/auditability
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  # Sits on the platform's write-heavy hot path -- every other module's event
+  # emission lands here -- so this scales more aggressively than most modules.
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8099
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  auditPackOutputFormat: "pdf"
+  nlQueryEnabled: "true"
+
+database:
+  url: "postgresql+asyncpg://auditability:auditability@postgres:5432/auditability"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+dependencyStubBaseUrl: ""  # set to the real LLM Gateway URL once deployed alongside this module
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8099
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8099
+  initialDelaySeconds: 5
+  periodSeconds: 10
