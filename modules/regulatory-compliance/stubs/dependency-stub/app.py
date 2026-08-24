@@ -1,8 +1,12 @@
 """Dependency-stub service for Regulatory and Compliance.
 
-Stands in for Auditability (Module 20, not yet built in this platform) —
-the LLD's Deployability and Testability Contract: "Runs and tests fully
-with Auditability stubbed to return canned evidence data."
+Stands in for Auditability (Module 20) in this module's own standalone
+docker-compose stack, per the LLD's Deployability and Testability
+Contract: "Runs and tests fully with Auditability stubbed to return
+canned evidence data." Auditability itself is now built
+(`modules/auditability`) — this stub remains so Regulatory and
+Compliance still runs and tests fully standalone without composing the
+two modules together.
 """
 from __future__ import annotations
 

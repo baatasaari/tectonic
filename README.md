@@ -31,7 +31,8 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 18 — Evaluation Framework | Built — [`modules/evaluation-framework`](modules/evaluation-framework) |
 | 19 — Observability | Built — [`modules/observability`](modules/observability) |
 | 20 — Auditability | Built — [`modules/auditability`](modules/auditability) |
-| 21–34 | Not yet started |
+| 21 — MCP | Built — [`modules/mcp`](modules/mcp) |
+| 22–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -258,6 +259,7 @@ modules/
   evaluation-framework/                                      Module 18
   observability/                                               Module 19
   auditability/                                                  Module 20
+  mcp/                                                              Module 21
 ```
 
 ## Cross-module integration, once deployed together
@@ -578,6 +580,37 @@ context on its outbound calls (`HTTPXClientInstrumentor`), closing the
 actual end-to-end distributed tracing gap raised in review.
 Design doc: [`docs/module-19-observability.md`](docs/module-19-observability.md).
 Build: [`modules/observability`](modules/observability).
+
+### Module 20: Auditability
+
+The platform's immutable, tamper-evident event log: every other module
+appends its notable events here (`POST /v1/events`), each one hash-chained
+to the previous entry per tenant so any break is detectable, with an
+audit-pack export (PDF/JSON evidence bundle) and a natural-language query
+endpoint (via LLM Gateway) over the log. A real Postgres concurrency bug
+surfaced in this module's own integration tier — `SELECT ... FOR UPDATE`
+on a not-yet-existing row provides no locking, so a tenant's first-ever
+event could race under concurrent writers — fixed with a
+`pg_advisory_xact_lock` taken before the read; see the module's own README
+for the full writeup.
+Design doc: [`docs/module-20-auditability.md`](docs/module-20-auditability.md).
+Build: [`modules/auditability`](modules/auditability).
+
+### Module 21: MCP
+
+The platform's single, governed entry point for MCP (Model Context
+Protocol) traffic: a registry of MCP servers (the "internal server
+marketplace"), a per-tenant/per-tool access policy enforced deny-by-default
+(no policy row for a tenant/server means zero access), and a JSON-RPC 2.0
+proxy that checks that policy before forwarding a request to the real
+backing server. Distinct from Tool Orchestration (Module 4)'s own
+`HTTPMCPClientAdapter`: that's a direct, ungoverned call from one caller to
+one already-known MCP server, while this module is the opposite
+direction — where a server gets *registered* so any caller platform-wide
+can discover and be governed calling it, with Tool Orchestration itself a
+natural (optional) caller of this module once a tool is registered here.
+Design doc: [`docs/module-21-mcp.md`](docs/module-21-mcp.md).
+Build: [`modules/mcp`](modules/mcp).
 
 ## Running any module locally
 

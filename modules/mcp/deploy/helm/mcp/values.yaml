@@ -1,0 +1,55 @@
+image:
+  repository: tectonic/mcp-gateway
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  # Sits between every calling agent and every registered MCP server -- proxies
+  # the full tools/call volume platform-wide -- so this scales aggressively.
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8100
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+
+database:
+  url: "postgresql+asyncpg://mcp_gateway:mcp_gateway@postgres:5432/mcp_gateway"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+dependencyStubBaseUrl: ""  # set to a real registered MCP server's URL once deployed alongside this module
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8100
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8100
+  initialDelaySeconds: 5
+  periodSeconds: 10
