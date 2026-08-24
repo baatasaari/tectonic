@@ -79,6 +79,22 @@ src/regulatory_compliance/
   frameworks it touches, so a tenant pinned to an older
   `FrameworkProfile.version` is unaffected until they explicitly opt in
   to the newer version.
+- **Postgres integration tests.** The repository layer is now also
+  tested against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering real
+  JSONB list round-tripping of `ControlMapping.clause_references`, the
+  `deprecate_control_mappings` multi-row update touching only the
+  targeted framework version, and a real UUID primary key round trip
+  through `FrameworkProfile`/`EvidencePack` — none of which SQLite's
+  unit-tier fakes can reliably prove. See `tests/integration/conftest.py`
+  for how the Postgres instance is obtained. This tier's presence
+  prompted a platform-wide sweep of every module's `db/models.py` for
+  the same class of bug: `Mapped[datetime]` columns missing
+  `DateTime(timezone=True)` despite the Alembic migration already
+  defining them as timestamptz and the domain layer's defaults being
+  tz-aware — invisible under SQLite, but a real correctness bug against
+  Postgres once a domain default (or an explicit value) is written.
+  Found and fixed here too.
 
 ## Running locally
 

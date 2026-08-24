@@ -54,6 +54,20 @@ src/tool_orchestration/
   is enabled (enforced at config load, not just documented). A synthesised
   tool always passes through Guardrails and gets a Sentinel Agents review
   ticket before it can ever be approved.
+- **Postgres integration tests** — the repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering the
+  `ToolDefinition.schema` JSONB round trip, a real UUID primary key, a
+  multi-row `list_tool_definitions` query filtered by tenant and status, and
+  an upsert-style reliability-score update that must touch only the targeted
+  tool's row — all things SQLite's unit-tier fakes can't reliably prove. See
+  `tests/integration/conftest.py` for how the Postgres instance is obtained.
+  This tier's presence prompted a platform-wide sweep of every module's
+  `db/models.py` for the same class of bug: `Mapped[datetime]` columns missing
+  `DateTime(timezone=True)` despite the Alembic migration already defining
+  them as timestamptz and the domain layer's defaults being tz-aware —
+  invisible under SQLite, but a real correctness bug against Postgres once a
+  domain default (or an explicit value) is written. Found and fixed here too.
 
 ## Running locally
 

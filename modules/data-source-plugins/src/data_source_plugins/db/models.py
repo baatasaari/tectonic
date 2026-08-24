@@ -33,7 +33,7 @@ class ConnectorConfig(Base):
     secrets_ref: Mapped[str] = mapped_column(String(255), default="")
     sync_schedule: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="active")
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class SchemaSnapshot(Base):
@@ -44,7 +44,7 @@ class SchemaSnapshot(Base):
     connector_id: Mapped[str] = mapped_column(UUIDType)
     schema_json: Mapped[dict] = mapped_column("schema", JSONType, default=dict)
     version: Mapped[int] = mapped_column(Integer())
-    captured_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class SyncRun(Base):
@@ -55,7 +55,7 @@ class SyncRun(Base):
     connector_id: Mapped[str] = mapped_column(UUIDType)
     status: Mapped[str] = mapped_column(String(32), default="running")
     records_synced: Mapped[int] = mapped_column(Integer(), default=0)
-    started_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
@@ -70,7 +70,7 @@ class QualityScore(Base):
     freshness_score: Mapped[float] = mapped_column(Float())
     format_validity_score: Mapped[float] = mapped_column(Float())
     overall_score: Mapped[float] = mapped_column(Float())
-    computed_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class DriftIncident(Base):
@@ -83,4 +83,4 @@ class DriftIncident(Base):
     classification: Mapped[str] = mapped_column(String(32), default="additive")
     auto_adapted: Mapped[bool] = mapped_column(Boolean, default=False)
     resolved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

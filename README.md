@@ -37,25 +37,23 @@ building against it.
 
 ## Enterprise-readiness hardening
 
-A structured audit across all 19 built modules (against auth, resiliency,
-real-database testing, durability, connection/pagination limits, and CI
-gaps) found the platform architecturally sound but missing several things
-a production-facing deployment genuinely needs. These are being fixed as
-a series of dedicated, independently reviewable branches/PRs, in this
-order (foundational correctness/scalability risks first, process next,
-the largest single item — auth — last):
+A dedicated review pass across all 19 built modules — gaps, technical
+depth, edge cases, and custom code that open-source frameworks could
+replace — is landing as a series of independent, foundational-risk-first
+branches/PRs, each scoped to one concern so it can be reviewed and merged
+on its own:
 
-| # | Area | Status |
-|---|---|---|
-| 1 | Resiliency — retries + circuit breakers on every outbound HTTP call | Built — `claude/resiliency-retries` |
-| 2 | Real-Postgres integration tests (repository layer tested against genuine Postgres, not just SQLite) | Not yet started |
-| 3 | Durable background jobs (Regulatory and Compliance's evidence-pack generation survives a pod restart) | Not yet started |
-| 4 | Connection pooling tuned to each Helm chart's replica counts + pagination on list endpoints | Not yet started |
-| 5 | CI/CD pipeline (lint + test gating on every push/PR) | Not yet started |
-| 6 | JWT bearer service-to-service auth, shared signing key | Not yet started |
+| # | Branch | Scope | Status |
+|---|---|---|---|
+| 1 | `claude/resiliency-retries` | Retries + circuit breakers on every outbound HTTP call | Built — merged |
+| 2 | `claude/postgres-integration-tests` | Repository layer tested against a real Postgres, not just SQLite | Built — merged |
+| 3 | Durable background jobs | Module 17's evidence-pack generation surviving a pod restart | Built — separate PR |
+| 4 | Connection pooling + pagination | Pool sizing tuned to Helm replica counts; pagination on list endpoints | Built — separate PR |
+| 5 | CI/CD pipeline | Lint + test gating via GitHub Actions | Built — separate PR |
+| 6 | JWT bearer auth | Shared-signing-key service-to-service auth (final, dedicated push) | Built — separate PR |
 
-Item 1 (this repo state) adds a `ResilientHTTPClient` base class
-(`clients/resilience.py`) to every module: real, off-the-shelf libraries —
+**Branch 1 — resiliency.** Every module gets a `ResilientHTTPClient` base
+class (`clients/resilience.py`) built on real, off-the-shelf libraries —
 `tenacity` for exponential-backoff retry, `aiobreaker` for a proper
 Release-It!-pattern circuit breaker — not hand-rolled equivalents. Every
 one of the ~50 client classes across the platform's `clients/http_clients.py`
@@ -69,6 +67,41 @@ a live reproduction, not just wired and assumed to work: confirmed retry
 count on a flaky-then-recovers backend, confirmed zero retries on a 4xx,
 and confirmed the breaker actually opens after repeated failures and then
 short-circuits without a further network call.
+
+**Branch 2 — real-Postgres integration tests.** 17 of the 19 built
+modules (all but Vector DB, which is Qdrant-only with no SQLAlchemy/
+Postgres usage, and Short-Term Memory, whose Redis backend is already
+covered by `fakeredis`-based unit tests) now have a `tests/integration/`
+tier exercising the real `SQLAlchemy*Repository` against genuine Postgres
+— not part of the default `pytest` run, opt-in via either
+`TECTONIC_TEST_POSTGRES_URL` (an admin connection string to an
+already-running Postgres; the fixture creates and drops an isolated
+database per test-module run) or Docker + `testcontainers` as a
+zero-config fallback, skipping the whole tier cleanly when neither is
+available. Each module's suite targets something SQLite's unit tier can't
+reliably prove: real JSONB list/dict round-tripping with exact type and
+order preservation, real UUID primary keys, and multi-row update/filter
+queries hitting only the intended rows.
+
+Actually running these for real — several had never executed against a
+genuine Postgres before, including one written earlier in this project
+that only supported a Docker-only fixture — surfaced a real, platform-wide
+schema-drift bug: in every one of those 17 modules, one or more
+`Mapped[datetime]` columns in `db/models.py` were missing
+`DateTime(timezone=True)`, even though the corresponding Alembic
+migration already defines the column as `timestamptz` and the domain
+layer's own defaults are timezone-aware (`datetime.now(UTC)`). SQLite
+never enforces the mismatch, so it was invisible in the unit tier; against
+real Postgres, asyncpg rejects the write outright
+(`can't subtract offset-naive and offset-aware datetimes`) the moment a
+tz-aware value is written to what it believes is a naive column. Fixed
+across all 17 modules' `db/models.py`, with regression tests added where
+the integration suite already exercised the affected column.
+
+**Branches 3–6** (durable background jobs, connection pooling +
+pagination, CI/CD, JWT bearer auth) are built and merging in this same
+sequence; see each branch's own PR for details until this section is
+updated with their narratives too.
 
 ## Repository layout
 

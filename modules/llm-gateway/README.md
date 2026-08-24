@@ -61,6 +61,20 @@ src/llm_gateway/
   estimated ceiling is reserved against the budget before the provider call
   (so two concurrent requests can't both slip under a limit that only one
   should), then settled to the real cost once the provider responds.
+- **Postgres integration tests** — the repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  `provider_scope` / `deprecation_notices` JSONB round-tripping, a real UUID
+  primary key, and a multi-row `list_virtual_keys` query that must hit only
+  the intended tenant's rows — all things SQLite's unit-tier fakes can't
+  reliably prove. See `tests/integration/conftest.py` for how the Postgres
+  instance is obtained. This tier's presence prompted a platform-wide sweep of
+  every module's `db/models.py` for the same class of bug: `Mapped[datetime]`
+  columns missing `DateTime(timezone=True)` despite the Alembic migration
+  already defining them as timestamptz and the domain layer's defaults being
+  tz-aware — invisible under SQLite, but a real correctness bug against
+  Postgres once a domain default (or an explicit value) is written. Found and
+  fixed here too.
 
 ## Running locally
 

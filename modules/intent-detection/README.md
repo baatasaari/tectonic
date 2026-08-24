@@ -50,6 +50,22 @@ src/intent_detection/
 - **Privacy by design.** Raw input text is never persisted — only
   `hash_input()`'s SHA-256 hash, per the LLD's `ClassificationLog.input_hash`
   field and its stated rationale.
+- **Postgres integration tests** — the repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  `IntentTaxonomy.intents` / `ClassificationLog.intents_detected` JSONB
+  round-tripping (nested lists-of-dicts, exact float confidence values), a
+  real UUID primary key, and a multi-row `get_taxonomy_by_version`/
+  `get_active_taxonomy` query that must select only the intended
+  tenant+version/status row among several taxonomies — all things SQLite's
+  unit-tier fakes can't reliably prove. See `tests/integration/conftest.py`
+  for how the Postgres instance is obtained. This tier's presence prompted a
+  platform-wide sweep of every module's `db/models.py` for the same class of
+  bug: `Mapped[datetime]` columns missing `DateTime(timezone=True)` despite
+  the Alembic migration already defining them as timestamptz and the domain
+  layer's defaults being tz-aware — invisible under SQLite, but a real
+  correctness bug against Postgres once a domain default (or an explicit
+  value) is written. Found and fixed here too.
 
 ## Running locally
 
