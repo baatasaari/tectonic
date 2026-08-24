@@ -34,6 +34,8 @@ implements its three key patterns
 
 ## Design notes vs. the LLD
 
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
+
 - **Salience scoring.** The LLD calls for "a lightweight rule-based
   scorer...with an optional LLM-based scorer for higher-value tenants."
   `core/salience_scorer.py` implements the rule-based tier in full
