@@ -1,0 +1,119 @@
+name: CI
+
+# Lint + test gating for every module (LLD "Deployability and testability
+# contract": each module builds, lints and tests fully independently). Runs
+# per-module in a fail-fast:false matrix so one module's failure doesn't hide
+# another's, and each module's unit tier is fast enough (well under a minute)
+# that running all 19 on every push/PR is cheap.
+#
+# A Postgres service is always started so that any module's tests/integration/
+# tier (opt-in via TECTONIC_TEST_POSTGRES_URL — see that module's
+# tests/integration/conftest.py) runs for real here, not just skips. Not every
+# module has that tier yet as of this workflow's introduction; the "does this
+# directory exist" guard below means adding one to a module later needs no
+# workflow change to start being exercised in CI.
+
+on:
+  push:
+    branches: ["claude/**"]
+  pull_request:
+    branches: ["claude/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    name: ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tectonic_ci
+          POSTGRES_PASSWORD: tectonic_ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tectonic_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - agentic-rag
+          - context-engineering
+          - conversational-engine
+          - data-source-plugins
+          - evaluation-framework
+          - graph-db
+          - guardrails
+          - human-oversight
+          - intent-detection
+          - knowledge-base
+          - llm-gateway
+          - long-term-memory
+          - observability
+          - regulatory-compliance
+          - sentinel-agents
+          - short-term-memory
+          - tool-orchestration
+          - vector-db
+          - workflow-engine
+
+    defaults:
+      run:
+        working-directory: modules/${{ matrix.module }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: "modules/${{ matrix.module }}/pyproject.toml"
+
+      - name: Install module (with dev dependencies)
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check src tests
+
+      - name: Unit tests
+        run: pytest tests/unit -v
+
+      - name: Integration tests (real Postgres, only if this module has that tier)
+        if: hashFiles(format('modules/{0}/tests/integration/**', matrix.module)) != ''
+        env:
+          TECTONIC_TEST_POSTGRES_URL: postgresql://tectonic_ci:tectonic_ci@localhost:5432/postgres
+        run: pytest tests/integration -v
+
+  ci:
+    # A single, stable check name for branch protection to require, instead of
+    # 19 individual matrix-leg names that shift whenever a module is added.
+    name: CI
+    if: always()
+    needs: [lint-and-test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every module job to have succeeded
+        run: |
+          if [ "${{ needs.lint-and-test.result }}" != "success" ]; then
+            echo "One or more module jobs failed (result: ${{ needs.lint-and-test.result }})."
+            exit 1
+          fi
+          echo "All module jobs passed."

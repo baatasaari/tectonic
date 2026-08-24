@@ -1,5 +1,7 @@
 # Tectonic — Agentic AI Platform
 
+[![CI](https://github.com/baatasaari/tectonic/actions/workflows/ci.yml/badge.svg)](https://github.com/baatasaari/tectonic/actions/workflows/ci.yml)
+
 A cloud-agnostic platform for building, running and governing agentic AI
 applications: 34 modules spanning orchestration/runtime, intelligence,
 data, memory, governance/safety, quality/trust and interoperability. Full
@@ -48,8 +50,8 @@ on its own:
 | 1 | `claude/resiliency-retries` | Retries + circuit breakers on every outbound HTTP call | Built — merged |
 | 2 | `claude/postgres-integration-tests` | Repository layer tested against a real Postgres, not just SQLite | Built — merged |
 | 3 | `claude/durable-background-jobs` | Module 17's evidence-pack generation surviving a pod restart | Built — merged |
-| 4 | `claude/pooling-and-pagination` | Connection pooling tuned to Helm replica counts + pagination on list endpoints | Built (this branch) |
-| 5 | CI/CD pipeline | Lint + test gating via GitHub Actions | Built — separate PR |
+| 4 | `claude/pooling-and-pagination` | Connection pooling tuned to Helm replica counts + pagination on list endpoints | Built — merged |
+| 5 | `claude/ci-cd-pipeline` | Lint + test gating via GitHub Actions | Built (this branch) |
 | 6 | JWT bearer auth | Shared-signing-key service-to-service auth (final, dedicated push) | Built — separate PR |
 
 **Branch 1 — resiliency.** Every module gets a `ResilientHTTPClient` base
@@ -154,9 +156,26 @@ a genuine Postgres instance in
   pass an effectively-unbounded internal page size rather than silently
   truncating to the API's default page.
 
-**Branches 5–6** (CI/CD, JWT bearer auth) are built and merging in this
-same sequence; see each branch's own PR for details until this section
-is updated with their narratives too.
+**Branch 5 — CI/CD.** `.github/workflows/ci.yml` — before this,
+`.github/workflows/` was empty: nothing gated a push or PR on lint or
+tests actually passing. A single workflow, one job per module in a
+`fail-fast: false` matrix (so one module's failure never hides
+another's), runs on every push/PR to any `claude/**` branch:
+
+- `ruff check src tests`, then `pytest tests/unit -v` — every module,
+  every push. A `postgres:16-alpine` service container is always
+  available; any module whose `tests/integration/` directory exists (the
+  real-Postgres tier from branch 2/6, landing module-by-module as that
+  PR and this remediation series merge) gets it run for real too, gated
+  purely by "does this directory have files" — no workflow edit needed
+  as more modules grow that tier.
+- A final `CI` job aggregates all 19 module jobs behind one stable check
+  name, so branch protection can require a single check rather than 19
+  individual (and shifting, as modules are added) job names.
+
+**Branch 6** (JWT bearer auth) is built and merging in this same
+sequence; see its own PR for details until this section is updated with
+its narrative too.
 
 ## Repository layout
 
