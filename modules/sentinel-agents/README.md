@@ -33,6 +33,8 @@ src/sentinel_agents/
 
 ## Design notes vs. the LLD
 
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
+
 - **Agent runtime.** The LLD calls for Google ADK 2.0 `Agent` since
   Sentinels are themselves agents. Following the same precedent as
   Module 1 (Workflow Engine), this is a self-contained implementation

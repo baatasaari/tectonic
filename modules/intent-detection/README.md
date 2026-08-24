@@ -33,6 +33,8 @@ src/intent_detection/
 
 ## Design notes vs. the LLD
 
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
+
 - **Primary Classifier.** The LLD calls for "a fine-tuned small model (e.g.
   a distilled transformer classifier)." `core/primary_classifier.py` scores
   each taxonomy intent by its closest labelled example via term-frequency
