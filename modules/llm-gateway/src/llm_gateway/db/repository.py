@@ -1,7 +1,7 @@
 """SQLAlchemy-backed implementation of GatewayRepository (LLD §3.1)."""
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from llm_gateway.core.domain import (
@@ -66,9 +66,21 @@ class SQLAlchemyGatewayRepository:
         m = await self.session.get(models.VirtualKey, virtual_key_id)
         return _vk_to_domain(m) if m else None
 
-    async def list_virtual_keys(self, tenant_id: str) -> list[VirtualKeyRecord]:
-        rows = await self.session.execute(select(models.VirtualKey).where(models.VirtualKey.tenant_id == tenant_id))
-        return [_vk_to_domain(m) for m in rows.scalars().all()]
+    async def list_virtual_keys(
+        self, tenant_id: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[VirtualKeyRecord], int]:
+        where_clause = models.VirtualKey.tenant_id == tenant_id
+        total_rows = await self.session.execute(select(func.count(models.VirtualKey.id)).where(where_clause))
+        total = total_rows.scalar_one()
+
+        rows = await self.session.execute(
+            select(models.VirtualKey)
+            .where(where_clause)
+            .order_by(models.VirtualKey.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_vk_to_domain(m) for m in rows.scalars().all()], total
 
     async def get_budget_policy(self, budget_policy_id: str) -> BudgetPolicyRecord | None:
         m = await self.session.get(models.BudgetPolicy, budget_policy_id)

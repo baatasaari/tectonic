@@ -33,6 +33,8 @@ src/observability/
 
 ## Design notes vs. the LLD
 
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
+
 - **End-to-end distributed trace propagation — added after review, not a
   pre-existing feature.** Ingesting spans into one Postgres table isn't
   what makes tracing "end-to-end": until this fix, every module's
@@ -92,6 +94,37 @@ src/observability/
   degraded case" pattern used elsewhere in this platform (e.g.
   Guardrails' ambiguous-jailbreak fallback), rather than surfacing an
   error to a support engineer mid-incident.
+- **Postgres integration tests** — the repository layer is now also
+  tested against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  nested-attribute JSONB round-tripping on `Span.attributes` (mixed
+  ints/floats/lists/nulls) with real `trace_id`/`span_id` values, and two
+  multi-row queries — `list_spans_for_trace`'s tenant+trace filter and
+  `list_traces_for_tenant`'s `DISTINCT` across many spans per trace —
+  hitting only the intended rows, none of which SQLite's unit-tier fakes
+  can reliably prove. See `tests/integration/conftest.py` for how the
+  Postgres instance is obtained. This tier caught a real schema-drift
+  bug: `Span.start_time`/`end_time`/`ingested_at` were mapped without
+  `DateTime(timezone=True)` even though the Alembic migration (and the
+  domain's own tz-aware `now()` default) both assume a timestamptz
+  column — invisible under SQLite, but asyncpg rejected every write
+  using an aware datetime against real Postgres. Fixed in `db/models.py`.
+
+- **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
+  the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
+  regardless of how many pods are running — at this module's own
+  `deploy/helm/observability/values.yaml` `autoscaling.maxReplicas: 20`,
+  that's up to 300 connections to this module's own Postgres
+  instance from this module alone at full autoscale, with no one having
+  deliberately decided that number. `db/session.py`'s `make_engine` now
+  passes explicit, configurable `pool_size=5` /
+  `max_overflow=2` (`db_pool_size`/`db_max_overflow`
+  Settings, env-overridable) sized so this module's own steady-state
+  total stays at ~100 connections and its full-burst total at ~150,
+  even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
+  connections behind a cloud LB/proxy's own idle-connection timeout —
+  a real, independent gap, not just a replica-count one.
+
 - **Service-to-service JWT auth.** Before this, no module authenticated
   any of its inbound HTTP calls — any process able to reach a module's
   port could call it, and every outbound call this module makes carried

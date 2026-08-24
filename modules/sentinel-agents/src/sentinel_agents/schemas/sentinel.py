@@ -32,6 +32,13 @@ class AlertSchema(BaseModel):
     detected_at: datetime
 
 
+class AlertListResponse(BaseModel):
+    items: list[AlertSchema]
+    total: int
+    limit: int
+    offset: int
+
+
 class BaselineSchema(BaseModel):
     agent_ref: str
     action_type: str

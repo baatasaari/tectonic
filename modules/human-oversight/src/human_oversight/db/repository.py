@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from human_oversight.core.domain import (
@@ -84,12 +84,20 @@ class SQLAlchemyHumanOversightRepository:
         await self.session.refresh(m)
         return _request_to_domain(m)
 
-    async def list_requests(self, tenant_id: str, status: str | None = None) -> list[OversightRequestRecord]:
+    async def list_requests(
+        self, tenant_id: str, status: str | None = None, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[OversightRequestRecord], int]:
         stmt = select(models.OversightRequest).where(models.OversightRequest.tenant_id == tenant_id)
+        count_stmt = select(func.count(models.OversightRequest.id)).where(
+            models.OversightRequest.tenant_id == tenant_id
+        )
         if status:
             stmt = stmt.where(models.OversightRequest.status == status)
+            count_stmt = count_stmt.where(models.OversightRequest.status == status)
+        stmt = stmt.order_by(models.OversightRequest.created_at.desc()).limit(limit).offset(offset)
         rows = await self.session.execute(stmt)
-        return [_request_to_domain(m) for m in rows.scalars().all()]
+        total = await self.session.execute(count_stmt)
+        return [_request_to_domain(m) for m in rows.scalars().all()], total.scalar_one()
 
     async def list_pending_expired(self, tenant_id: str, as_of: datetime) -> list[OversightRequestRecord]:
         rows = await self.session.execute(

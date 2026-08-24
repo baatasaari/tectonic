@@ -16,8 +16,9 @@ async def test_ingest_document_creates_document_version_and_chunks(harness):
     assert result.version.version_number == 1
     assert result.chunk_count > 0
 
-    chunks = await harness.repository.list_chunks_by_version(result.version.id)
+    chunks, total = await harness.repository.list_chunks_by_version(result.version.id)
     assert len(chunks) == result.chunk_count
+    assert total == result.chunk_count
     assert all(c.policy_tags == ["internal"] for c in chunks)
 
     assert len(harness.vector_db.stored) == result.chunk_count

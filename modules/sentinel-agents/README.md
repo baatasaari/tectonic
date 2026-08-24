@@ -34,6 +34,8 @@ src/sentinel_agents/
 
 ## Design notes vs. the LLD
 
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
+
 - **Agent runtime.** The LLD calls for Google ADK 2.0 `Agent` since
   Sentinels are themselves agents. Following the same precedent as
   Module 1 (Workflow Engine), this is a self-contained implementation
@@ -72,6 +74,57 @@ src/sentinel_agents/
   completeness but doesn't persist a per-tenant override in this build —
   configuration is sourced from this module's own YAML/env at startup,
   with `baselining.sensitivity` marked hot-reloadable there.
+- **Postgres integration tests.** The repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  `Alert.agent_refs` JSONB round-tripping, an upsert-style query
+  (`upsert_baseline`) that must update only the one row matching a real
+  multi-column uniqueness constraint (`tenant_id`, `agent_ref`, `action_type`)
+  rather than creating a duplicate, and a multi-row filtered query
+  (`list_alerts` scoped by severity) — none of which SQLite's unit-tier fakes
+  can reliably prove. See `tests/integration/conftest.py` for how the Postgres
+  instance is obtained. This tier's presence prompted a platform-wide sweep of
+  every module's `db/models.py` for the same class of bug: `Mapped[datetime]`
+  columns missing `DateTime(timezone=True)` despite the Alembic migration
+  already defining them as timestamptz and the domain layer's defaults being
+  tz-aware — invisible under SQLite, but a real correctness bug against
+  Postgres once a domain default (or an explicit value) is written. Found and
+  fixed here too.
+
+- **`GET /alerts` pagination.** Added `limit`/`offset` query params
+  (default `limit=50`, max `200`); the response shape changed from a
+  bare array to `AlertListResponse` (`items`/`total`/`limit`/`offset`).
+  Alerts are a genuinely growing per-tenant history, so this is real
+  limit/offset pagination end to end (`SentinelRepository.list_alerts`
+  now returns `(items, total)`). Ordered by `detected_at` descending
+  (newest first, the useful default for an alert feed) with `id`
+  ascending as a tiebreaker, since multiple alerts can share a
+  `detected_at` timestamp.
+- **`GET /baselines/{agent_ref}` pagination deliberately skipped.**
+  `AgentBaselineRecord` rows are keyed by `(tenant_id, agent_ref,
+  action_type)` and updated in place by `upsert_baseline` (Welford's
+  running mean/variance) — never appended to. One agent's baseline list
+  is therefore bounded by its small, fixed set of distinct action types,
+  not an unbounded growing history the way `/alerts` is, so it was left
+  returning a bare `list[BaselineSchema]` rather than adding limit/offset
+  pagination that would add API surface with no real capacity problem to
+  solve. See the docstring on `SentinelRepository.list_baselines_for_agent`
+  in `core/ports.py`.
+- **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
+  the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
+  regardless of how many pods are running — at this module's own
+  `deploy/helm/sentinel-agents/values.yaml` `autoscaling.maxReplicas: 20`,
+  that's up to 300 connections to this module's own Postgres
+  instance from this module alone at full autoscale, with no one having
+  deliberately decided that number. `db/session.py`'s `make_engine` now
+  passes explicit, configurable `pool_size=5` /
+  `max_overflow=2` (`db_pool_size`/`db_max_overflow`
+  Settings, env-overridable) sized so this module's own steady-state
+  total stays at ~100 connections and its full-burst total at ~150,
+  even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
+  connections behind a cloud LB/proxy's own idle-connection timeout —
+  a real, independent gap, not just a replica-count one.
+
 - **Service-to-service JWT auth.** Before this, no module authenticated
   any of its inbound HTTP calls — any process able to reach a module's
   port could call it, and every outbound call this module makes carried

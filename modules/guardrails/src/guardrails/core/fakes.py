@@ -45,8 +45,15 @@ class InMemoryGuardrailsRepository:
         self.red_team_runs[record.id] = copy.deepcopy(record)
         return copy.deepcopy(record)
 
-    async def list_red_team_runs(self, tenant_id: str) -> list[RedTeamRunRecord]:
-        return [copy.deepcopy(r) for r in self.red_team_runs.values() if r.tenant_id == tenant_id]
+    async def list_red_team_runs(
+        self, tenant_id: str, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[RedTeamRunRecord], int]:
+        results = sorted(
+            (r for r in self.red_team_runs.values() if r.tenant_id == tenant_id),
+            key=lambda r: r.run_at, reverse=True,
+        )
+        sliced = [copy.deepcopy(r) for r in results[offset : offset + limit]]
+        return sliced, len(results)
 
     async def create_bypass_incident(self, record: BypassIncidentRecord) -> BypassIncidentRecord:
         self.bypass_incidents.setdefault(record.red_team_run_id, []).append(copy.deepcopy(record))

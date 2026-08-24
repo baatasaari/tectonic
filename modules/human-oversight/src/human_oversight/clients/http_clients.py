@@ -16,6 +16,13 @@ Every other requesting module doesn't define a standard callback
 endpoint yet; those get a best-effort generic callback (logged, not
 raised, on failure) — the same documented-gap pattern used elsewhere in
 this platform (see the module README).
+
+Every client below is a `ResilientHTTPClient` (retry + circuit breaker on
+every outbound call — see resilience.py). The webhook-based channels pass
+an absolute per-call URL (`self._webhook_url`) to `_post` rather than a
+fixed `base_url` — httpx treats an absolute URL passed to a request call
+as-is regardless of the client's configured `base_url`, so this works the
+same way it did before.
 """
 from __future__ import annotations
 
@@ -24,6 +31,7 @@ from email.message import EmailMessage
 
 import httpx
 
+from human_oversight.clients.resilience import CircuitBreakerError, ResilientHTTPClient
 from human_oversight.core.domain import (
     DecisionRecord,
     NotificationLogRecord,
@@ -36,18 +44,19 @@ from human_oversight.telemetry.logging import get_logger
 
 logger = get_logger(component="http_clients")
 
+_VERY_SHORT_TIMEOUT = httpx.Timeout(connect=5.0, read=5.0, write=5.0, pool=5.0)
 
-class WebhookNotificationChannel:
+
+class WebhookNotificationChannel(ResilientHTTPClient):
     def __init__(self, webhook_url: str, client: httpx.AsyncClient | None = None) -> None:
+        super().__init__("", client=client, breaker_name="webhook-notification")
         self._webhook_url = webhook_url
-        self._client = client or httpx.AsyncClient(timeout=10.0)
 
     async def send(self, request: OversightRequestRecord) -> NotificationLogRecord:
         try:
-            resp = await self._client.post(self._webhook_url, json={"request_id": request.id, "priority": request.priority})
-            resp.raise_for_status()
+            await self._post(self._webhook_url, json={"request_id": request.id, "priority": request.priority})
             status = "delivered"
-        except httpx.HTTPError:
+        except (httpx.HTTPError, CircuitBreakerError):
             status = "failed"
         return NotificationLogRecord(
             id=new_id(), request_id=request.id, channel="webhook", delivered_at=now() if status == "delivered" else None,
@@ -55,18 +64,17 @@ class WebhookNotificationChannel:
         )
 
 
-class SlackNotificationChannel:
+class SlackNotificationChannel(ResilientHTTPClient):
     def __init__(self, webhook_url: str, client: httpx.AsyncClient | None = None) -> None:
+        super().__init__("", client=client, breaker_name="slack-notification")
         self._webhook_url = webhook_url
-        self._client = client or httpx.AsyncClient(timeout=10.0)
 
     async def send(self, request: OversightRequestRecord) -> NotificationLogRecord:
         text = f"New oversight request ({request.priority}) from {request.requesting_module}: {request.id}"
         try:
-            resp = await self._client.post(self._webhook_url, json={"text": text})
-            resp.raise_for_status()
+            await self._post(self._webhook_url, json={"text": text})
             status = "delivered"
-        except httpx.HTTPError:
+        except (httpx.HTTPError, CircuitBreakerError):
             status = "failed"
         return NotificationLogRecord(
             id=new_id(), request_id=request.id, channel="slack", delivered_at=now() if status == "delivered" else None,
@@ -74,10 +82,10 @@ class SlackNotificationChannel:
         )
 
 
-class TeamsNotificationChannel:
+class TeamsNotificationChannel(ResilientHTTPClient):
     def __init__(self, webhook_url: str, client: httpx.AsyncClient | None = None) -> None:
+        super().__init__("", client=client, breaker_name="teams-notification")
         self._webhook_url = webhook_url
-        self._client = client or httpx.AsyncClient(timeout=10.0)
 
     async def send(self, request: OversightRequestRecord) -> NotificationLogRecord:
         card = {
@@ -86,10 +94,9 @@ class TeamsNotificationChannel:
             "text": f"New oversight request ({request.priority}) from {request.requesting_module}: {request.id}",
         }
         try:
-            resp = await self._client.post(self._webhook_url, json=card)
-            resp.raise_for_status()
+            await self._post(self._webhook_url, json=card)
             status = "delivered"
-        except httpx.HTTPError:
+        except (httpx.HTTPError, CircuitBreakerError):
             status = "failed"
         return NotificationLogRecord(
             id=new_id(), request_id=request.id, channel="teams", delivered_at=now() if status == "delivered" else None,
@@ -122,7 +129,7 @@ class SMTPNotificationChannel:
         )
 
 
-class HTTPDecisionCallbackDispatcher:
+class HTTPDecisionCallbackDispatcher(ResilientHTTPClient):
     """Unlike every other HTTP client in this module (and this platform),
     this one's target audience isn't known at construction time: `notify()`
     calls back to whichever `requesting_module` raised the original
@@ -136,7 +143,7 @@ class HTTPDecisionCallbackDispatcher:
         self, base_url: str, client: httpx.AsyncClient | None = None, *,
         issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
     ) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0)
+        super().__init__(base_url, client=client, timeout=_VERY_SHORT_TIMEOUT, breaker_name="decision-callback")
         self._issuer = issuer
         self._shared_secret = shared_secret
         self._ttl_seconds = ttl_seconds
@@ -155,26 +162,24 @@ class HTTPDecisionCallbackDispatcher:
 
         if requesting_module == "workflow_engine" and ":" in requesting_ref:
             instance_id, approval_id = requesting_ref.split(":", 1)
-            resp = await self._client.post(
+            await self._post(
                 f"/v1/workflow-engine/instances/{instance_id}/approvals/{approval_id}/callback",
                 json={"decision": decision.decision.value, "resolved_by": decision.decided_by},
                 headers=headers,
             )
-            resp.raise_for_status()
             return
 
         try:
-            resp = await self._client.post(
+            await self._post(
                 f"/v1/{requesting_module}/oversight-callback",
                 json={"requesting_ref": requesting_ref, "decision": decision.decision.value, "decided_by": decision.decided_by},
                 headers=headers,
             )
-            resp.raise_for_status()
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, CircuitBreakerError) as e:
             logger.warning("oversight_callback_unsupported", requesting_module=requesting_module, error=str(e))
 
 
-class HTTPAuditabilityClient:
+class HTTPAuditabilityClient(ResilientHTTPClient):
     def __init__(
         self, base_url: str, client: httpx.AsyncClient | None = None, *,
         issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
@@ -182,7 +187,12 @@ class HTTPAuditabilityClient:
         auth = ServiceBearerAuth(
             issuer=issuer, audience="auditability", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
         ) if issuer else None
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=5.0, auth=auth)
+        super().__init__(
+            base_url, client=client, timeout=_VERY_SHORT_TIMEOUT, breaker_name="auditability", fail_max=10, auth=auth,
+        )
 
     async def emit(self, event: dict) -> None:
-        await self._client.post("/v1/auditability/events", json=event)
+        try:
+            await self._post("/v1/auditability/events", json=event)
+        except (httpx.HTTPError, CircuitBreakerError) as exc:
+            logger.warning("auditability_emit_failed", error=str(exc))

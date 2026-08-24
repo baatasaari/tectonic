@@ -15,6 +15,13 @@ class ToolDefinitionSummary(BaseModel):
     synthesised: bool
 
 
+class ToolDefinitionListResponse(BaseModel):
+    items: list[ToolDefinitionSummary]
+    total: int
+    limit: int
+    offset: int
+
+
 class ReliabilityScoreSummary(BaseModel):
     rolling_success_rate: float
     rolling_avg_latency_ms: float

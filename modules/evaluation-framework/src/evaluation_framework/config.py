@@ -39,6 +39,14 @@ class EvaluationFrameworkSettings(BaseSettings):
     telemetry: TelemetryConfig = TelemetryConfig()
 
     database_url: str = "postgresql+asyncpg://evalfw:evalfw@localhost:5432/evalfw"
+
+    # Pool sized against this module's own Helm chart (deploy/helm/evaluation-framework/values.yaml):
+    # maxReplicas=20, targeting <=100 steady-state / <=150 burst connections to
+    # this module's own Postgres instance platform-wide at full autoscale.
+    db_pool_size: int = 5
+    db_max_overflow: int = 2
+    db_pool_timeout_seconds: int = 30
+    db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     service_name: str = "evaluation-framework"
     http_port: int = 8097
     dependency_stub_base_url: str = "http://localhost:9118"

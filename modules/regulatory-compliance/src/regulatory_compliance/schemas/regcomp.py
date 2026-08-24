@@ -31,6 +31,13 @@ class ControlMappingSchema(BaseModel):
     deprecated: bool
 
 
+class ControlMappingListResponse(BaseModel):
+    items: list[ControlMappingSchema]
+    total: int
+    limit: int
+    offset: int
+
+
 class ControlEventRequest(BaseModel):
     tenant_id: str
     control_name: str
@@ -71,6 +78,8 @@ class EvidencePackSchema(BaseModel):
     document_format: str
     document_bytes_b64: str | None = None
     created_at: datetime
+    attempts: int
+    last_error: str | None = None
 
 
 class CoverageResponse(BaseModel):

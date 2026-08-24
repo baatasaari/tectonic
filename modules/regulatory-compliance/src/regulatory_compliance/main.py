@@ -1,6 +1,8 @@
 """FastAPI application entrypoint (LLD §Level 4 "Deployment")."""
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 from contextlib import asynccontextmanager
 
@@ -14,6 +16,7 @@ from regulatory_compliance.api.routes_regcomp import router as regcomp_router
 from regulatory_compliance.app_context import AppContext
 from regulatory_compliance.clients.http_clients import HTTPAuditabilityClient
 from regulatory_compliance.config import RegulatoryComplianceSettings, load_settings
+from regulatory_compliance.core.evidence_worker import EvidencePackWorker
 from regulatory_compliance.core.regulatory_feed import RegulatoryFeedManager
 from regulatory_compliance.db.repository import SQLAlchemyRegulatoryComplianceRepository
 from regulatory_compliance.db.session import make_engine, make_session_factory
@@ -61,10 +64,32 @@ async def lifespan(app: FastAPI):
         seeded = await RegulatoryFeedManager(repository).seed_defaults()
         logger.info("crosswalk_table_seeded", mappings=seeded)
 
-    logger.info("startup_complete", service=settings.service_name, tenant_id=settings.tenant_id)
+    @asynccontextmanager
+    async def repository_factory():
+        async with ctx.session_factory() as session:
+            yield SQLAlchemyRegulatoryComplianceRepository(session)
+
+    worker = EvidencePackWorker(
+        repository_factory, ctx.auditability, settings.evidence.output_format,
+        poll_interval_seconds=settings.evidence.worker_poll_interval_seconds,
+        lease_seconds=settings.evidence.worker_lease_seconds,
+        max_attempts=settings.evidence.worker_max_attempts,
+    )
+    await worker.recover_stuck_packs()
+    worker_task = asyncio.create_task(worker.run_forever())
+    app.state.evidence_worker = worker
+
+    logger.info(
+        "startup_complete", service=settings.service_name, tenant_id=settings.tenant_id,
+        evidence_worker_id=worker.worker_id,
+    )
     try:
         yield
     finally:
+        worker.stop()
+        worker_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker_task
         await ctx.engine.dispose()
         logger.info("shutdown_complete")
 

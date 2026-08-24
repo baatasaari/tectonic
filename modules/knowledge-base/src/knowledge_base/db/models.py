@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CHAR, JSON, Index, Integer, String, Text, func
+from sqlalchemy import CHAR, JSON, DateTime, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -32,8 +32,8 @@ class Document(Base):
     current_version_id: Mapped[str | None] = mapped_column(UUIDType, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="active")
     staleness_threshold_days: Mapped[int | None] = mapped_column(Integer(), nullable=True)
-    last_reviewed_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    last_reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class DocumentVersion(Base):
@@ -46,7 +46,7 @@ class DocumentVersion(Base):
     blob_ref: Mapped[str] = mapped_column(String(255))
     version_number: Mapped[int] = mapped_column(Integer())
     created_by: Mapped[str] = mapped_column(String(255), default="")
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Chunk(Base):

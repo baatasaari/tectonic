@@ -1,7 +1,7 @@
 """`/v1/llm-gateway/admin/*` routes (LLD §3.3)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from llm_gateway.api.deps import get_repository
 from llm_gateway.config import BudgetConfig
@@ -12,6 +12,7 @@ from llm_gateway.schemas.admin import (
     BudgetStatusResponse,
     CreateVirtualKeyRequest,
     ProviderStatusResponse,
+    VirtualKeyListResponse,
     VirtualKeyResponse,
 )
 
@@ -36,19 +37,26 @@ async def create_virtual_key(
     )
 
 
-@router.get("/virtual-keys", response_model=list[VirtualKeyResponse])
+@router.get("/virtual-keys", response_model=VirtualKeyListResponse)
 async def list_virtual_keys(
     tenant_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     repository: GatewayRepository = Depends(get_repository),
-) -> list[VirtualKeyResponse]:
-    records = await repository.list_virtual_keys(tenant_id)
-    return [
-        VirtualKeyResponse(
-            id=r.id, tenant_id=r.tenant_id, provider_scope=r.provider_scope,
-            budget_policy_ref=r.budget_policy_ref, status=r.status.value,
-        )
-        for r in records
-    ]
+) -> VirtualKeyListResponse:
+    records, total = await repository.list_virtual_keys(tenant_id, limit=limit, offset=offset)
+    return VirtualKeyListResponse(
+        items=[
+            VirtualKeyResponse(
+                id=r.id, tenant_id=r.tenant_id, provider_scope=r.provider_scope,
+                budget_policy_ref=r.budget_policy_ref, status=r.status.value,
+            )
+            for r in records
+        ],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/budgets/{budget_policy_id}", response_model=BudgetStatusResponse)
@@ -71,6 +79,14 @@ async def get_budget_status(
 
 @router.get("/providers", response_model=list[ProviderStatusResponse])
 async def list_providers(
+    # Deliberately NOT paginated: unlike /virtual-keys, provider configs
+    # are a fixed, admin-configured set of LLM providers this gateway
+    # integrates with (one row per provider it knows how to call), not a
+    # tenant-scoped dataset that grows with usage. `ProviderConfigRecord`
+    # has no tenant_id and list_provider_configs() takes no filters — in
+    # practice this is a handful of rows (OpenAI, Anthropic, etc.), so
+    # limit/offset would add API surface without a real bound to enforce.
+    # Revisit if provider configs ever become tenant-configurable.
     repository: GatewayRepository = Depends(get_repository),
 ) -> list[ProviderStatusResponse]:
     providers = await repository.list_provider_configs()

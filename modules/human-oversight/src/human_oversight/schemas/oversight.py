@@ -29,6 +29,13 @@ class OversightRequestSchema(BaseModel):
     expires_at: datetime
 
 
+class OversightRequestListResponse(BaseModel):
+    items: list[OversightRequestSchema]
+    total: int
+    limit: int
+    offset: int
+
+
 class ClaimRequest(BaseModel):
     claimed_by: str
 

@@ -44,12 +44,13 @@ class InMemoryEvaluationFrameworkRepository:
         return [s for s in self.metric_scores.values() if s.eval_run_id == eval_run_id]
 
     async def list_metric_scores_for_tenant(
-        self, tenant_id: str, *, agent_ref: str | None = None,
-    ) -> list[MetricScoreRecord]:
+        self, tenant_id: str, *, agent_ref: str | None = None, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[MetricScoreRecord], int]:
         results = [s for s in self.metric_scores.values() if s.tenant_id == tenant_id]
         if agent_ref is not None:
             results = [s for s in results if s.agent_ref == agent_ref]
-        return results
+        results = sorted(results, key=lambda s: s.created_at, reverse=True)
+        return results[offset : offset + limit], len(results)
 
     async def create_gate_result(self, record: GateResultRecord) -> GateResultRecord:
         self.gate_results[record.id] = record

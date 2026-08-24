@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CHAR, JSON, ForeignKey, Index, String, func
+from sqlalchemy import CHAR, JSON, DateTime, ForeignKey, Index, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -49,8 +49,8 @@ class ConversationSession(Base):
     user_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="active")
     persona_config_ref: Mapped[str] = mapped_column(String(255), default="default")
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    last_activity_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_activity_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     trace_id: Mapped[str] = mapped_column(String(64))
 
     messages: Mapped[list[Message]] = relationship(back_populates="session")
@@ -66,7 +66,7 @@ class Message(Base):
     content: Mapped[str] = mapped_column(String())
     emotion_score: Mapped[float | None] = mapped_column(nullable=True)
     guardrail_check_result: Mapped[dict | None] = mapped_column(JSONType, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     session: Mapped[ConversationSession] = relationship(back_populates="messages")
 
@@ -79,4 +79,4 @@ class HandoffEvent(Base):
     session_id: Mapped[str] = mapped_column(UUIDType, ForeignKey("conversation_sessions.id"))
     trigger_reason: Mapped[str] = mapped_column(String(32))
     target: Mapped[str] = mapped_column(String(255))
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

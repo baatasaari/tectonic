@@ -62,8 +62,14 @@ class InMemoryWorkflowRepository:
         self.steps[record.id] = copy.deepcopy(record)
         return copy.deepcopy(record)
 
-    async def list_step_executions(self, instance_id: str) -> list[StepExecutionRecord]:
-        return [copy.deepcopy(s) for s in self.steps.values() if s.instance_id == instance_id]
+    async def list_step_executions(
+        self, instance_id: str, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[StepExecutionRecord], int]:
+        results = [s for s in self.steps.values() if s.instance_id == instance_id]
+        # id ascending, matching the SQL repository's ORDER BY id (no non-nullable timestamp
+        # column exists on StepExecution to order by instead).
+        results = sorted(results, key=lambda s: s.id)
+        return [copy.deepcopy(s) for s in results[offset:offset + limit]], len(results)
 
     async def get_step_execution(self, step_execution_id: str) -> StepExecutionRecord | None:
         rec = self.steps.get(step_execution_id)

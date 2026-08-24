@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from long_term_memory.core.domain import (
@@ -132,13 +132,25 @@ class SQLAlchemyLongTermMemoryRepository:
         await self.session.refresh(m)
         return _reflection_to_domain(m)
 
-    async def list_reflections(self, tenant_id: str, agent_ref: str) -> list[ReflectionEntryRecord]:
-        rows = await self.session.execute(
-            select(models.ReflectionEntry).where(
-                models.ReflectionEntry.tenant_id == tenant_id, models.ReflectionEntry.agent_ref == agent_ref,
-            )
+    async def list_reflections(
+        self, tenant_id: str, agent_ref: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[ReflectionEntryRecord], int]:
+        where_clause = (
+            models.ReflectionEntry.tenant_id == tenant_id, models.ReflectionEntry.agent_ref == agent_ref,
         )
-        return [_reflection_to_domain(m) for m in rows.scalars().all()]
+        total_rows = await self.session.execute(
+            select(func.count(models.ReflectionEntry.id)).where(*where_clause)
+        )
+        total = total_rows.scalar_one()
+
+        rows = await self.session.execute(
+            select(models.ReflectionEntry)
+            .where(*where_clause)
+            .order_by(models.ReflectionEntry.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_reflection_to_domain(m) for m in rows.scalars().all()], total
 
     async def create_deletion_record(self, record: DeletionRecord) -> DeletionRecord:
         m = models.DeletionRecordModel(
