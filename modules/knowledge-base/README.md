@@ -35,6 +35,8 @@ src/knowledge_base/
 
 ## Design notes vs. the LLD
 
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
+
 - **Document parsing.** The LLD calls for `unstructured` and `pypdf` for
   multi-format parsing (PDF, DOCX, HTML, etc.). `core/parser.py`
   implements the text-native formats directly instead — plain text,
@@ -65,6 +67,22 @@ src/knowledge_base/
   uploaded `file` or an inline `content_text` form field as the byte
   source, and still records `source_ref`/`source_type` as metadata so the
   data model matches the LLD exactly.
+- **Postgres integration tests** — the repository layer is now also
+  tested against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering a
+  genuine multi-row bulk insert (`create_chunks`) with distinct real
+  UUID primary keys and per-row JSONB `policy_tags` round-tripping, and
+  a multi-table filter (`list_chunks_by_policy_tag`) that must return
+  only the intended chunks — things SQLite's unit-tier fakes can't
+  reliably prove. See `tests/integration/conftest.py` for how the
+  Postgres instance is obtained. This tier caught a real schema-drift
+  bug: `Document.last_reviewed_at` was mapped without
+  `DateTime(timezone=True)` even though the Alembic migration (and the
+  domain default, `datetime.now(UTC)`) both assume a timestamptz
+  column — invisible under SQLite, but asyncpg rejected every
+  `create_document` call using the domain default against real
+  Postgres. Fixed in `db/models.py`; the integration suite now has a
+  dedicated regression test for it.
 
 ## Running locally
 

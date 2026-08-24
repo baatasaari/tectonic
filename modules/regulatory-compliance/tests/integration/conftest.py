@@ -1,16 +1,16 @@
 """Shared fixture for the Postgres integration tier (LLD's own testing plan
 calls for the repository layer to be tested against a real Postgres, not
-just SQLite -- see the module README's "Design notes vs. the LLD").
+just SQLite — see the module README's "Design notes vs. the LLD").
 
 Two ways to get a real Postgres, tried in order:
 
 1. `TECTONIC_TEST_POSTGRES_URL` set to an admin connection string for an
    already-running Postgres (a CI service container, a local `postgresql`
-   install) -- this fixture creates and drops a fresh, isolated database
+   install) — this fixture creates and drops a fresh, isolated database
    per test-module run against it. Useful in any environment where Docker
    itself isn't available (or isn't wanted) but a real Postgres is.
 2. Left unset, with a Docker daemon available: `testcontainers` spins up a
-   disposable `postgres:16-alpine` container instead -- the zero-config
+   disposable `postgres:16-alpine` container instead — the zero-config
    default for CI runners and local dev with Docker.
 
 Neither available -> the whole integration tier is skipped, not failed;
@@ -65,7 +65,7 @@ async def postgres_url():
         finally:
             await conn.close()
 
-        # SQLAlchemy needs the +asyncpg driver marker explicitly -- a bare postgresql://
+        # SQLAlchemy needs the +asyncpg driver marker explicitly — a bare postgresql://
         # resolves to the sync psycopg2 dialect, which isn't even installed here.
         base = asyncpg_dsn.replace("postgresql://", "postgresql+asyncpg://", 1).rsplit("/", 1)[0]
         url = f"{base}/{db_name}"

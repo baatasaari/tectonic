@@ -34,6 +34,8 @@ src/regulatory_compliance/
 
 ## Design notes vs. the LLD
 
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
+
 - **Evidence pack PDF generation.** The LLD's "PDF (via the platform's
   own PDF generation approach)" is realised with `fpdf2` — a genuinely
   lightweight, pure-Python PDF writer with no system dependencies, so
@@ -96,6 +98,22 @@ src/regulatory_compliance/
   frameworks it touches, so a tenant pinned to an older
   `FrameworkProfile.version` is unaffected until they explicitly opt in
   to the newer version.
+- **Postgres integration tests.** The repository layer is now also
+  tested against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering real
+  JSONB list round-tripping of `ControlMapping.clause_references`, the
+  `deprecate_control_mappings` multi-row update touching only the
+  targeted framework version, and a real UUID primary key round trip
+  through `FrameworkProfile`/`EvidencePack` — none of which SQLite's
+  unit-tier fakes can reliably prove. See `tests/integration/conftest.py`
+  for how the Postgres instance is obtained. This tier's presence
+  prompted a platform-wide sweep of every module's `db/models.py` for
+  the same class of bug: `Mapped[datetime]` columns missing
+  `DateTime(timezone=True)` despite the Alembic migration already
+  defining them as timestamptz and the domain layer's defaults being
+  tz-aware — invisible under SQLite, but a real correctness bug against
+  Postgres once a domain default (or an explicit value) is written.
+  Found and fixed here too.
 
 ## Running locally
 

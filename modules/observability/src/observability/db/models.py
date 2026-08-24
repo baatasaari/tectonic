@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Index, String
+from sqlalchemy import JSON, DateTime, Index, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,9 +29,9 @@ class Span(Base):
     parent_span_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     name: Mapped[str] = mapped_column(String(255))
     service_name: Mapped[str] = mapped_column(String(64))
-    start_time: Mapped[datetime]
-    end_time: Mapped[datetime]
+    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    end_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     attributes: Mapped[dict] = mapped_column(JSONType, default=dict)
     status: Mapped[str] = mapped_column(String(16), default="ok")
     workflow_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    ingested_at: Mapped[datetime]
+    ingested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

@@ -30,6 +30,8 @@ src/graph_db/
 
 ## Design notes vs. the LLD
 
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
+
 - **Graph database.** The LLD calls for Neo4j or Memgraph via Cypher.
   Neither is installable/runnable in this build environment (no Docker
   for `testcontainers`, no external graph-DB service). `db/models.py`
@@ -52,6 +54,20 @@ src/graph_db/
   implements exactly that structured DSL (`query_type: "neighbours" |
   "path"`) and nothing else — raw Cypher stays out of scope, consistent
   with the LLD's own default-off posture, not a deviation from it.
+- **Postgres integration tests.** The repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  `Node.attributes` JSONB round-tripping, a real UUID primary/foreign key
+  relationship between two nodes and the edge connecting them, and a
+  tenant-scoped multi-row aggregation (`count_edges_by_kind`) — none of which
+  SQLite's unit-tier fakes can reliably prove. See
+  `tests/integration/conftest.py` for how the Postgres instance is obtained.
+  This tier's presence prompted a platform-wide sweep of every module's
+  `db/models.py` for the same class of bug: `Mapped[datetime]` columns missing
+  `DateTime(timezone=True)` despite the Alembic migration already defining
+  them as timestamptz and the domain layer's defaults being tz-aware —
+  invisible under SQLite, but a real correctness bug against Postgres once a
+  domain default (or an explicit value) is written. Found and fixed here too.
 
 ## Running locally
 

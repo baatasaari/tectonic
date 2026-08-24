@@ -41,6 +41,8 @@ tests/integration/        Real-Postgres tier via testcontainers (needs Docker)
 
 ## Design notes vs. the LLD
 
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
+
 - **ADK 2.0 Workflow Runtime.** The LLD names Google ADK 2.0's Workflow
   Runtime as the production graph executor. `core/scheduler.py` implements
   the same semantics (fan-out/fan-in, retry, confidence-gated human-in-the-
@@ -66,6 +68,19 @@ tests/integration/        Real-Postgres tier via testcontainers (needs Docker)
   falling back to the deployment's configured default tenant. A real
   deployment sits this behind whatever the platform's auth layer resolves
   tenant from.
+- **Postgres integration tests, now dual-path.** `tests/integration/`
+  previously required Docker/testcontainers only; it now also accepts
+  `TECTONIC_TEST_POSTGRES_URL` against an already-running Postgres (see
+  `tests/integration/conftest.py`), matching the pattern used across the
+  rest of the platform. Running it for real for the first time (Docker
+  was never available in the environment this module was originally
+  built in) surfaced a genuine schema-drift bug: every `Mapped[datetime]`
+  column in `db/models.py` (`published_at`, `started_at`, `completed_at`,
+  `requested_at`, `resolved_at`, `created_at`) was missing
+  `DateTime(timezone=True)`, even though every Alembic migration already
+  defines them as timestamptz and the domain layer's defaults are all
+  tz-aware. Invisible under SQLite; asyncpg rejected the mismatch for
+  real. Fixed in `db/models.py`.
 
 ## Running locally
 
