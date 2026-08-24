@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CHAR, JSON, String, func
+from sqlalchemy import CHAR, JSON, DateTime, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,7 +29,7 @@ class VirtualKey(Base):
     provider_scope: Mapped[list[str]] = mapped_column(JSONType, default=list)
     budget_policy_ref: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(16), default="active")
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class BudgetPolicy(Base):
@@ -56,7 +56,7 @@ class RequestLog(Base):
     cost: Mapped[float] = mapped_column(default=0.0)
     cache_hit: Mapped[bool] = mapped_column(default=False)
     latency_ms: Mapped[float] = mapped_column(default=0.0)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class ProviderConfig(Base):

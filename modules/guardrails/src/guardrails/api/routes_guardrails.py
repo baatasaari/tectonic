@@ -15,6 +15,7 @@ from guardrails.schemas.checks import (
     CheckResponse,
     CreatePolicyProfileRequest,
     PolicyProfileSchema,
+    RedTeamRunListResponse,
     RedTeamRunSchema,
     TriggerRedTeamRunResponse,
 )
@@ -98,12 +99,14 @@ async def create_policy_profile(
     return _profile_schema(record)
 
 
-@router.get("/red-team-runs", response_model=list[RedTeamRunSchema])
+@router.get("/red-team-runs", response_model=RedTeamRunListResponse)
 async def list_red_team_runs(
     tenant_id: str = Query(...),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     repository: GuardrailsRepository = Depends(get_repository),
-) -> list[RedTeamRunSchema]:
-    runs = await repository.list_red_team_runs(tenant_id)
+) -> RedTeamRunListResponse:
+    runs, total = await repository.list_red_team_runs(tenant_id, limit=limit, offset=offset)
     schemas = []
     for run in runs:
         incidents = await repository.list_bypass_incidents(run.id)
@@ -120,7 +123,7 @@ async def list_red_team_runs(
                 ],
             )
         )
-    return schemas
+    return RedTeamRunListResponse(items=schemas, total=total, limit=limit, offset=offset)
 
 
 @router.post("/red-team-runs/trigger", response_model=TriggerRedTeamRunResponse, status_code=201)

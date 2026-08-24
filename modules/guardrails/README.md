@@ -32,6 +32,8 @@ src/guardrails/
 
 ## Design notes vs. the LLD
 
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
+
 - **Policy engine.** The LLD calls for NVIDIA NeMo Guardrails as the
   policy execution engine. NeMo Guardrails' rails/flow DSL and its model
   runtime requirements are a large dependency footprint unsuited to this
@@ -71,6 +73,43 @@ src/guardrails/
   this module falls back to an ephemeral profile built directly from its
   own YAML config defaults, so `/check` works immediately without
   requiring a `POST /policy-profiles` call first.
+- **Postgres integration tests.** The repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering JSONB
+  round-tripping across `PolicyProfile`'s three list columns
+  (`enabled_checks`, `pii_entity_types`, `denied_topics`), a real UUID foreign
+  key (`BypassIncident.red_team_run_id`) scoping a multi-row query to only its
+  parent run, and an `ORDER BY ... LIMIT 1` query across multiple candidate
+  rows — none of which SQLite's unit-tier fakes can reliably prove. See
+  `tests/integration/conftest.py` for how the Postgres instance is obtained.
+  This tier's presence prompted a platform-wide sweep of every module's
+  `db/models.py` for the same class of bug: `Mapped[datetime]` columns missing
+  `DateTime(timezone=True)` despite the Alembic migration already defining
+  them as timestamptz and the domain layer's defaults being tz-aware —
+  invisible under SQLite, but a real correctness bug against Postgres once a
+  domain default (or an explicit value) is written. Found and fixed here too.
+
+- **Pagination on `GET /red-team-runs`.** Added `limit`/`offset` query
+  params (default 50, max 200) and a `RedTeamRunListResponse` envelope
+  (`items`/`total`/`limit`/`offset`) — this endpoint previously returned
+  every matching row unbounded, a real scaling gap for a tenant with a
+  large red-team run history. Ordered by `run_at` descending (newest run
+  first) for stable pagination.
+
+- **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
+  the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
+  regardless of how many pods are running — at this module's own
+  `deploy/helm/guardrails/values.yaml` `autoscaling.maxReplicas: 30`,
+  that's up to 450 connections to this module's own Postgres
+  instance from this module alone at full autoscale, with no one having
+  deliberately decided that number. `db/session.py`'s `make_engine` now
+  passes explicit, configurable `pool_size=4` /
+  `max_overflow=2` (`db_pool_size`/`db_max_overflow`
+  Settings, env-overridable) sized so this module's own steady-state
+  total stays at ~100 connections and its full-burst total at ~150,
+  even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
+  connections behind a cloud LB/proxy's own idle-connection timeout —
+  a real, independent gap, not just a replica-count one.
 
 ## Running locally
 

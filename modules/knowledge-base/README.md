@@ -35,6 +35,8 @@ src/knowledge_base/
 
 ## Design notes vs. the LLD
 
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
+
 - **Document parsing.** The LLD calls for `unstructured` and `pypdf` for
   multi-format parsing (PDF, DOCX, HTML, etc.). `core/parser.py`
   implements the text-native formats directly instead — plain text,
@@ -65,6 +67,50 @@ src/knowledge_base/
   uploaded `file` or an inline `content_text` form field as the byte
   source, and still records `source_ref`/`source_type` as metadata so the
   data model matches the LLD exactly.
+- **Postgres integration tests** — the repository layer is now also
+  tested against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering a
+  genuine multi-row bulk insert (`create_chunks`) with distinct real
+  UUID primary keys and per-row JSONB `policy_tags` round-tripping, and
+  a multi-table filter (`list_chunks_by_policy_tag`) that must return
+  only the intended chunks — things SQLite's unit-tier fakes can't
+  reliably prove. See `tests/integration/conftest.py` for how the
+  Postgres instance is obtained. This tier caught a real schema-drift
+  bug: `Document.last_reviewed_at` was mapped without
+  `DateTime(timezone=True)` even though the Alembic migration (and the
+  domain default, `datetime.now(UTC)`) both assume a timestamptz
+  column — invisible under SQLite, but asyncpg rejected every
+  `create_document` call using the domain default against real
+  Postgres. Fixed in `db/models.py`; the integration suite now has a
+  dedicated regression test for it.
+
+- **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
+  the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
+  regardless of how many pods are running — at this module's own
+  `deploy/helm/knowledge-base/values.yaml` `autoscaling.maxReplicas: 20`,
+  that's up to 300 connections to this module's own Postgres
+  instance from this module alone at full autoscale, with no one having
+  deliberately decided that number. `db/session.py`'s `make_engine` now
+  passes explicit, configurable `pool_size=5` /
+  `max_overflow=2` (`db_pool_size`/`db_max_overflow`
+  Settings, env-overridable) sized so this module's own steady-state
+  total stays at ~100 connections and its full-burst total at ~150,
+  even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
+  connections behind a cloud LB/proxy's own idle-connection timeout —
+  a real, independent gap, not just a replica-count one.
+- **Pagination on `GET /chunks`.** Added `limit`/`offset` query params
+  (default 50, max 200) and a `ChunkListResponse` envelope
+  (`items`/`total`/`limit`/`offset`) — this endpoint previously returned
+  every matching chunk unbounded for both of its lookup modes
+  (`document_version_id` and `policy_tag`+`tenant_id`). Ordered by
+  `chunk_index` ascending (by `document_version_id` then `chunk_index`
+  for the policy-tag lookup, which can span multiple versions). The
+  policy-tag path filters chunk membership in Python after the
+  version-scoped fetch, since JSON-array containment isn't filterable
+  at the SQL level in a way that's portable between the JSONB (Postgres)
+  and JSON (SQLite) column variants this module already uses — so it
+  paginates the filtered, deterministically ordered in-memory list
+  rather than pushing `LIMIT`/`OFFSET` into that query.
 
 ## Running locally
 

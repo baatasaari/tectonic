@@ -57,3 +57,10 @@ class DriftIncidentSchema(BaseModel):
     auto_adapted: bool
     resolved_by: str | None
     created_at: datetime
+
+
+class DriftIncidentListResponse(BaseModel):
+    items: list[DriftIncidentSchema]
+    total: int
+    limit: int
+    offset: int

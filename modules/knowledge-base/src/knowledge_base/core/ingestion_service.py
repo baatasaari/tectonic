@@ -119,8 +119,8 @@ class IngestionService:
         content_hash = version_manager.content_hash(content)
         duplicate = await self._repository.find_version_by_content_hash(document_id, content_hash)
         if duplicate is not None:
-            existing_chunks = await self._repository.list_chunks_by_version(duplicate.id)
-            return IngestionResult(document=document, version=duplicate, chunk_count=len(existing_chunks))
+            _, chunk_count = await self._repository.list_chunks_by_version(duplicate.id)
+            return IngestionResult(document=document, version=duplicate, chunk_count=chunk_count)
 
         existing_versions = await self._repository.list_versions(document_id)
         blob_ref = await self._blob_storage.put(content)

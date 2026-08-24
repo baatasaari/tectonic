@@ -47,18 +47,120 @@ on its own:
 
 | # | Branch | Scope | Status |
 |---|---|---|---|
-| 1 | `claude/resiliency-retries` | Retries + circuit breakers on every outbound HTTP call | Built — separate PR |
-| 2 | `claude/postgres-integration-tests` | Repository layer tested against a real Postgres, not just SQLite | Built — separate PR |
-| 3 | `claude/durable-background-jobs` | Module 17's evidence-pack generation surviving a pod restart | Built — separate PR |
-| 4 | `claude/pooling-and-pagination` | Connection pooling tuned to Helm replica counts + pagination on list endpoints | Built — separate PR |
+| 1 | `claude/resiliency-retries` | Retries + circuit breakers on every outbound HTTP call | Built — merged |
+| 2 | `claude/postgres-integration-tests` | Repository layer tested against a real Postgres, not just SQLite | Built — merged |
+| 3 | `claude/durable-background-jobs` | Module 17's evidence-pack generation surviving a pod restart | Built — merged |
+| 4 | `claude/pooling-and-pagination` | Connection pooling tuned to Helm replica counts + pagination on list endpoints | Built — merged |
 | 5 | `claude/ci-cd-pipeline` | Lint + test gating via GitHub Actions | Built (this branch) |
-| 6 | JWT bearer auth | Shared-signing-key service-to-service auth (final, dedicated push) | Not started |
+| 6 | JWT bearer auth | Shared-signing-key service-to-service auth (final, dedicated push) | Built — separate PR |
 
-**This branch (5/6):** `.github/workflows/ci.yml` — before this, `.github/workflows/`
-was empty: nothing gated a push or PR on lint or tests actually passing.
-A single workflow, one job per module in a `fail-fast: false` matrix (so
-one module's failure never hides another's), runs on every push/PR to any
-`claude/**` branch:
+**Branch 1 — resiliency.** Every module gets a `ResilientHTTPClient` base
+class (`clients/resilience.py`) built on real, off-the-shelf libraries —
+`tenacity` for exponential-backoff retry, `aiobreaker` for a proper
+Release-It!-pattern circuit breaker — not hand-rolled equivalents. Every
+one of the ~50 client classes across the platform's `clients/http_clients.py`
+files now retries network failures and 5xx responses (never 4xx) and
+opens its breaker after repeated failures, so a struggling peer gets a
+break instead of a retry storm and callers fail fast instead of piling up
+against a peer that's already down. LLM Gateway's real provider-calling
+path (`http_provider_client.py`) gets its own per-provider breaker, so one
+provider being down never blocks calls to a different one. Verified with
+a live reproduction, not just wired and assumed to work: confirmed retry
+count on a flaky-then-recovers backend, confirmed zero retries on a 4xx,
+and confirmed the breaker actually opens after repeated failures and then
+short-circuits without a further network call.
+
+**Branch 2 — real-Postgres integration tests.** 17 of the 19 built
+modules (all but Vector DB, which is Qdrant-only with no SQLAlchemy/
+Postgres usage, and Short-Term Memory, whose Redis backend is already
+covered by `fakeredis`-based unit tests) now have a `tests/integration/`
+tier exercising the real `SQLAlchemy*Repository` against genuine Postgres
+— not part of the default `pytest` run, opt-in via either
+`TECTONIC_TEST_POSTGRES_URL` (an admin connection string to an
+already-running Postgres; the fixture creates and drops an isolated
+database per test-module run) or Docker + `testcontainers` as a
+zero-config fallback, skipping the whole tier cleanly when neither is
+available. Each module's suite targets something SQLite's unit tier can't
+reliably prove: real JSONB list/dict round-tripping with exact type and
+order preservation, real UUID primary keys, and multi-row update/filter
+queries hitting only the intended rows.
+
+Actually running these for real — several had never executed against a
+genuine Postgres before, including one written earlier in this project
+that only supported a Docker-only fixture — surfaced a real, platform-wide
+schema-drift bug: in every one of those 17 modules, one or more
+`Mapped[datetime]` columns in `db/models.py` were missing
+`DateTime(timezone=True)`, even though the corresponding Alembic
+migration already defines the column as `timestamptz` and the domain
+layer's own defaults are timezone-aware (`datetime.now(UTC)`). SQLite
+never enforces the mismatch, so it was invisible in the unit tier; against
+real Postgres, asyncpg rejects the write outright
+(`can't subtract offset-naive and offset-aware datetimes`) the moment a
+tz-aware value is written to what it believes is a naive column. Fixed
+across all 17 modules' `db/models.py`, with regression tests added where
+the integration suite already exercised the affected column.
+
+**Branch 3 — durable background jobs.** Module 17 (Regulatory and
+Compliance)'s evidence-pack generation used to run as an in-process
+FastAPI `BackgroundTasks` job — genuine async work, but non-durable: a
+pod restart between the `202 Accepted` response and the background task
+finishing left the pack permanently stuck at `status=generating`, with
+nothing else ever picking the job back up. Fixed with a Postgres-backed
+job queue (`core/evidence_worker.py`'s `EvidencePackWorker`), reusing the
+`evidence_packs` table itself as the queue: an asyncio poll loop claims
+pending packs via `SELECT ... FOR UPDATE SKIP LOCKED`, so multiple worker
+instances/pods can poll the same table concurrently without ever
+double-claiming a row; each claim gets a time-bounded lease so a crash
+mid-generation is recovered automatically once the lease expires, with no
+separate liveness check; a startup recovery sweep force-expires every
+held lease immediately so anything left mid-flight by a now-dead previous
+process instance is reclaimed on the very next poll tick; and a
+transient generation failure is requeued for retry, with a
+`worker_max_attempts` ceiling so a permanently-broken job stops being
+retried forever instead of spinning indefinitely. The one property here
+that neither SQLite nor an in-memory fake can prove for real —
+concurrent claims never double-claiming the same row — is proven against
+a genuine Postgres instance in
+`modules/regulatory-compliance/tests/integration/test_evidence_worker_postgres.py`.
+
+**Branch 4 — connection pooling + pagination**, two parts:
+
+- **Connection pooling.** SQLAlchemy's out-of-the-box async engine
+  defaults (`pool_size=5`, `max_overflow=10`) applied identically
+  everywhere regardless of how many pods are actually running — at each
+  module's own Helm chart's `autoscaling.maxReplicas` (10/20/30
+  depending on the module), that meant up to 150–450 connections to a
+  single module's own Postgres instance from that module alone at full
+  autoscale, with no one having deliberately decided the number. Across
+  all 17 Postgres-backed modules, `db/session.py`'s `make_engine` now
+  passes explicit `pool_size`/`max_overflow`/`pool_timeout`/
+  `pool_recycle`, computed per module from its own `maxReplicas` so
+  steady-state stays around 100 connections and full-burst around 150
+  even at max autoscale, plus `pool_recycle=1800s` everywhere to avoid
+  stale connections behind a cloud LB/proxy's own idle timeout — a real,
+  independent gap. All four values are now env-overridable Settings
+  fields, with a regression test per module asserting `make_engine`
+  actually applies them.
+- **Pagination.** Audited every list-returning API endpoint platform-wide
+  (15 found across 12 modules); added `limit`/`offset` query params
+  (default 50, max 200) and a `<Resource>ListResponse` envelope
+  (`items`/`total`/`limit`/`offset`) to the ones that were genuinely
+  unbounded growing lists. A handful were deliberately left unpaginated
+  — llm-gateway's `GET /providers` (a small, fixed, admin-configured
+  set) and long-term-memory's `POST /query` (already bounded via its own
+  `top_k` ranking) — each justified in a code comment and its module's
+  README, not silently skipped. Where a list method is also called
+  internally by core logic needing the *complete* set (regulatory-
+  compliance's crosswalk/coverage calculation, workflow-engine's
+  instance-detail view embedding its full step list), those call sites
+  pass an effectively-unbounded internal page size rather than silently
+  truncating to the API's default page.
+
+**Branch 5 — CI/CD.** `.github/workflows/ci.yml` — before this,
+`.github/workflows/` was empty: nothing gated a push or PR on lint or
+tests actually passing. A single workflow, one job per module in a
+`fail-fast: false` matrix (so one module's failure never hides
+another's), runs on every push/PR to any `claude/**` branch:
 
 - `ruff check src tests`, then `pytest tests/unit -v` — every module,
   every push. A `postgres:16-alpine` service container is always
@@ -70,6 +172,10 @@ one module's failure never hides another's), runs on every push/PR to any
 - A final `CI` job aggregates all 19 module jobs behind one stable check
   name, so branch protection can require a single check rather than 19
   individual (and shifting, as modules are added) job names.
+
+**Branch 6** (JWT bearer auth) is built and merging in this same
+sequence; see its own PR for details until this section is updated with
+its narrative too.
 
 ## Repository layout
 

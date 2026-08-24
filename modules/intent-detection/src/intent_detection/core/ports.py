@@ -30,7 +30,9 @@ class IntentRepository(Protocol):
 
     async def create_drift_report(self, record: DriftReportRecord) -> DriftReportRecord: ...
 
-    async def list_drift_reports(self, tenant_id: str) -> list[DriftReportRecord]: ...
+    async def list_drift_reports(
+        self, tenant_id: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[DriftReportRecord], int]: ...
 
 
 class LLMGatewayClient(Protocol):

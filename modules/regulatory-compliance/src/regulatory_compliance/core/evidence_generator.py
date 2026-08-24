@@ -61,8 +61,10 @@ class EvidencePackGenerator:
             pack.document_format = ext
             pack.document_ref = f"evidence-packs/{pack.id}.{ext}"
             pack.document_bytes_b64 = base64.b64encode(document_bytes).decode("ascii")
-        except Exception:
+            pack.last_error = None
+        except Exception as exc:
             pack.status = EvidencePackStatus.FAILED
+            pack.last_error = str(exc) or exc.__class__.__name__
             logger.exception("evidence_pack_generation_failed", pack_id=pack_id)
 
         return await self._repository.update_evidence_pack(pack)

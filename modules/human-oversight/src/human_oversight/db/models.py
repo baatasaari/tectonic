@@ -36,7 +36,7 @@ class OversightRequest(Base):
     priority: Mapped[str] = mapped_column(String(16), default="medium")
     status: Mapped[str] = mapped_column(String(16), default="pending")
     claimed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
@@ -49,7 +49,7 @@ class Decision(Base):
     decision: Mapped[str] = mapped_column(String(16))
     decided_by: Mapped[str] = mapped_column(String(255))
     decision_reason: Mapped[str] = mapped_column(String(2048), default="")
-    decided_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class OverrideRecordModel(Base):
@@ -61,7 +61,7 @@ class OverrideRecordModel(Base):
     original_agent_proposal: Mapped[dict] = mapped_column(JSONType, default=dict)
     human_override_action: Mapped[dict] = mapped_column(JSONType, default=dict)
     override_reason: Mapped[str] = mapped_column(String(2048), default="")
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class NotificationLog(Base):

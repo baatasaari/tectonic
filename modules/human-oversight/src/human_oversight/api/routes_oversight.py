@@ -24,6 +24,7 @@ from human_oversight.schemas.oversight import (
     DecideRequest,
     DecisionSchema,
     OversightRequestDetailSchema,
+    OversightRequestListResponse,
     OversightRequestSchema,
 )
 
@@ -104,14 +105,18 @@ async def decide_request(
     return _decision_schema(decision)
 
 
-@router.get("/requests", response_model=list[OversightRequestSchema])
+@router.get("/requests", response_model=OversightRequestListResponse)
 async def list_requests(
     tenant_id: str = Query(...),
     status: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     repository: HumanOversightRepository = Depends(get_repository),
-) -> list[OversightRequestSchema]:
-    requests = await repository.list_requests(tenant_id, status)
-    return [_request_schema(r) for r in requests]
+) -> OversightRequestListResponse:
+    requests, total = await repository.list_requests(tenant_id, status, limit=limit, offset=offset)
+    return OversightRequestListResponse(
+        items=[_request_schema(r) for r in requests], total=total, limit=limit, offset=offset,
+    )
 
 
 @router.get("/requests/{request_id}", response_model=OversightRequestDetailSchema)

@@ -16,6 +16,13 @@ class MetricScoreSchema(BaseModel):
     created_at: datetime
 
 
+class MetricScoreListResponse(BaseModel):
+    items: list[MetricScoreSchema]
+    total: int
+    limit: int
+    offset: int
+
+
 class EvaluateRequest(BaseModel):
     tenant_id: str
     agent_ref: str

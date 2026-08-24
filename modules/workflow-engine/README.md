@@ -41,6 +41,8 @@ tests/integration/        Real-Postgres tier via testcontainers (needs Docker)
 
 ## Design notes vs. the LLD
 
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
+
 - **ADK 2.0 Workflow Runtime.** The LLD names Google ADK 2.0's Workflow
   Runtime as the production graph executor. `core/scheduler.py` implements
   the same semantics (fan-out/fan-in, retry, confidence-gated human-in-the-
@@ -66,6 +68,48 @@ tests/integration/        Real-Postgres tier via testcontainers (needs Docker)
   falling back to the deployment's configured default tenant. A real
   deployment sits this behind whatever the platform's auth layer resolves
   tenant from.
+- **Postgres integration tests, now dual-path.** `tests/integration/`
+  previously required Docker/testcontainers only; it now also accepts
+  `TECTONIC_TEST_POSTGRES_URL` against an already-running Postgres (see
+  `tests/integration/conftest.py`), matching the pattern used across the
+  rest of the platform. Running it for real for the first time (Docker
+  was never available in the environment this module was originally
+  built in) surfaced a genuine schema-drift bug: every `Mapped[datetime]`
+  column in `db/models.py` (`published_at`, `started_at`, `completed_at`,
+  `requested_at`, `resolved_at`, `created_at`) was missing
+  `DateTime(timezone=True)`, even though every Alembic migration already
+  defines them as timestamptz and the domain layer's defaults are all
+  tz-aware. Invisible under SQLite; asyncpg rejected the mismatch for
+  real. Fixed in `db/models.py`.
+
+- **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
+  the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
+  regardless of how many pods are running — at this module's own
+  `deploy/helm/workflow-engine/values.yaml` `autoscaling.maxReplicas: 10`,
+  that's up to 150 connections to this module's own Postgres
+  instance from this module alone at full autoscale, with no one having
+  deliberately decided that number. `db/session.py`'s `make_engine` now
+  passes explicit, configurable `pool_size=10` /
+  `max_overflow=5` (`db_pool_size`/`db_max_overflow`
+  Settings, env-overridable) sized so this module's own steady-state
+  total stays at ~100 connections and its full-burst total at ~150,
+  even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
+  connections behind a cloud LB/proxy's own idle-connection timeout —
+  a real, independent gap, not just a replica-count one.
+- **Pagination on `GET /{instance_id}/steps`.** Added `limit`/`offset`
+  query params (default 50, max 200) and a `StepExecutionListResponse`
+  envelope (`items`/`total`/`limit`/`offset`) — this endpoint previously
+  returned every step execution for an instance unbounded, a real
+  scaling gap for a long-running or heavily-replanned workflow instance.
+  Neither `started_at` nor `completed_at` is a reliable ordering column
+  (both are nullable — a pending step has neither), so this orders by
+  `id` ascending instead, a stable, deterministic tiebreaker so
+  limit/offset pagination is actually meaningful. `GET
+  /{instance_id}` (the instance detail view, which embeds the complete
+  step list inline) is a distinct, intentionally-unpaginated internal
+  call against the same repository method (`limit=10_000`, an
+  effectively-unbounded internal page size) — that view genuinely needs
+  the complete list, not one page of it.
 
 ## Running locally
 

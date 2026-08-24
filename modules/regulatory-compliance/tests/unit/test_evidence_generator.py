@@ -75,7 +75,7 @@ async def test_generate_failure_marks_pack_failed_without_raising():
     from regulatory_compliance.core.fakes import InMemoryRegulatoryComplianceRepository
 
     class BoomRepository(InMemoryRegulatoryComplianceRepository):
-        async def list_control_mappings(self, *, control_name=None, framework_name=None):
+        async def list_control_mappings(self, *, control_name=None, framework_name=None, limit=50, offset=0):
             raise RuntimeError("boom")
 
     repository = BoomRepository()

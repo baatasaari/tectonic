@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from evaluation_framework.core.domain import (
@@ -99,13 +99,17 @@ class SQLAlchemyEvaluationFrameworkRepository:
         return [_score_to_domain(m) for m in rows.scalars().all()]
 
     async def list_metric_scores_for_tenant(
-        self, tenant_id: str, *, agent_ref: str | None = None,
-    ) -> list[MetricScoreRecord]:
+        self, tenant_id: str, *, agent_ref: str | None = None, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[MetricScoreRecord], int]:
         stmt = select(models.MetricScore).where(models.MetricScore.tenant_id == tenant_id)
+        count_stmt = select(func.count(models.MetricScore.id)).where(models.MetricScore.tenant_id == tenant_id)
         if agent_ref is not None:
             stmt = stmt.where(models.MetricScore.agent_ref == agent_ref)
+            count_stmt = count_stmt.where(models.MetricScore.agent_ref == agent_ref)
+        stmt = stmt.order_by(models.MetricScore.created_at.desc()).limit(limit).offset(offset)
         rows = await self.session.execute(stmt)
-        return [_score_to_domain(m) for m in rows.scalars().all()]
+        total = await self.session.execute(count_stmt)
+        return [_score_to_domain(m) for m in rows.scalars().all()], total.scalar_one()
 
     async def create_gate_result(self, record: GateResultRecord) -> GateResultRecord:
         m = models.GateResult(

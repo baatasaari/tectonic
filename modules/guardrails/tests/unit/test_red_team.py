@@ -1,4 +1,7 @@
+from datetime import timedelta
+
 from guardrails.config import RedTeamConfig
+from guardrails.core.domain import RedTeamRunRecord, new_id, now
 
 
 async def test_default_adversarial_prompts_all_blocked_no_bypass(harness):
@@ -30,5 +33,33 @@ async def test_bypassing_prompts_recorded_and_sentinel_alerted(harness_factory):
 async def test_run_persists_run_record(harness):
     profile = harness.default_profile()
     run = await harness.red_team_runner.run("t1", profile)
-    runs = await harness.repository.list_red_team_runs("t1")
+    runs, _total = await harness.repository.list_red_team_runs("t1")
     assert any(r.id == run.id for r in runs)
+
+
+async def _seed_run(harness, *, age_seconds: int):
+    record = RedTeamRunRecord(
+        id=new_id(), tenant_id="t1", attempts_generated=1, successful_bypasses=0,
+        run_at=now() - timedelta(seconds=age_seconds),
+    )
+    return await harness.repository.create_red_team_run(record)
+
+
+async def test_list_red_team_runs_paginates_newest_first(harness):
+    oldest = await _seed_run(harness, age_seconds=200)
+    middle = await _seed_run(harness, age_seconds=100)
+    newest = await _seed_run(harness, age_seconds=0)
+
+    page1, total = await harness.repository.list_red_team_runs("t1", limit=2, offset=0)
+    assert total == 3
+    assert [r.id for r in page1] == [newest.id, middle.id]
+
+    page2, total = await harness.repository.list_red_team_runs("t1", limit=2, offset=2)
+    assert total == 3
+    assert [r.id for r in page2] == [oldest.id]
+
+
+async def test_list_red_team_runs_empty_returns_no_error(harness):
+    runs, total = await harness.repository.list_red_team_runs("no-such-tenant")
+    assert runs == []
+    assert total == 0

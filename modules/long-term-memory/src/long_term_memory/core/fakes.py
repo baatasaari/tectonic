@@ -63,10 +63,13 @@ class InMemoryLongTermMemoryRepository:
         self.reflections.append(copy.deepcopy(record))
         return copy.deepcopy(record)
 
-    async def list_reflections(self, tenant_id: str, agent_ref: str) -> list[ReflectionEntryRecord]:
-        return [
-            copy.deepcopy(r) for r in self.reflections if r.tenant_id == tenant_id and r.agent_ref == agent_ref
-        ]
+    async def list_reflections(
+        self, tenant_id: str, agent_ref: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[ReflectionEntryRecord], int]:
+        matching = [r for r in self.reflections if r.tenant_id == tenant_id and r.agent_ref == agent_ref]
+        matching.sort(key=lambda r: r.created_at, reverse=True)
+        sliced = [copy.deepcopy(r) for r in matching[offset : offset + limit]]
+        return sliced, len(matching)
 
     async def create_deletion_record(self, record: DeletionRecord) -> DeletionRecord:
         self.deletion_records[record.id] = copy.deepcopy(record)

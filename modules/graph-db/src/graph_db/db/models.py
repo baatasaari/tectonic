@@ -31,7 +31,7 @@ class Node(Base):
     entity_type: Mapped[str] = mapped_column(String(128))
     name: Mapped[str] = mapped_column(String(512))
     attributes: Mapped[dict] = mapped_column(JSONType, default=dict)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Edge(Base):
@@ -51,4 +51,4 @@ class Edge(Base):
     valid_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     confidence: Mapped[float | None] = mapped_column(Float(), nullable=True)
     source_ref: Mapped[str] = mapped_column(String(255), default="")
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -33,6 +33,8 @@ src/evaluation_framework/
 
 ## Design notes vs. the LLD
 
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
+
 - **Eval library adapters — `faithfulness` is real DeepEval, corrected
   after review.** The LLD calls for wrapping DeepEval, Ragas and an
   OpenAI-Evals-compatible format behind one interface. The first version
@@ -85,6 +87,12 @@ src/evaluation_framework/
   component: a deterministic hash of `interaction_id` against the
   configured `sample_rate`, not `random()`, so a given interaction always
   samples the same way.
+- **Pagination on `GET /scores`.** Added `limit`/`offset` query params
+  (default 50, max 200) and a `MetricScoreListResponse` envelope
+  (`items`/`total`/`limit`/`offset`) — this endpoint previously returned
+  every matching score row unbounded, a real scaling gap for a tenant
+  with a large evaluation history. Ordered by `created_at` descending
+  (newest score first) for stable pagination.
 - **CLI.** `agenteval run --gate` reimplements the LLD's described
   AgentEval CLI pattern against this module's own HTTP API (`click` +
   `httpx`, both real, lightweight dependencies) rather than porting
@@ -96,6 +104,36 @@ src/evaluation_framework/
   access), so that feedback loop is `GET /v1/evaluation-framework/scores`
   being polled by those modules instead — the same data, reached through
   this module's API rather than its storage.
+- **Postgres integration tests** — the repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering
+  `EvalRun.metrics_evaluated` list-order-preserving JSONB round trips, a real
+  UUID primary key round trip through `get_eval_run`, float-type fidelity on
+  `DomainMetricPack.custom_thresholds`, and a multi-row filtered query
+  (`list_metric_scores_for_tenant`) hitting only rows matching both tenant and
+  agent_ref — none of which SQLite's unit-tier fakes can reliably prove. See
+  `tests/integration/conftest.py` for how the Postgres instance is obtained.
+  This tier's presence prompted a platform-wide sweep of every module's
+  `db/models.py` for the same class of bug: `Mapped[datetime]` columns missing
+  `DateTime(timezone=True)` despite the Alembic migration already defining
+  them as timestamptz and the domain layer's defaults being tz-aware —
+  invisible under SQLite, but a real correctness bug against Postgres once a
+  domain default (or an explicit value) is written. Found and fixed here too.
+
+- **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
+  the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
+  regardless of how many pods are running — at this module's own
+  `deploy/helm/evaluation-framework/values.yaml` `autoscaling.maxReplicas: 20`,
+  that's up to 300 connections to this module's own Postgres
+  instance from this module alone at full autoscale, with no one having
+  deliberately decided that number. `db/session.py`'s `make_engine` now
+  passes explicit, configurable `pool_size=5` /
+  `max_overflow=2` (`db_pool_size`/`db_max_overflow`
+  Settings, env-overridable) sized so this module's own steady-state
+  total stays at ~100 connections and its full-burst total at ~150,
+  even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
+  connections behind a cloud LB/proxy's own idle-connection timeout —
+  a real, independent gap, not just a replica-count one.
 
 ## Running locally
 

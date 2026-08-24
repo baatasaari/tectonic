@@ -18,6 +18,13 @@ class VirtualKeyResponse(BaseModel):
     status: str
 
 
+class VirtualKeyListResponse(BaseModel):
+    items: list[VirtualKeyResponse]
+    total: int
+    limit: int
+    offset: int
+
+
 class BudgetStatusResponse(BaseModel):
     id: str
     tenant_id: str

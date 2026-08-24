@@ -37,12 +37,17 @@ class InMemoryToolRepository:
         self.tools[record.id] = copy.deepcopy(record)
         return copy.deepcopy(record)
 
-    async def list_tool_definitions(self, tenant_id: str, status: str | None = None) -> list[ToolDefinitionRecord]:
-        return [
-            copy.deepcopy(t)
-            for t in self.tools.values()
+    async def list_tool_definitions(
+        self, tenant_id: str, status: str | None = None, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[ToolDefinitionRecord], int]:
+        results = [
+            t for t in self.tools.values()
             if t.tenant_id == tenant_id and (status is None or t.status.value == status)
         ]
+        # Matches the SQL repository's ORDER BY created_at ASC, id ASC.
+        results = sorted(results, key=lambda t: t.id)
+        results = sorted(results, key=lambda t: t.created_at)
+        return [copy.deepcopy(t) for t in results[offset:offset + limit]], len(results)
 
     async def create_tool_invocation(self, record: ToolInvocationRecord) -> ToolInvocationRecord:
         self.invocations.append(copy.deepcopy(record))
