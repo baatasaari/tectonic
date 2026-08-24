@@ -11,6 +11,10 @@ from typing import Any
 
 import httpx
 
+from evaluation_framework.clients.resilience import ResilientHTTPClient
+from evaluation_framework.security.jwt_auth import ServiceBearerAuth
+
+
 class HTTPLLMGatewayClient(ResilientHTTPClient):
     def __init__(
         self, base_url: str, client: httpx.AsyncClient | None = None, *,

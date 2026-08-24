@@ -8,6 +8,10 @@ from __future__ import annotations
 
 import httpx
 
+from observability.clients.resilience import ResilientHTTPClient
+from observability.security.jwt_auth import ServiceBearerAuth
+
+
 class HTTPLLMGatewayClient(ResilientHTTPClient):
     def __init__(
         self, base_url: str, client: httpx.AsyncClient | None = None, *,

@@ -18,6 +18,16 @@ from typing import Any
 
 import httpx
 
+from conversational_engine.clients.resilience import CircuitBreakerError, ResilientHTTPClient
+from conversational_engine.security.jwt_auth import ServiceBearerAuth
+from conversational_engine.telemetry.logging import get_logger
+
+logger = get_logger(component="http_clients")
+
+_SHORT_TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
+_VERY_SHORT_TIMEOUT = httpx.Timeout(connect=5.0, read=5.0, write=5.0, pool=5.0)
+
+
 class HTTPLLMGatewayClient(ResilientHTTPClient):
     def __init__(
         self, base_url: str, client: httpx.AsyncClient | None = None, *,

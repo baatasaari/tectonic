@@ -9,6 +9,10 @@ from typing import Any
 
 import httpx
 
+from intent_detection.clients.resilience import ResilientHTTPClient
+from intent_detection.security.jwt_auth import ServiceBearerAuth
+
+
 class HTTPLLMGatewayClient(ResilientHTTPClient):
     def __init__(
         self, base_url: str, client: httpx.AsyncClient | None = None, *,

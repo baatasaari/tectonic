@@ -6,6 +6,12 @@ from __future__ import annotations
 
 import httpx
 
+from llm_gateway.clients.resilience import ResilientHTTPClient
+from llm_gateway.security.jwt_auth import ServiceBearerAuth
+
+_SHORT_TIMEOUT = httpx.Timeout(connect=5.0, read=5.0, write=5.0, pool=5.0)
+
+
 class HTTPSecretsClient(ResilientHTTPClient):
     def __init__(
         self, base_url: str, client: httpx.AsyncClient | None = None, *,

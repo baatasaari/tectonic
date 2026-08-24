@@ -7,6 +7,10 @@ from __future__ import annotations
 
 import httpx
 
+from short_term_memory.clients.resilience import ResilientHTTPClient
+from short_term_memory.security.jwt_auth import ServiceBearerAuth
+
+
 class HTTPLLMGatewayClient(ResilientHTTPClient):
     def __init__(
         self, base_url: str, client: httpx.AsyncClient | None = None, *,

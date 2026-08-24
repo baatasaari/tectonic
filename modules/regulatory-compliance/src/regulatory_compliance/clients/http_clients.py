@@ -16,6 +16,12 @@ from __future__ import annotations
 
 import httpx
 
+from regulatory_compliance.clients.resilience import ResilientHTTPClient
+from regulatory_compliance.security.jwt_auth import ServiceBearerAuth
+
+_SHORT_TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
+
+
 class HTTPAuditabilityClient(ResilientHTTPClient):
     def __init__(
         self, base_url: str, client: httpx.AsyncClient | None = None, *,

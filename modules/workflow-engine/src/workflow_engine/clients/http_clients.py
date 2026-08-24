@@ -17,6 +17,12 @@ from typing import Any
 
 import httpx
 
+from workflow_engine.clients.resilience import ResilientHTTPClient
+from workflow_engine.security.jwt_auth import ServiceBearerAuth
+
+_SHORT_TIMEOUT = httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0)
+
+
 class HTTPLLMGatewayClient(ResilientHTTPClient):
     def __init__(
         self, base_url: str, client: httpx.AsyncClient | None = None, *,

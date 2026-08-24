@@ -14,6 +14,15 @@ from typing import Any
 
 import httpx
 
+from guardrails.clients.resilience import CircuitBreakerError, ResilientHTTPClient
+from guardrails.security.jwt_auth import ServiceBearerAuth
+from guardrails.telemetry.logging import get_logger
+
+logger = get_logger(component="http_clients")
+
+_SHORT_TIMEOUT = httpx.Timeout(connect=5.0, read=5.0, write=5.0, pool=5.0)
+
+
 class HTTPLLMGatewayClient(ResilientHTTPClient):
     def __init__(
         self, base_url: str, client: httpx.AsyncClient | None = None, *,

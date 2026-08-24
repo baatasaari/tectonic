@@ -8,9 +8,13 @@ from __future__ import annotations
 
 import httpx
 
+from vector_db.clients.resilience import ResilientHTTPClient
+from vector_db.security.jwt_auth import ServiceBearerAuth
+
+
 class HTTPEmbeddingProvider(ResilientHTTPClient):
     def __init__(
-        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        self, base_url: str, default_model: str, client: httpx.AsyncClient | None = None, *,
         issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
     ) -> None:
         auth = ServiceBearerAuth(

@@ -10,6 +10,12 @@ from typing import Any
 
 import httpx
 
+from knowledge_base.clients.resilience import ResilientHTTPClient
+from knowledge_base.security.jwt_auth import ServiceBearerAuth
+
+_TIMEOUT = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
+
+
 class HTTPVectorDBClient(ResilientHTTPClient):
     def __init__(
         self, base_url: str, client: httpx.AsyncClient | None = None, *,
