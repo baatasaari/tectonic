@@ -13,6 +13,7 @@ from agentic_rag.core.domain import (
     RetrievalSource,
     RetrievedItem,
 )
+from agentic_rag.security.jwt_auth import ServiceBearerAuth
 
 
 def _items_from_response(data: dict, source: RetrievalSource) -> list[RetrievedItem]:
@@ -28,8 +29,14 @@ def _items_from_response(data: dict, source: RetrievalSource) -> list[RetrievedI
 
 
 class HTTPVectorDBClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="vector-db", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0, auth=auth)
 
     async def search(self, *, query: str, scope: list[str], tenant_id: str) -> list[RetrievedItem]:
         resp = await self._client.post("/v1/vector-db/search", json={"query": query, "scope": scope, "tenant_id": tenant_id})
@@ -38,8 +45,14 @@ class HTTPVectorDBClient:
 
 
 class HTTPGraphDBClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="graph-db", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0, auth=auth)
 
     async def search(self, *, query: str, scope: list[str], tenant_id: str) -> list[RetrievedItem]:
         resp = await self._client.post("/v1/graph-db/search", json={"query": query, "scope": scope, "tenant_id": tenant_id})
@@ -48,8 +61,14 @@ class HTTPGraphDBClient:
 
 
 class HTTPKnowledgeBaseClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="knowledge-base", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0, auth=auth)
 
     async def symbolic_lookup(self, *, query: str, scope: list[str], tenant_id: str) -> list[RetrievedItem]:
         resp = await self._client.post(
@@ -60,8 +79,14 @@ class HTTPKnowledgeBaseClient:
 
 
 class HTTPLLMGatewayClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=30.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="llm-gateway", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=30.0, auth=auth)
 
     async def assess_groundedness(self, *, query: str, items: list[RetrievedItem], tenant_id: str) -> GroundednessAssessment:
         resp = await self._client.post(

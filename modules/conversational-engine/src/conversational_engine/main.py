@@ -23,6 +23,7 @@ from conversational_engine.clients.http_clients import (
 )
 from conversational_engine.config import ConversationalEngineSettings, load_settings
 from conversational_engine.db.session import make_engine, make_session_factory
+from conversational_engine.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from conversational_engine.telemetry.logging import configure_logging, get_logger
 from conversational_engine.telemetry.tracing import configure_tracing
 
@@ -37,20 +38,44 @@ def build_app_context(settings: ConversationalEngineSettings) -> AppContext:
         engine=engine,
         session_factory=make_session_factory(engine),
         redis=Redis.from_url(settings.redis_url),
-        llm_gateway=HTTPLLMGatewayClient(dep_url),
-        guardrails=HTTPGuardrailsClient(dep_url),
-        long_term_memory=HTTPLongTermMemoryClient(dep_url),
-        human_oversight=HTTPHumanOversightClient(dep_url),
-        observability=HTTPObservabilityClient(dep_url),
-        auditability=HTTPAuditabilityClient(dep_url),
+        llm_gateway=HTTPLLMGatewayClient(
+            dep_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        guardrails=HTTPGuardrailsClient(
+            dep_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        long_term_memory=HTTPLongTermMemoryClient(
+            dep_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        human_oversight=HTTPHumanOversightClient(
+            dep_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        observability=HTTPObservabilityClient(
+            dep_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        auditability=HTTPAuditabilityClient(
+            dep_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
     )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = load_settings()
+    settings: ConversationalEngineSettings = app.state.settings
     configure_logging(settings.telemetry.log_level)
     configure_tracing(settings.service_name, settings.telemetry.otlp_endpoint)
+
+    if settings.jwt_shared_secret == INSECURE_DEFAULT_SECRET:
+        logger.warning(
+            "jwt_shared_secret_is_insecure_default",
+            hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
+        )
 
     ctx = build_app_context(settings)
     app.state.ctx = ctx
@@ -65,12 +90,18 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = load_settings()
+
     app = FastAPI(
         title="Conversational Engine",
         version="0.1.0",
         description="Tectonic Agentic AI Platform — Module 2: multi-turn dialogue management with "
         "persona control, channel adaptation, and emotional/urgency-aware handoff.",
         lifespan=lifespan,
+    )
+    app.state.settings = settings
+    app.add_middleware(
+        ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )
     app.include_router(sessions_router)
 

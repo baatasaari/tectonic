@@ -25,6 +25,7 @@ from workflow_engine.clients.kafka_publisher import KafkaEventPublisher
 from workflow_engine.config import WorkflowEngineSettings, load_settings
 from workflow_engine.core.symbolic import SymbolicRuleExecutor
 from workflow_engine.db.session import make_engine, make_session_factory
+from workflow_engine.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from workflow_engine.telemetry.logging import configure_logging, get_logger
 from workflow_engine.telemetry.tracing import configure_tracing
 
@@ -43,10 +44,22 @@ def build_app_context(settings: WorkflowEngineSettings) -> tuple[AppContext, Kaf
         engine=engine,
         session_factory=session_factory,
         event_publisher=event_publisher,
-        llm_gateway=HTTPLLMGatewayClient(dep_base_url),
-        tool_orchestration=HTTPToolOrchestrationClient(dep_base_url),
-        guardrails=HTTPGuardrailsClient(dep_base_url),
-        human_oversight=HTTPHumanOversightClient(dep_base_url),
+        llm_gateway=HTTPLLMGatewayClient(
+            dep_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        tool_orchestration=HTTPToolOrchestrationClient(
+            dep_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        guardrails=HTTPGuardrailsClient(
+            dep_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        human_oversight=HTTPHumanOversightClient(
+            dep_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
         symbolic_executor=SymbolicRuleExecutor(),
     )
     return ctx, event_publisher
@@ -54,9 +67,15 @@ def build_app_context(settings: WorkflowEngineSettings) -> tuple[AppContext, Kaf
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = load_settings()
+    settings: WorkflowEngineSettings = app.state.settings
     configure_logging(settings.telemetry.log_level)
     configure_tracing(settings.service_name, settings.telemetry.otlp_endpoint)
+
+    if settings.jwt_shared_secret == INSECURE_DEFAULT_SECRET:
+        logger.warning(
+            "jwt_shared_secret_is_insecure_default",
+            hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
+        )
 
     ctx, event_publisher = build_app_context(settings)
     await event_publisher.start()
@@ -72,12 +91,18 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = load_settings()
+
     app = FastAPI(
         title="Workflow Engine",
         version="0.1.0",
         description="Tectonic Agentic AI Platform — Module 1: executes agent workflows as "
         "DAGs/graphs with neurosymbolic step routing and confidence-gated autonomy.",
         lifespan=lifespan,
+    )
+    app.state.settings = settings
+    app.add_middleware(
+        ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )
     app.include_router(definitions_router)
     app.include_router(instances_router)

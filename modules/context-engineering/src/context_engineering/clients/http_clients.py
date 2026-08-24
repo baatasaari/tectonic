@@ -6,10 +6,18 @@ from __future__ import annotations
 
 import httpx
 
+from context_engineering.security.jwt_auth import ServiceBearerAuth
+
 
 class HTTPLLMGatewayClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=30.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="llm-gateway", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=30.0, auth=auth)
 
     async def summarise(self, *, content: str, target_tokens: int, tenant_id: str) -> str:
         resp = await self._client.post(
@@ -20,8 +28,14 @@ class HTTPLLMGatewayClient:
 
 
 class HTTPEvaluationFeedbackClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="evaluation-framework", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=10.0, auth=auth)
 
     async def get_feature_feedback(self, *, tenant_id: str, task_type: str) -> dict[str, float]:
         resp = await self._client.get(
