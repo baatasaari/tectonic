@@ -6,7 +6,7 @@ non-functional targets table.
 """
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from workflow_engine.core.domain import (
@@ -179,11 +179,26 @@ class SQLAlchemyWorkflowRepository:
         await self.session.refresh(m)
         return _step_to_domain(m)
 
-    async def list_step_executions(self, instance_id: str) -> list[StepExecutionRecord]:
-        rows = await self.session.execute(
-            select(models.StepExecution).where(models.StepExecution.instance_id == instance_id)
+    async def list_step_executions(
+        self, instance_id: str, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[StepExecutionRecord], int]:
+        filters = [models.StepExecution.instance_id == instance_id]
+
+        count_stmt = select(func.count(models.StepExecution.id)).where(*filters)
+        total = (await self.session.execute(count_stmt)).scalar_one()
+
+        # No non-nullable timestamp column on this table (started_at/completed_at are both
+        # nullable — a pending step has neither) — order by id ascending as a stable,
+        # deterministic last resort so limit/offset pagination is meaningful.
+        stmt = (
+            select(models.StepExecution)
+            .where(*filters)
+            .order_by(models.StepExecution.id.asc())
+            .limit(limit)
+            .offset(offset)
         )
-        return [_step_to_domain(m) for m in rows.scalars().all()]
+        rows = await self.session.execute(stmt)
+        return [_step_to_domain(m) for m in rows.scalars().all()], total
 
     async def get_step_execution(self, step_execution_id: str) -> StepExecutionRecord | None:
         m = await self.session.get(models.StepExecution, step_execution_id)
