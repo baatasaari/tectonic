@@ -104,6 +104,19 @@ src/regulatory_compliance/
   even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
   connections behind a cloud LB/proxy's own idle-connection timeout —
   a real, independent gap, not just a replica-count one.
+- **Pagination on `GET /mappings`.** Added `limit`/`offset` query params
+  (default 50, max 200) and a `ControlMappingListResponse` envelope
+  (`items`/`total`/`limit`/`offset`) — this endpoint previously returned
+  every matching mapping row unbounded. `ControlMapping` has no natural
+  timestamp column, so this orders by `id` ascending as a stable,
+  deterministic tiebreaker. `CrosswalkEngine.map_control` and
+  `CoverageCalculator.coverage` are internal callers of the same
+  repository method that genuinely need the *complete* matching set (a
+  truncated page would silently drop mappings or skew a coverage
+  percentage) — both pass `limit=10_000`, an effectively-unbounded
+  internal page size, not a real pagination boundary, since mapping
+  tables per control/framework are small, config-driven data rather
+  than a user-growable list.
 
 ## Running locally
 
