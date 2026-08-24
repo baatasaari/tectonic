@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from workflow_engine.api.deps import build_scheduler, get_ctx, get_repository
 from workflow_engine.app_context import AppContext
@@ -23,6 +23,7 @@ from workflow_engine.schemas.instances import (
     StartInstanceRequest,
     StartInstanceResponse,
     StatusResponse,
+    StepExecutionListResponse,
     StepExecutionSummary,
     TerminateRequest,
 )
@@ -74,7 +75,10 @@ async def get_instance(
     instance = await repository.get_instance(instance_id)
     if instance is None:
         raise HTTPException(status_code=404, detail="instance not found")
-    steps = await repository.list_step_executions(instance_id)
+    # `InstanceDetail.steps` is the complete step list for this one instance, not the
+    # paginated `/steps` resource — limit=10_000 is an effectively-unbounded internal page
+    # size (one instance's step count is bounded by its workflow graph).
+    steps, _total = await repository.list_step_executions(instance_id, limit=10_000)
     return InstanceDetail(
         id=instance.id,
         definition_id=instance.definition_id,

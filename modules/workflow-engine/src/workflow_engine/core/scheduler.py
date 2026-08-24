@@ -116,7 +116,13 @@ class ExecutionScheduler:
             return instance
 
         step_id = pending_step_ids[0]
-        steps = await self.repository.list_step_executions(instance.id)
+        # `list_step_executions` is now paginated (limit/offset) for the `GET
+        # /instances/{id}/steps` API, but this scheduling logic needs the *complete* set of
+        # step executions for the instance to find the one currently running — a truncated
+        # page here could silently miss it on a long-running workflow. limit=10_000 is an
+        # effectively-unbounded internal page size (one instance's step count is bounded by
+        # its workflow graph, never a user-growable list).
+        steps, _total = await self.repository.list_step_executions(instance.id, limit=10_000)
         step_exec = next((s for s in steps if s.step_id == step_id and s.status == StepStatus.RUNNING), None)
         if step_exec is None:
             step_exec = next((s for s in steps if s.step_id == step_id), None)

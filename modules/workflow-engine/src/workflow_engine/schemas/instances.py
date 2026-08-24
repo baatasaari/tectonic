@@ -31,6 +31,13 @@ class StepExecutionSummary(BaseModel):
     completed_at: datetime | None = None
 
 
+class StepExecutionListResponse(BaseModel):
+    items: list[StepExecutionSummary]
+    total: int
+    limit: int
+    offset: int
+
+
 class InstanceDetail(BaseModel):
     id: str
     definition_id: str
