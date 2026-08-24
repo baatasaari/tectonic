@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from workflow_engine.core.domain import InstanceStatus, StepStatus, WorkflowInstanceRecord, new_id
+from workflow_engine.core.domain import (
+    ExecutionMode,
+    InstanceStatus,
+    StepExecutionRecord,
+    StepStatus,
+    WorkflowInstanceRecord,
+    new_id,
+)
 from workflow_engine.core.fakes import StubGuardrailsClient
 from workflow_engine.core.parser import parse_and_validate
 from workflow_engine.core.symbolic import SymbolicRule
@@ -41,7 +48,7 @@ async def test_happy_path_symbolic_then_neural_completes(harness):
 
     assert result.status == InstanceStatus.COMPLETED
     assert result.context["step_1"]["decision"] == "eligible"
-    steps = await harness.repository.list_step_executions(result.id)
+    steps, _total = await harness.repository.list_step_executions(result.id)
     assert {s.step_id: s.status for s in steps} == {"step_1": StepStatus.COMPLETED, "step_2": StepStatus.COMPLETED}
     event_types = [e["event_type"] for _, e in harness.event_publisher.published]
     assert "workflow.started" in event_types
@@ -73,7 +80,7 @@ async def test_low_confidence_pauses_for_approval_then_resumes(harness):
     completed = await harness.scheduler.resume_after_approval(paused, graph, approved=True)
 
     assert completed.status == InstanceStatus.COMPLETED
-    steps = await harness.repository.list_step_executions(completed.id)
+    steps, _total = await harness.repository.list_step_executions(completed.id)
     assert steps[0].status == StepStatus.COMPLETED
 
 
@@ -139,7 +146,7 @@ async def test_step_failure_exhausts_retries_then_replans_to_fallback(harness_fa
     assert len(harness.repository.replan_events) == 1
     replan_event = harness.repository.replan_events[0]
     assert replan_event.original_step_id == "step_1"
-    steps = await harness.repository.list_step_executions(result.id)
+    steps, _total = await harness.repository.list_step_executions(result.id)
     failed_step = next(s for s in steps if s.step_id == "step_1")
     assert failed_step.retry_count == 1
 
@@ -197,6 +204,6 @@ async def test_conditional_edges_route_correctly(harness):
     result = await harness.scheduler.start(instance, graph)
 
     assert result.status == InstanceStatus.COMPLETED
-    steps = await harness.repository.list_step_executions(result.id)
+    steps, _total = await harness.repository.list_step_executions(result.id)
     step_ids = {s.step_id for s in steps}
     assert step_ids == {"step_1", "step_high"}

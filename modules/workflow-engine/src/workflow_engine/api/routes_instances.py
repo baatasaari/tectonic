@@ -94,13 +94,17 @@ async def get_instance(
     )
 
 
-@router.get("/{instance_id}/steps", response_model=list[StepExecutionSummary])
+@router.get("/{instance_id}/steps", response_model=StepExecutionListResponse)
 async def list_steps(
     instance_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     repository: WorkflowRepository = Depends(get_repository),
-) -> list[StepExecutionSummary]:
-    steps = await repository.list_step_executions(instance_id)
-    return [_step_summary(s) for s in steps]
+) -> StepExecutionListResponse:
+    steps, total = await repository.list_step_executions(instance_id, limit=limit, offset=offset)
+    return StepExecutionListResponse(
+        items=[_step_summary(s) for s in steps], total=total, limit=limit, offset=offset,
+    )
 
 
 @router.post("/{instance_id}/pause", response_model=StatusResponse)
