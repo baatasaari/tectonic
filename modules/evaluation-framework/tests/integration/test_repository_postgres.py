@@ -122,7 +122,7 @@ async def test_list_metric_scores_for_tenant_filters_to_only_matching_rows(migra
                 )
             )
 
-            results = await repo.list_metric_scores_for_tenant("tenant-a", agent_ref="agent-1")
+            results, _total = await repo.list_metric_scores_for_tenant("tenant-a", agent_ref="agent-1")
             result_ids = {r.id for r in results}
 
             # A real multi-predicate WHERE (tenant_id AND agent_ref) hitting exactly the
@@ -133,7 +133,7 @@ async def test_list_metric_scores_for_tenant_filters_to_only_matching_rows(migra
             assert other_tenant.id not in result_ids
 
             # Filtering by tenant alone should surface both of that tenant's rows.
-            tenant_only = await repo.list_metric_scores_for_tenant("tenant-a")
+            tenant_only, _total = await repo.list_metric_scores_for_tenant("tenant-a")
             assert {r.id for r in tenant_only} == {matching.id, other_agent.id}
     finally:
         await engine.dispose()

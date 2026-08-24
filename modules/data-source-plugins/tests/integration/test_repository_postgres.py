@@ -124,8 +124,9 @@ async def test_drift_incident_schema_diff_round_trips_as_nested_jsonb(migrated_u
             )
             assert created.classification == DriftClassification.TYPE_WIDENING
 
-            incidents = await repo.list_drift_incidents(connector.id)
+            incidents, total = await repo.list_drift_incidents(connector.id)
             assert len(incidents) == 1
+            assert total == 1
             # A nested dict-of-lists-of-dicts JSONB structure preserved exactly.
             assert incidents[0].schema_diff == diff
             assert incidents[0].schema_diff["type_changes"][0]["to"] == "float"

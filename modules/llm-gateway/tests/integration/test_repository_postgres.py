@@ -112,7 +112,7 @@ async def test_list_virtual_keys_returns_only_matching_tenant_rows(migrated_url)
                 VirtualKeyRecord(id=new_id(), tenant_id="globex", provider_scope=[], budget_policy_ref="bp-b")
             )
 
-            initech_keys = await repo.list_virtual_keys("initech")
+            initech_keys, _total = await repo.list_virtual_keys("initech")
 
             # A multi-row filtered query against real Postgres must hit exactly the
             # intended tenant's rows, no more and no less.

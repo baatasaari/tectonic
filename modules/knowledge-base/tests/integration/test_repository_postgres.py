@@ -73,8 +73,9 @@ async def test_create_chunks_bulk_inserts_distinct_rows_with_uuid_pks_and_jsonb_
             assert len({c.id for c in created}) == 3
             assert {c.id for c in created} == {r.id for r in records}
 
-            fetched = await repo.list_chunks_by_version(version.id)
+            fetched, total = await repo.list_chunks_by_version(version.id)
             assert len(fetched) == 3
+            assert total == 3
             assert [c.chunk_index for c in fetched] == [0, 1, 2]
             # Real JSONB list preserved exactly, per row, including order.
             assert fetched[0].policy_tags == ["pii", "internal_only"]
@@ -107,11 +108,12 @@ async def test_list_chunks_by_policy_tag_returns_only_matching_rows_across_docum
             # A multi-table, multi-row filter: only the two chunks tagged "pii" across
             # both documents/versions should come back — the "public"-tagged chunks in
             # the same tables must not leak into the result.
-            matching = await repo.list_chunks_by_policy_tag(tenant_id, "pii")
+            matching, matching_total = await repo.list_chunks_by_policy_tag(tenant_id, "pii")
             assert {c.content for c in matching} == {"a0", "b0"}
             assert len(matching) == 2
+            assert matching_total == 2
 
-            other = await repo.list_chunks_by_policy_tag(tenant_id, "financial")
+            other, _other_total = await repo.list_chunks_by_policy_tag(tenant_id, "financial")
             assert [c.content for c in other] == ["b0"]
     finally:
         await engine.dispose()

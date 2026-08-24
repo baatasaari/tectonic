@@ -132,7 +132,7 @@ async def test_list_alerts_filters_by_severity_across_multiple_rows(migrated_url
                 )
             )
 
-            results = await repo.list_alerts("sev-tenant", severity="high")
+            results, _total = await repo.list_alerts("sev-tenant", severity="high")
             result_ids = {r.id for r in results}
             assert result_ids == {high.id}
             assert other_tenant_high.id not in result_ids

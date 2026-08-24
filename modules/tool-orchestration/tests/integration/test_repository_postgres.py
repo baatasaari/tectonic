@@ -94,7 +94,7 @@ async def test_list_tool_definitions_filters_by_tenant_and_status(migrated_url):
                 )
             )
 
-            active_for_beta = await repo.list_tool_definitions("beta-corp", status="active")
+            active_for_beta, _total = await repo.list_tool_definitions("beta-corp", status="active")
 
             # A multi-row filtered query against real Postgres must hit exactly the
             # rows matching both predicates, no more and no less.

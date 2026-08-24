@@ -49,8 +49,9 @@ async def test_control_mapping_clause_references_round_trip_as_real_jsonb(migrat
             created = await repo.upsert_control_mapping(record)
             assert created.clause_references == ["Art.22", "Art.5(1)(c)"]
 
-            fetched = await repo.list_control_mappings(control_name="human_oversight", framework_name="gdpr")
+            fetched, total = await repo.list_control_mappings(control_name="human_oversight", framework_name="gdpr")
             assert len(fetched) == 1
+            assert total == 1
             # A real JSONB round trip preserves list order and element types — this is
             # exactly the kind of thing SQLite's JSON-as-TEXT variant can silently get
             # away with getting wrong that Postgres's native JSONB type won't.
@@ -80,7 +81,7 @@ async def test_deprecate_control_mappings_updates_only_matching_rows(migrated_ur
             count = await repo.deprecate_control_mappings("audit_logging", "eu_ai_act", "2025")
 
             assert count == 1
-            mappings = await repo.list_control_mappings(control_name="audit_logging", framework_name="eu_ai_act")
+            mappings, _total = await repo.list_control_mappings(control_name="audit_logging", framework_name="eu_ai_act")
             deprecated = {m.framework_version: m.deprecated for m in mappings}
             assert deprecated == {"2024": True, "2025": False}
     finally:
