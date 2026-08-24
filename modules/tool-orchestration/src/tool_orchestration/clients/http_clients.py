@@ -8,10 +8,18 @@ from typing import Any
 
 import httpx
 
+from tool_orchestration.security.jwt_auth import ServiceBearerAuth
+
 
 class HTTPLLMGatewayClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=30.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="llm-gateway", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=30.0, auth=auth)
 
     async def complete(self, *, prompt_context: dict[str, Any], tenant_id: str) -> dict[str, Any]:
         resp = await self._client.post("/v1/completions", json={"context": prompt_context, "tenant_id": tenant_id})

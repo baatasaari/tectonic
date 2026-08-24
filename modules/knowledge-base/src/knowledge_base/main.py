@@ -17,6 +17,7 @@ from knowledge_base.clients.blob_storage import FileBlobStorage
 from knowledge_base.clients.http_clients import HTTPGraphDBClient, HTTPVectorDBClient
 from knowledge_base.config import KnowledgeBaseSettings, load_settings
 from knowledge_base.db.session import make_engine, make_session_factory
+from knowledge_base.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from knowledge_base.telemetry.logging import configure_logging, get_logger
 from knowledge_base.telemetry.tracing import configure_tracing
 
@@ -32,16 +33,28 @@ def build_app_context(settings: KnowledgeBaseSettings, *, blob_root: str | None 
         engine=engine,
         session_factory=make_session_factory(engine),
         blob_storage=FileBlobStorage(root),
-        vector_db=HTTPVectorDBClient(dep_url),
-        graph_db=HTTPGraphDBClient(dep_url),
+        vector_db=HTTPVectorDBClient(
+            dep_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        graph_db=HTTPGraphDBClient(
+            dep_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
     )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = load_settings()
+    settings: KnowledgeBaseSettings = app.state.settings
     configure_logging(settings.telemetry.log_level)
     configure_tracing(settings.service_name, settings.telemetry.otlp_endpoint)
+
+    if settings.jwt_shared_secret == INSECURE_DEFAULT_SECRET:
+        logger.warning(
+            "jwt_shared_secret_is_insecure_default",
+            hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
+        )
 
     ctx = build_app_context(settings)
     app.state.ctx = ctx
@@ -55,12 +68,18 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = load_settings()
+
     app = FastAPI(
         title="Knowledge Base",
         version="0.1.0",
         description="Tectonic Agentic AI Platform — Module 9: ingests, chunks, versions and "
         "manages source-of-truth documents feeding Agentic RAG.",
         lifespan=lifespan,
+    )
+    app.state.settings = settings
+    app.add_middleware(
+        ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )
     app.include_router(documents_router)
 

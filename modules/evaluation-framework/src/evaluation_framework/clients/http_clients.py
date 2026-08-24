@@ -6,10 +6,18 @@ from typing import Any
 
 import httpx
 
+from evaluation_framework.security.jwt_auth import ServiceBearerAuth
+
 
 class HTTPLLMGatewayClient:
-    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
-        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=30.0)
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="llm-gateway", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        self._client = client or httpx.AsyncClient(base_url=base_url, timeout=30.0, auth=auth)
 
     async def judge(self, agent_output: str, metric_name: str, reference_data: dict[str, Any]) -> float:
         resp = await self._client.post(

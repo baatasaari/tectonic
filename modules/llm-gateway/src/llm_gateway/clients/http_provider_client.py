@@ -11,6 +11,13 @@ directly. Swapping in the `litellm` Python SDK directly means implementing
 this same `ProviderClient` Protocol against `litellm.acompletion` — the
 router, failover manager and cost governance engine that drive this port
 don't change either way, same boundary Module 1 draws around ADK.
+
+Deliberately excluded from this platform's service-to-service JWT auth
+(security/jwt_auth.py): this client calls real external LLM provider APIs
+(OpenAI, Anthropic, etc.), not a platform peer module. Those providers
+authenticate via their own API keys (see `_auth_headers`/`SecretsClient`
+above), which have nothing to do with the shared HS256 signing key every
+platform module holds for calling *each other*.
 """
 from __future__ import annotations
 
