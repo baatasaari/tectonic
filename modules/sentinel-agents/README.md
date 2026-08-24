@@ -72,6 +72,21 @@ src/sentinel_agents/
   configuration is sourced from this module's own YAML/env at startup,
   with `baselining.sensitivity` marked hot-reloadable there.
 
+- **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
+  the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
+  regardless of how many pods are running — at this module's own
+  `deploy/helm/sentinel-agents/values.yaml` `autoscaling.maxReplicas: 20`,
+  that's up to 300 connections to this module's own Postgres
+  instance from this module alone at full autoscale, with no one having
+  deliberately decided that number. `db/session.py`'s `make_engine` now
+  passes explicit, configurable `pool_size=5` /
+  `max_overflow=2` (`db_pool_size`/`db_max_overflow`
+  Settings, env-overridable) sized so this module's own steady-state
+  total stays at ~100 connections and its full-burst total at ~150,
+  even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
+  connections behind a cloud LB/proxy's own idle-connection timeout —
+  a real, independent gap, not just a replica-count one.
+
 ## Running locally
 
 ```bash

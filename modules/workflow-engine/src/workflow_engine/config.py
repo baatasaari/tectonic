@@ -77,6 +77,13 @@ class WorkflowEngineSettings(BaseSettings):
     # Infra connection settings — not part of the tenant-facing YAML schema,
     # supplied via environment in every deployment target (Helm, compose, CI).
     database_url: str = "postgresql+asyncpg://workflow_engine:workflow_engine@localhost:5432/workflow_engine"
+    # Pool sized against this module's own Helm chart (deploy/helm/workflow-engine/values.yaml):
+    # maxReplicas=10, targeting <=100 steady-state / <=150 burst connections to
+    # this module's own Postgres instance platform-wide at full autoscale.
+    db_pool_size: int = 10
+    db_max_overflow: int = 5
+    db_pool_timeout_seconds: int = 30
+    db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     kafka_bootstrap_servers: str = "localhost:9092"
     service_name: str = "workflow-engine"
     http_port: int = 8080
