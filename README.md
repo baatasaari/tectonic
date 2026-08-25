@@ -40,7 +40,8 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 27 — Deployment Strategy | Built — [`modules/deployment-strategy`](modules/deployment-strategy) |
 | 28 — Multi-modality | Built — [`modules/multi-modality`](modules/multi-modality) |
 | 29 — PromptOps | Built — [`modules/promptops`](modules/promptops) |
-| 30–34 | Not yet started |
+| 30 — Multi-tenancy | Built — [`modules/multi-tenancy`](modules/multi-tenancy) |
+| 31–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -276,6 +277,7 @@ modules/
   deployment-strategy/                                                          Module 27
   multi-modality/                                                                 Module 28
   promptops/                                                                        Module 29
+  multi-tenancy/                                                                      Module 30
 ```
 
 ## Cross-module integration, once deployed together
@@ -810,6 +812,29 @@ never starts an A/B test itself, and never promotes anything, the same
 autonomous-agent safety.
 Design doc: [`docs/module-29-promptops.md`](docs/module-29-promptops.md).
 Build: [`modules/promptops`](modules/promptops).
+
+### Module 30: Multi-tenancy
+
+The platform's tenant registry and isolation-verification layer: every
+tenant's lifecycle (`active`/`suspended`/`deleted`) is governed here,
+and a real, executable probe periodically confirms that a tenant-scoped
+query against any registered platform module actually returns only
+that tenant's own records. Every module in this platform already
+exposes the identical `GET .../resource?tenant_id=X` → `{"items":
+[...each with its own tenant_id...]}` list contract, so
+`IsolationProbeService` reuses one generic client against any of them —
+no per-module adapter code needed — and flags any returned item whose
+own `tenant_id` doesn't match as a breach.
+`multi_tenancy_isolation_breach_incidents_total`, the LLD's own key
+metric ("target zero"), is a real, wired counter incremented by the
+actual foreign-record count a probe found, not aspirational prose. A
+probe against an unreachable target fails closed (`passed=False`,
+`probe_unavailable`) — isolation is only ever reported verified when it
+was actually checked. `GET /tenants/{id}/gate` is the one real
+integration point every other module's request path should call before
+serving a request.
+Design doc: [`docs/module-30-multi-tenancy.md`](docs/module-30-multi-tenancy.md).
+Build: [`modules/multi-tenancy`](modules/multi-tenancy).
 
 ## Running any module locally
 

@@ -1,0 +1,20 @@
+# Prometheus Alertmanager rule definitions for the Multi-tenancy module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: multi-tenancy
+    rules:
+      - alert: MultiTenancyIsolationBreachDetected
+        expr: sum(increase(multi_tenancy_isolation_breach_incidents_total[5m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "An isolation probe found at least one foreign record"
+          description: "A tenant-scoped query against a registered platform module returned data belonging to a different tenant -- check which target_name label is driving it. Target zero, the LLD's own key metric."
+
+      - alert: MultiTenancyProbeTargetUnreachable
+        expr: sum(rate(multi_tenancy_isolation_probes_total{passed="False"}[15m])) by (target_name) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "An isolation probe target has been failing (unreachable or breaching) for 15m"
+          description: "Check whether this is probe_unavailable (the target is down) or an actual breach -- either way, this module can't currently vouch for that target's isolation."

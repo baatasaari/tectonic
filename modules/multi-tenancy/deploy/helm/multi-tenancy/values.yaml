@@ -1,0 +1,58 @@
+image:
+  repository: tectonic/multi-tenancy
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: 256Mi
+  limits:
+    cpu: "500m"
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  # The gate-check endpoint is meant to sit on other modules' hot request paths (see the
+  # LLD's own non-functional targets) -- closer to the platform's high-QPS front-door
+  # modules (Agent Cards) than the operator-facing registries.
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8109
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  # JSON array of ProbeTargetConfig entries (name/base_url/list_path/audience) -- see
+  # config.py's own docstring. Defaults to Agent Cards; add more entries as other
+  # modules' isolation should also be probed, no code change required.
+  probeTargets: '[{"name":"agent-cards","base_url":"http://agent-cards:8102","list_path":"/v1/agent-cards","audience":"agent-cards"}]'
+
+database:
+  url: "postgresql+asyncpg://multi_tenancy:multi_tenancy@postgres:5432/multi_tenancy"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8109
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8109
+  initialDelaySeconds: 5
+  periodSeconds: 10

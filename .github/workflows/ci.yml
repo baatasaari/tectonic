@@ -70,6 +70,7 @@ jobs:
           - long-term-memory
           - mcp
           - multi-modality
+          - multi-tenancy
           - observability
           - promptops
           - regulatory-compliance
