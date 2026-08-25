@@ -1,0 +1,6 @@
+apiVersion: v2
+name: sdk-and-developer-portal
+description: "Tectonic Agentic AI Platform — Module 34: SDK and Developer Portal"
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

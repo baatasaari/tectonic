@@ -1,0 +1,62 @@
+image:
+  repository: tectonic/sdk-and-developer-portal
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: 256Mi
+  limits:
+    cpu: "500m"
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  # Developer-facing but not front-door-volume: registration and catalogue sync are
+  # infrequent operator/developer actions, not a hot request path any other module
+  # blocks on.
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8113
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+
+database:
+  url: "postgresql+asyncpg://sdk_and_developer_portal:sdk_and_developer_portal@postgres:5432/sdk_and_developer_portal"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+identityAccessBaseUrl: "http://identity-and-access:8110"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
+auditabilityBaseUrl: "http://auditability:8090"
+
+# JSON-encoded list, same pattern Multi-tenancy's own probe_targets chart value uses --
+# each entry is a real peer module this portal's catalogue syncs a live OpenAPI spec from.
+catalogTargets: '[{"name":"auditability","base_url":"http://auditability:8090"}]'
+
+podDisruptionBudget:
+  minAvailable: 1
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8113
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8113
+  initialDelaySeconds: 5
+  periodSeconds: 10

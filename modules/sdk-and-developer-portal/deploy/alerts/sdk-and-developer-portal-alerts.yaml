@@ -1,0 +1,21 @@
+# Prometheus Alertmanager rule definitions for the SDK and Developer
+# Portal module (LLD §Level 4 "Alerting").
+groups:
+  - name: sdk-and-developer-portal
+    rules:
+      - alert: SdkPortalAdoptionRateLow
+        expr: sdk_portal_adoption_rate < 0.3
+        for: 24h
+        labels:
+          severity: warning
+        annotations:
+          summary: "SDK adoption rate below 30%, sustained 24h"
+          description: "The LLD's own key metric -- a real, sustained drop in the fraction of registered developers with any recorded sandbox activity is worth investigating before it's treated as normal."
+
+      - alert: SdkPortalGenerationFailureRateHigh
+        expr: sum(rate(sdk_portal_sdk_generations_total{outcome="failure"}[15m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "At least one SDK generation failure in the last 15m"
+          description: "Check whether the target module's catalogue entry is stale or missing -- a sync may be needed before regenerating."

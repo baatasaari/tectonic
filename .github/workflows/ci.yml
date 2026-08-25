@@ -77,6 +77,7 @@ jobs:
           - promptops
           - regulatory-compliance
           - secrets-and-credential-management
+          - sdk-and-developer-portal
           - sentinel-agents
           - short-term-memory
           - tool-orchestration
