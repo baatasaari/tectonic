@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-finops
+  labels:
+    app.kubernetes.io/name: finops
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: finops
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: finops
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: finops
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8105
+          env:
+            - name: FINOPS_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: FINOPS_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: FINOPS_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: FINOPS_MIN_ALERT_THRESHOLD_PCT
+              value: {{ .Values.config.minAlertThresholdPct | quote }}
+            - name: FINOPS_ALERT_THRESHOLD_STEP
+              value: {{ .Values.config.alertThresholdStep | quote }}
+            - name: FINOPS_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
+            {{- if .Values.database.existingSecret }}
+            - name: FINOPS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: FINOPS_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}

@@ -1,0 +1,57 @@
+image:
+  repository: tectonic/finops
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: 256Mi
+  limits:
+    cpu: "500m"
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  # Operator-facing cost reporting, not per-request serving volume -- a lighter ceiling
+  # than the high-QPS registries (MCP/Agent Cards), same reasoning as LLMOps's own chart.
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8105
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  minAlertThresholdPct: "0.5"
+  alertThresholdStep: "0.05"
+
+database:
+  url: "postgresql+asyncpg://finops:finops@postgres:5432/finops"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+llmGatewayBaseUrl: "http://llm-gateway:8082"
+
+podDisruptionBudget:
+  minAvailable: 1
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8105
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8105
+  initialDelaySeconds: 5
+  periodSeconds: 10

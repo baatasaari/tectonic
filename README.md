@@ -36,7 +36,8 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 23 — Agent Cards | Built — [`modules/agent-cards`](modules/agent-cards) |
 | 24 — Agent Marketplace / Registry | Built — [`modules/agent-marketplace`](modules/agent-marketplace) |
 | 25 — LLMOps | Built — [`modules/llmops`](modules/llmops) |
-| 26–34 | Not yet started |
+| 26 — FinOps | Built — [`modules/finops`](modules/finops) |
+| 27–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -268,6 +269,7 @@ modules/
   agent-cards/                                                          Module 23
   agent-marketplace/                                                      Module 24
   llmops/                                                                   Module 25
+  finops/                                                                     Module 26
 ```
 
 ## Cross-module integration, once deployed together
@@ -706,6 +708,28 @@ is real future work this LLD calls out explicitly rather than quietly
 half-wiring it here.
 Design doc: [`docs/module-25-llmops.md`](docs/module-25-llmops.md).
 Build: [`modules/llmops`](modules/llmops).
+
+### Module 26: FinOps
+
+The platform's tenant cost-reporting and budget-governance layer: it
+reads LLM Gateway (Module 3)'s own real, live `current_spend` (never
+re-derives or duplicates it — LLM Gateway never pushes usage events
+here, an explicit design choice to avoid double-counting the same
+dollar twice across two systems), combines it with usage events
+ingested from any other module, and runs a run-rate forecast against a
+configurable, cross-resource budget policy — distinct from LLM
+Gateway's own per-key, request-time spend enforcement. When that
+forecast projects a breach, the Cost Optimisation Agent has exactly one
+possible bounded action: lower the budget's `alert_threshold_pct` by a
+configured step, clamped at a configured floor, never touching spend or
+`limit_amount`, with every action persisted (`previous_value`/
+`new_value`/`reason`) for audit. `ForecastingService.forecast` returns
+`None` rather than a wild extrapolation below 5% of the period elapsed
+— the same insufficient-data honesty Agent Cards (Module 23) and LLMOps
+(Module 25) already established for their own real-signal
+computations.
+Design doc: [`docs/module-26-finops.md`](docs/module-26-finops.md).
+Build: [`modules/finops`](modules/finops).
 
 ## Running any module locally
 

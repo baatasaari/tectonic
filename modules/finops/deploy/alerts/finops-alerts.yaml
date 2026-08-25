@@ -1,0 +1,20 @@
+# Prometheus Alertmanager rule definitions for the FinOps module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: finops
+    rules:
+      - alert: FinOpsBudgetAlertsHigh
+        expr: sum(increase(finops_budget_alerts_total[1h])) > 5
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 5 budget alert-threshold breaches across tenants in the last hour"
+          description: "A real signal that several tenants are trending over budget -- check which tenant_id is driving it via the cost-report endpoint."
+
+      - alert: FinOpsOptimisationActionsSpiking
+        expr: sum(increase(finops_optimisation_actions_total[6h])) > 10
+        labels:
+          severity: warning
+        annotations:
+          summary: "The Cost Optimisation Agent has taken more than 10 actions in 6 hours"
+          description: "Its one bounded action (lowering alert_threshold_pct) firing this often across tenants suggests a systemic cost trend, not isolated noise -- worth a human look before thresholds run down to their floor."

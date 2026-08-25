@@ -58,6 +58,7 @@ jobs:
           - conversational-engine
           - data-source-plugins
           - evaluation-framework
+          - finops
           - graph-db
           - guardrails
           - human-oversight
