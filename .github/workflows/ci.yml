@@ -75,6 +75,7 @@ jobs:
           - observability
           - promptops
           - regulatory-compliance
+          - secrets-and-credential-management
           - sentinel-agents
           - short-term-memory
           - tool-orchestration

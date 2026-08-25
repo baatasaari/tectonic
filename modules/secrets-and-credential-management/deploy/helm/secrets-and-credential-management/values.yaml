@@ -1,0 +1,67 @@
+image:
+  repository: tectonic/secrets-and-credential-management
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: 256Mi
+  limits:
+    cpu: "500m"
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  # A security-critical, latency-sensitive path (every retrieve() call sits behind a
+  # live Identity and Access authorize() round trip) but not a front-door-volume module
+  # (Agent Cards) -- sized the same as this platform's other zero-trust-gated services.
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8111
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+
+database:
+  url: "postgresql+asyncpg://secrets_and_credential_management:secrets_and_credential_management@postgres:5432/secrets_and_credential_management"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+identityAccessBaseUrl: "http://identity-and-access:8110"
+auditabilityBaseUrl: "http://auditability:8090"
+
+# This module's own dedicated encryption-at-rest key -- deliberately a SEPARATE
+# Kubernetes Secret from the platform-wide TECTONIC_JWT_SHARED_SECRET every module's
+# chart also injects. See config.py's own docstring for why the two must never be
+# conflated: compromising the inbound-auth secret must never compromise the ability to
+# decrypt every secret this module has ever stored.
+secretsMasterKey:
+  existingSecret: ""
+  existingSecretKey: "secrets-master-key"
+  value: "TjDlTNIHnInVxA0zsGHYi6iTjBRtCSnWVcGxrYLXaYc="
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8111
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8111
+  initialDelaySeconds: 5
+  periodSeconds: 10
