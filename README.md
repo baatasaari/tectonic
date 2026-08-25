@@ -39,7 +39,8 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 26 — FinOps | Built — [`modules/finops`](modules/finops) |
 | 27 — Deployment Strategy | Built — [`modules/deployment-strategy`](modules/deployment-strategy) |
 | 28 — Multi-modality | Built — [`modules/multi-modality`](modules/multi-modality) |
-| 29–34 | Not yet started |
+| 29 — PromptOps | Built — [`modules/promptops`](modules/promptops) |
+| 30–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -274,6 +275,7 @@ modules/
   finops/                                                                     Module 26
   deployment-strategy/                                                          Module 27
   multi-modality/                                                                 Module 28
+  promptops/                                                                        Module 29
 ```
 
 ## Cross-module integration, once deployed together
@@ -784,6 +786,30 @@ Speech-to-Text/Vision/OCR API, the same "documented placeholder, not a
 half-built feature" posture Agent Marketplace and LLMOps already take.
 Design doc: [`docs/module-28-multi-modality.md`](docs/module-28-multi-modality.md).
 Build: [`modules/multi-modality`](modules/multi-modality).
+
+### Module 29: PromptOps
+
+The platform's prompt registry, A/B-testing gate and bounded
+reflection-based optimiser: a prompt template is registered as a
+`draft` version, pitted against another version in a real,
+statistically-gated A/B test — an honest two-proportion z-test over
+both versions' real pass/fail history from Evaluation Framework (Module
+18) — and only promoted to `active`, automatically superseding whatever
+was active before, once that test actually clears significance;
+`conclude` refuses to pick a winner (`409`) on a sample too small to
+mean anything. The same statistic is reused after launch for drift
+detection: `DriftDetectionService` compares an active version's pass
+rate right now against its pass rate at promotion time — a real,
+computed drift incident, not a vague warning. A bounded Reflection
+Optimiser reads a struggling version's real failing-metric summary and
+asks LLM Gateway (Module 3) to draft an improved template, returning it
+as a brand-new `draft` version — it never overwrites the original,
+never starts an A/B test itself, and never promotes anything, the same
+"one bounded action, everything else stays manual" shape FinOps (Module
+26)'s own Cost Optimisation Agent already established for
+autonomous-agent safety.
+Design doc: [`docs/module-29-promptops.md`](docs/module-29-promptops.md).
+Build: [`modules/promptops`](modules/promptops).
 
 ## Running any module locally
 

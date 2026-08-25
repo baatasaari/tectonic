@@ -71,6 +71,7 @@ jobs:
           - mcp
           - multi-modality
           - observability
+          - promptops
           - regulatory-compliance
           - sentinel-agents
           - short-term-memory

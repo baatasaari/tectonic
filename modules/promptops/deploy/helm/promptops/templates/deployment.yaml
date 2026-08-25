@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-promptops
+  labels:
+    app.kubernetes.io/name: promptops
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: promptops
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: promptops
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      containers:
+        - name: promptops
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8108
+          env:
+            - name: PROMPTOPS_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: PROMPTOPS_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: PROMPTOPS_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: PROMPTOPS_MIN_AB_SAMPLE_SIZE_PER_ARM
+              value: {{ .Values.config.minAbSampleSizePerArm | quote }}
+            - name: PROMPTOPS_AB_SIGNIFICANCE_LEVEL
+              value: {{ .Values.config.abSignificanceLevel | quote }}
+            - name: PROMPTOPS_DRIFT_SIGNIFICANCE_LEVEL
+              value: {{ .Values.config.driftSignificanceLevel | quote }}
+            - name: PROMPTOPS_MAX_PASS_RATE_BEFORE_REFLECTION
+              value: {{ .Values.config.maxPassRateBeforeReflection | quote }}
+            - name: PROMPTOPS_MIN_REFLECTION_SAMPLE_SIZE
+              value: {{ .Values.config.minReflectionSampleSize | quote }}
+            - name: PROMPTOPS_REFLECTION_MODEL
+              value: {{ .Values.config.reflectionModel | quote }}
+            - name: PROMPTOPS_EVALUATION_FRAMEWORK_BASE_URL
+              value: {{ .Values.evaluationFrameworkBaseUrl | quote }}
+            - name: PROMPTOPS_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
+            {{- if .Values.database.existingSecret }}
+            - name: PROMPTOPS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: PROMPTOPS_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}

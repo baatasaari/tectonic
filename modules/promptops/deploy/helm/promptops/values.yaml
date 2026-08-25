@@ -1,0 +1,62 @@
+image:
+  repository: tectonic/promptops
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: 256Mi
+  limits:
+    cpu: "500m"
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  # Operator/CI-driven prompt governance, not per-request serving volume -- the same
+  # lighter ceiling LLMOps' own chart already uses.
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8108
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  minAbSampleSizePerArm: "10"
+  abSignificanceLevel: "0.05"
+  driftSignificanceLevel: "0.05"
+  maxPassRateBeforeReflection: "0.9"
+  minReflectionSampleSize: "10"
+  reflectionModel: "gpt-4o-mini"
+
+database:
+  url: "postgresql+asyncpg://promptops:promptops@postgres:5432/promptops"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+evaluationFrameworkBaseUrl: "http://evaluation-framework:8097"
+llmGatewayBaseUrl: "http://llm-gateway:8082"
+
+podDisruptionBudget:
+  minAvailable: 1
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8108
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8108
+  initialDelaySeconds: 5
+  periodSeconds: 10
