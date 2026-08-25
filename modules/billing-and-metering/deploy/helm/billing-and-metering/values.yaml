@@ -1,0 +1,57 @@
+image:
+  repository: tectonic/billing-and-metering
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: 256Mi
+  limits:
+    cpu: "500m"
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  # An operator/back-office path (pricing plans, invoice generation), never a hot
+  # request path any other module blocks on -- sized well below the platform's
+  # zero-trust-gated or front-door-volume services.
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8112
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+
+database:
+  url: "postgresql+asyncpg://billing_and_metering:billing_and_metering@postgres:5432/billing_and_metering"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+finopsBaseUrl: "http://finops:8105"
+auditabilityBaseUrl: "http://auditability:8090"
+
+podDisruptionBudget:
+  minAvailable: 1
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8112
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8112
+  initialDelaySeconds: 5
+  periodSeconds: 10

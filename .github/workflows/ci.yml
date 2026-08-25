@@ -54,6 +54,7 @@ jobs:
           - agent-marketplace
           - agentic-rag
           - auditability
+          - billing-and-metering
           - context-engineering
           - conversational-engine
           - data-source-plugins

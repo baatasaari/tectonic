@@ -1,0 +1,6 @@
+apiVersion: v2
+name: billing-and-metering
+description: "Tectonic Agentic AI Platform — Module 33: Billing and Metering"
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
