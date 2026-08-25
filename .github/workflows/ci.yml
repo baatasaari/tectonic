@@ -57,6 +57,7 @@ jobs:
           - context-engineering
           - conversational-engine
           - data-source-plugins
+          - deployment-strategy
           - evaluation-framework
           - finops
           - graph-db

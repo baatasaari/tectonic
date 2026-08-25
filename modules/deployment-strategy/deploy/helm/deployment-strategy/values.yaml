@@ -1,0 +1,61 @@
+image:
+  repository: tectonic/deployment-strategy
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: 256Mi
+  limits:
+    cpu: "500m"
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  # Operator/CI-driven rollout traffic, not per-request serving volume -- the same
+  # lighter ceiling LLMOps's own chart already uses.
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8106
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  minGroundednessSampleSize: "10"
+  minHealthScore: "0.8"
+  groundednessWeight: "0.6"
+  costWeight: "0.4"
+  budgetPeriod: "monthly"
+
+database:
+  url: "postgresql+asyncpg://deployment_strategy:deployment_strategy@postgres:5432/deployment_strategy"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+evaluationFrameworkBaseUrl: "http://evaluation-framework:8097"
+finopsBaseUrl: "http://finops:8105"
+
+podDisruptionBudget:
+  minAvailable: 1
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8106
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8106
+  initialDelaySeconds: 5
+  periodSeconds: 10

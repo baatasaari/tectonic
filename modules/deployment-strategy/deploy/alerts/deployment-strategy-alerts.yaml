@@ -1,0 +1,24 @@
+# Prometheus Alertmanager rule definitions for the Deployment Strategy
+# module (LLD §Level 4 "Alerting").
+groups:
+  - name: deployment-strategy
+    rules:
+      - alert: DeploymentStrategyChangeFailureRateHigh
+        expr: |
+          sum(rate(deployment_strategy_rollbacks_total[3h]))
+            /
+          sum(rate(deployment_strategy_deployments_total{stage="active"}[3h]))
+          > 0.3
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 30% of promotions in the last 3 hours were followed by a rollback"
+          description: "A real change-failure-rate signal, not a support ticket count someone had to go dig up -- check which service_name is driving it."
+
+      - alert: DeploymentStrategyCanaryStuckInsufficientData
+        expr: sum(increase(deployment_strategy_canary_health_evaluations_total{outcome="insufficient_data"}[24h])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "A canary health evaluation returned insufficient_data in the last 24h"
+          description: "Neither Evaluation Framework nor a configured FinOps budget policy has enough data yet for this deployment -- worth checking whether it's stuck in canary."

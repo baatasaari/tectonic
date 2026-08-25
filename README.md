@@ -37,7 +37,8 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 24 — Agent Marketplace / Registry | Built — [`modules/agent-marketplace`](modules/agent-marketplace) |
 | 25 — LLMOps | Built — [`modules/llmops`](modules/llmops) |
 | 26 — FinOps | Built — [`modules/finops`](modules/finops) |
-| 27–34 | Not yet started |
+| 27 — Deployment Strategy | Built — [`modules/deployment-strategy`](modules/deployment-strategy) |
+| 28–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -270,6 +271,7 @@ modules/
   agent-marketplace/                                                      Module 24
   llmops/                                                                   Module 25
   finops/                                                                     Module 26
+  deployment-strategy/                                                          Module 27
 ```
 
 ## Cross-module integration, once deployed together
@@ -730,6 +732,33 @@ configured step, clamped at a configured floor, never touching spend or
 computations.
 Design doc: [`docs/module-26-finops.md`](docs/module-26-finops.md).
 Build: [`modules/finops`](modules/finops).
+
+### Module 27: Deployment Strategy
+
+The platform's cloud-agnostic deployment controller: a build artefact
+is deployed to a target at some canary traffic percentage, and only
+promoted to `active` — automatically superseding whatever was active
+before — once a composite health score clears a configurable bar.
+Unlike most canary-analysis tools (Argo Rollouts, Flagger), which watch
+only infra signals (error rate, latency), `CanaryHealthCalculator`
+watches agent-specific behavior: a real groundedness pass rate from
+Evaluation Framework (Module 18)'s own `GET /scores`, combined with a
+real budget-utilisation signal from FinOps (Module 26)'s own `GET
+/cost-reports/{tenant_id}` — reusing Agent Cards (Module 23)'s own
+weighted-renormalization-over-available-signals math, applied here to a
+promotion gate instead of a trust score. Zero signals with data is
+`insufficient_data`, never a default "healthy" verdict, and `promote`
+always re-runs the check rather than trusting an earlier pass — the
+same explicit legal-transition-table shape (`canary → active`/
+`rolled_back`, `active → rolled_back`/`superseded`) Agent Marketplace
+(Module 24) and LLMOps (Module 25) already established. A genuinely
+agent-aware gate should also watch guardrail-violation rate, but
+Guardrails (Module 14) doesn't yet expose an aggregate, queryable
+violation-rate endpoint — this LLD calls that out explicitly as real
+future work rather than fabricating a signal against an endpoint that
+doesn't exist.
+Design doc: [`docs/module-27-deployment-strategy.md`](docs/module-27-deployment-strategy.md).
+Build: [`modules/deployment-strategy`](modules/deployment-strategy).
 
 ## Running any module locally
 

@@ -1,0 +1,50 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# standalone with Evaluation Framework's own GET /scores and FinOps's own
+# GET /cost-reports/{tenant_id} both stubbed by a dependency-stub service.
+# Real Postgres runs here.
+name: deployment-strategy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: deployment_strategy
+      POSTGRES_PASSWORD: deployment_strategy
+      POSTGRES_DB: deployment_strategy
+    ports:
+      - "5454:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deployment_strategy"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9127:9127"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DEPLOYMENT_STRATEGY_DATABASE_URL: postgresql+asyncpg://deployment_strategy:deployment_strategy@postgres:5432/deployment_strategy
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  deployment-strategy:
+    build: ..
+    ports:
+      - "8106:8106"
+    environment:
+      DEPLOYMENT_STRATEGY_DATABASE_URL: postgresql+asyncpg://deployment_strategy:deployment_strategy@postgres:5432/deployment_strategy
+      DEPLOYMENT_STRATEGY_EVALUATION_FRAMEWORK_BASE_URL: http://dependency-stub:9127
+      DEPLOYMENT_STRATEGY_FINOPS_BASE_URL: http://dependency-stub:9127
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
