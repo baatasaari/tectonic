@@ -1,0 +1,56 @@
+image:
+  repository: tectonic/multi-modality
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: 256Mi
+  limits:
+    cpu: "500m"
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  # A caller-facing extraction endpoint (voice/document ingestion at request time), closer
+  # to the platform's high-QPS front-door modules (Agent Cards) than the operator-facing
+  # registries -- this platform's standard sizing formula.
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8107
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+
+database:
+  url: "postgresql+asyncpg://multi_modality:multi_modality@postgres:5432/multi_modality"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+guardrailsBaseUrl: "http://guardrails:8093"
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8107
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8107
+  initialDelaySeconds: 5
+  periodSeconds: 10

@@ -38,7 +38,8 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 25 — LLMOps | Built — [`modules/llmops`](modules/llmops) |
 | 26 — FinOps | Built — [`modules/finops`](modules/finops) |
 | 27 — Deployment Strategy | Built — [`modules/deployment-strategy`](modules/deployment-strategy) |
-| 28–34 | Not yet started |
+| 28 — Multi-modality | Built — [`modules/multi-modality`](modules/multi-modality) |
+| 29–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -272,6 +273,7 @@ modules/
   llmops/                                                                   Module 25
   finops/                                                                     Module 26
   deployment-strategy/                                                          Module 27
+  multi-modality/                                                                 Module 28
 ```
 
 ## Cross-module integration, once deployed together
@@ -759,6 +761,29 @@ future work rather than fabricating a signal against an endpoint that
 doesn't exist.
 Design doc: [`docs/module-27-deployment-strategy.md`](docs/module-27-deployment-strategy.md).
 Build: [`modules/deployment-strategy`](modules/deployment-strategy).
+
+### Module 28: Multi-modality
+
+The platform's unified multi-modal ingestion and governance layer: raw
+media of any of four modalities (text, voice, image, document) is
+normalized into a common `extracted_content` shape by a pluggable,
+per-modality pipeline, then — when a caller supplies a
+`grounding_context` (a reference document, a claim description, an
+existing transcript) — checked for groundedness against it through
+Guardrails (Module 14)'s own real `POST /v1/guardrails/check`
+(`stage=output`), the identical endpoint and `groundedness_check` logic
+this platform already uses to catch ungrounded LLM output. The same
+"real peer, not invented" convention this platform established for
+Agent Cards' trust score and Deployment Strategy's canary health. A
+down Guardrails peer degrades the verdict to `unavailable` rather than
+failing the whole extraction — the caller still gets their extracted
+content back. Honest about what "accuracy" means without a real
+ASR/vision provider wired: `core/extractors.py`'s per-modality
+extractors are documented, swappable stand-ins for a real cloud
+Speech-to-Text/Vision/OCR API, the same "documented placeholder, not a
+half-built feature" posture Agent Marketplace and LLMOps already take.
+Design doc: [`docs/module-28-multi-modality.md`](docs/module-28-multi-modality.md).
+Build: [`modules/multi-modality`](modules/multi-modality).
 
 ## Running any module locally
 

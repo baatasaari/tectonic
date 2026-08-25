@@ -69,6 +69,7 @@ jobs:
           - llmops
           - long-term-memory
           - mcp
+          - multi-modality
           - observability
           - regulatory-compliance
           - sentinel-agents
