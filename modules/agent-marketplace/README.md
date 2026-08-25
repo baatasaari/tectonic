@@ -59,7 +59,7 @@ src/agent_marketplace/
 - **No reviewer-role enforcement yet, and that's a documented choice.**
   `approve`/`reject` are gated the same as every other route (this
   platform's shared-secret JWT) but not by a distinct reviewer role —
-  Identity and Access (Module 27) is where that belongs once it exists;
+  Identity and Access (Module 31) is where that belongs once it exists;
   the state machine itself doesn't need to change shape to adopt it,
   only who's allowed to call it does.
 - **Connection pooling and pagination, built in from day one.** Sized
