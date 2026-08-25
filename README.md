@@ -42,7 +42,9 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 29 — PromptOps | Built — [`modules/promptops`](modules/promptops) |
 | 30 — Multi-tenancy | Built — [`modules/multi-tenancy`](modules/multi-tenancy) |
 | 31 — Identity and Access | Built — [`modules/identity-and-access`](modules/identity-and-access) |
-| 32–34 | Not yet started |
+| 32 — Secrets and Credential Management | Built — [`modules/secrets-and-credential-management`](modules/secrets-and-credential-management) |
+| 33 — Billing and Metering | Built — [`modules/billing-and-metering`](modules/billing-and-metering) |
+| 34 — SDK and Developer Portal | Built — [`modules/sdk-and-developer-portal`](modules/sdk-and-developer-portal) |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -280,6 +282,9 @@ modules/
   promptops/                                                                        Module 29
   multi-tenancy/                                                                      Module 30
   identity-and-access/                                                                  Module 31
+  secrets-and-credential-management/                                                      Module 32
+  billing-and-metering/                                                                     Module 33
+  sdk-and-developer-portal/                                                                   Module 34
 ```
 
 ## Cross-module integration, once deployed together
@@ -865,6 +870,75 @@ blocked," the LLD's own key metric, is something a security team can
 actually go query.
 Design doc: [`docs/module-31-identity-and-access.md`](docs/module-31-identity-and-access.md).
 Build: [`modules/identity-and-access`](modules/identity-and-access).
+
+### Module 32: Secrets and Credential Management
+
+The platform's per-tenant secret vault: every value is encrypted at
+rest (`Fernet`, this module's own `secrets_master_key`, deliberately a
+different secret and trust boundary from the platform-wide
+`TECTONIC_JWT_SHARED_SECRET`) before it ever reaches Postgres, and
+retrieval is gated by a real, live zero-trust `authorize` call to
+Identity and Access (Module 31) with scope
+`secret:{tenant_id}:{namespace}:read` — the same live-revocation-aware
+gate every other `authorize` call in this platform already goes
+through, never a bespoke access-control layer of its own. Every
+retrieval attempt, allowed or denied, is dual-recorded: a local
+`SecretAccessRecord` always, plus a best-effort real event to
+Auditability (Module 20) — a down Auditability degrades only the audit
+trail, never the access decision. `secrets_rotation_compliance_rate`,
+the LLD's own key metric, is a real, computed Gauge (currently-non-
+overdue active secrets ÷ total active secrets); with zero active
+secrets it reports `None`, never a fabricated 1.0. The secret lifecycle
+is one-way — `active → revoked` only, unlike this platform's other
+reversible active↔suspended state machines.
+Design doc: [`docs/module-32-secrets-and-credential-management.md`](docs/module-32-secrets-and-credential-management.md).
+Build: [`modules/secrets-and-credential-management`](modules/secrets-and-credential-management).
+
+### Module 33: Billing and Metering
+
+Turns real per-tenant usage signals from other platform modules into
+metered usage records and invoices — never a self-reported counter
+this module invents. `"llm.cost_usd"` is read straight from FinOps
+(Module 26)'s own real `GET /v1/finops/cost-reports/{tenant_id}`; every
+other resource key in a pricing plan is treated as a real
+`source_module` name and counted from Auditability (Module 20)'s own
+real `GET /v1/auditability/events`, reading only the `total` that
+endpoint already returns. What gets metered is driven entirely by the
+active pricing plan's own `unit_prices` keys, so pricing a new module
+in is a plan edit, never a code change. "Metering accuracy," the LLD's
+own key metric, is a real flag on every invoice: a metering-source
+failure skips that resource's usage record and flips the invoice's
+`complete` field to `False` rather than silently recording zero usage.
+Invoices are a one-way `draft → finalized` state machine, the same
+shape Secrets and Credential Management (Module 32) established for
+its own revocation lifecycle.
+Design doc: [`docs/module-33-billing-and-metering.md`](docs/module-33-billing-and-metering.md).
+Build: [`modules/billing-and-metering`](modules/billing-and-metering).
+
+### Module 34: SDK and Developer Portal
+
+The platform's developer-facing front door, and the final module of
+the 34-module platform. Registering a developer composes two real
+peers on every call: Identity and Access (`POST /identities`,
+`type="user"`) and Multi-tenancy (`POST /tenants`, `tier="sandbox"` —
+reusing that module's own real `tier` field as the queryable signal
+that separates trial tenants from paying ones, no second
+sandbox-tracking system); sandbox tokens are minted on demand by
+Identity and Access itself, never cached here. The SDK catalogue is
+generated from every configured peer's own real, live `GET
+/openapi.json` — behind that peer's own `ServiceAuthMiddleware`, so
+even fetching documentation respects the platform's real security
+model — and a pure, deterministic generator turns each spec's `paths`
+into a minimal, real, working Python client, regenerated only when the
+spec's own content hash actually changes. "Time-to-first-successful-
+call," the LLD's own key metric, is computed from Auditability's real
+event history via a targeted `total`/`offset` read, never a fabricated
+zero for a developer with no activity yet. "Support ticket volume" —
+the module table's third key metric — is explicitly out of scope: this
+platform has no ticketing module, so this LLD does not invent one to
+fill the gap.
+Design doc: [`docs/module-34-sdk-and-developer-portal.md`](docs/module-34-sdk-and-developer-portal.md).
+Build: [`modules/sdk-and-developer-portal`](modules/sdk-and-developer-portal).
 
 ## Running any module locally
 
