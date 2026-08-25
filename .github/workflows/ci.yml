@@ -63,6 +63,7 @@ jobs:
           - graph-db
           - guardrails
           - human-oversight
+          - identity-and-access
           - intent-detection
           - knowledge-base
           - llm-gateway

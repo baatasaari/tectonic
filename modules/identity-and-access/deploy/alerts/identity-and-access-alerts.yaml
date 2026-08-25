@@ -1,0 +1,24 @@
+# Prometheus Alertmanager rule definitions for the Identity and Access
+# module (LLD §Level 4 "Alerting").
+groups:
+  - name: identity-and-access
+    rules:
+      - alert: IdentityAccessUnauthorizedAttemptsHigh
+        expr: sum(rate(identity_access_unauthorized_attempts_total[5m])) * 60 > 10
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 10 unauthorized authorize() attempts per minute, sustained 5m"
+          description: "Check which tenant_id/required_scope labels are driving it -- could be a misconfigured caller or an actual attack."
+
+      - alert: IdentityAccessAuthSuccessRateLow
+        expr: |
+          sum(rate(identity_access_auth_decisions_total{allowed="True"}[15m]))
+            /
+          sum(rate(identity_access_auth_decisions_total[15m]))
+          < 0.5
+        labels:
+          severity: warning
+        annotations:
+          summary: "Auth success rate below 50% over the last 15m"
+          description: "The LLD's own key metric -- a real, sustained drop is worth investigating before it's treated as normal."

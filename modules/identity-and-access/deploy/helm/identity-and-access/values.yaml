@@ -1,0 +1,66 @@
+image:
+  repository: tectonic/identity-and-access
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: 256Mi
+  limits:
+    cpu: "500m"
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  # `authorize` is meant to sit on other modules' hot request paths (see the LLD's own
+  # non-functional targets) -- closer to the platform's high-QPS front-door modules
+  # (Agent Cards) than the operator-facing registries.
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8110
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  tokenDefaultTtlSeconds: "3600"
+
+database:
+  url: "postgresql+asyncpg://identity_access:identity_access@postgres:5432/identity_access"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+auditabilityBaseUrl: "http://auditability:8090"
+
+# This module's own dedicated signing key for the zero-trust tokens it issues --
+# deliberately a SEPARATE Kubernetes Secret from the platform-wide
+# TECTONIC_JWT_SHARED_SECRET every module's chart also injects. See config.py's own
+# docstring for why the two must never be conflated.
+tokenSigningSecret:
+  existingSecret: ""
+  existingSecretKey: "token-signing-secret"
+  value: "dev-insecure-token-signing-secret-change-me"
+
+podDisruptionBudget:
+  minAvailable: 2
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8110
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8110
+  initialDelaySeconds: 5
+  periodSeconds: 10

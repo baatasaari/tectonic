@@ -41,7 +41,8 @@ module catalogue: [`docs/agentic-platform-final-module-table.md`](docs/agentic-p
 | 28 — Multi-modality | Built — [`modules/multi-modality`](modules/multi-modality) |
 | 29 — PromptOps | Built — [`modules/promptops`](modules/promptops) |
 | 30 — Multi-tenancy | Built — [`modules/multi-tenancy`](modules/multi-tenancy) |
-| 31–34 | Not yet started |
+| 31 — Identity and Access | Built — [`modules/identity-and-access`](modules/identity-and-access) |
+| 32–34 | Not yet started |
 
 Each module is designed, built and tested independently (its own repo-style
 subtree under `modules/`, own README, own CI-shaped test tiers), then
@@ -278,6 +279,7 @@ modules/
   multi-modality/                                                                 Module 28
   promptops/                                                                        Module 29
   multi-tenancy/                                                                      Module 30
+  identity-and-access/                                                                  Module 31
 ```
 
 ## Cross-module integration, once deployed together
@@ -835,6 +837,34 @@ integration point every other module's request path should call before
 serving a request.
 Design doc: [`docs/module-30-multi-tenancy.md`](docs/module-30-multi-tenancy.md).
 Build: [`modules/multi-tenancy`](modules/multi-tenancy).
+
+### Module 31: Identity and Access
+
+The platform's identity registry and zero-trust authorization layer:
+every user, agent and service gets its own registered, individually-
+revocable identity (never a shared service account), assigned one or
+more roles that bundle real scopes, and can request a scoped token
+narrowed to the intersection of what it asked for and what its roles
+actually grant — `TokenService.issue` can only ever narrow, never
+grant more than an identity's roles actually hold. The defining
+zero-trust property: `AuthorizationService.authorize` re-checks the
+issuing identity's *current* status against the live registry on every
+single call, so a revoked identity's outstanding tokens stop
+authorizing on the very next request, not whenever they happen to
+naturally expire — the real difference between "zero trust" and "trust
+the signature." This module's own inbound API is still protected by
+the platform-wide `TECTONIC_JWT_SHARED_SECRET` every module shares, but
+the tokens it issues are signed with its own dedicated
+`token_signing_secret` — two distinct secrets for two distinct trust
+boundaries, never conflated. Every denied `authorize` call is also
+emitted as a real event to Auditability (Module 20)'s own `POST
+/v1/auditability/events`, the same real-peer emission pattern this
+platform's earlier modules (Human Oversight, Sentinel Agents,
+Regulatory Compliance) already established — "unauthorised attempts
+blocked," the LLD's own key metric, is something a security team can
+actually go query.
+Design doc: [`docs/module-31-identity-and-access.md`](docs/module-31-identity-and-access.md).
+Build: [`modules/identity-and-access`](modules/identity-and-access).
 
 ## Running any module locally
 
