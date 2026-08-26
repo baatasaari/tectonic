@@ -14,6 +14,7 @@ from billing_and_metering.api.routes_billing_and_metering import router as billi
 from billing_and_metering.app_context import AppContext
 from billing_and_metering.clients.auditability_client import HTTPAuditabilityClient
 from billing_and_metering.clients.finops_client import HTTPFinOpsClient
+from billing_and_metering.clients.multi_tenancy_client import HTTPMultiTenancyClient
 from billing_and_metering.config import BillingAndMeteringSettings, load_settings
 from billing_and_metering.db.session import make_engine, make_session_factory
 from billing_and_metering.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
@@ -34,6 +35,9 @@ def build_app_context(settings: BillingAndMeteringSettings) -> AppContext:
         ),
         auditability=HTTPAuditabilityClient(
             settings.auditability_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+        ),
+        multi_tenancy=HTTPMultiTenancyClient(
+            settings.multi_tenancy_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
         ),
     )
 

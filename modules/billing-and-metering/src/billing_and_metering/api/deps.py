@@ -25,8 +25,8 @@ async def get_repository(ctx: AppContext = Depends(get_ctx)) -> AsyncIterator[Bi
         yield SQLAlchemyBillingRepository(session)
 
 
-def build_pricing_plan_service(repository: BillingRepository) -> PricingPlanService:
-    return PricingPlanService(repository)
+def build_pricing_plan_service(repository: BillingRepository, ctx: AppContext | None = None) -> PricingPlanService:
+    return PricingPlanService(repository, ctx.multi_tenancy if ctx is not None else None)
 
 
 def build_metering_service(repository: BillingRepository, ctx: AppContext) -> MeteringService:
@@ -34,4 +34,6 @@ def build_metering_service(repository: BillingRepository, ctx: AppContext) -> Me
 
 
 def build_invoice_service(repository: BillingRepository, ctx: AppContext) -> InvoiceService:
-    return InvoiceService(repository, build_pricing_plan_service(repository), build_metering_service(repository, ctx))
+    return InvoiceService(
+        repository, build_pricing_plan_service(repository, ctx), build_metering_service(repository, ctx),
+    )

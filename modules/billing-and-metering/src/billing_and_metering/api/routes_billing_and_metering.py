@@ -65,9 +65,10 @@ def _usage_schema(record) -> UsageRecordSchema:
 @router.post("/pricing-plans", response_model=PricingPlanSchema, status_code=201)
 async def create_pricing_plan(
     body: CreatePricingPlanRequest,
+    ctx: AppContext = Depends(get_ctx),
     repository: BillingRepository = Depends(get_repository),
 ) -> PricingPlanSchema:
-    service = build_pricing_plan_service(repository)
+    service = build_pricing_plan_service(repository, ctx)
     plan = await service.create(tenant_id=body.tenant_id, name=body.name, unit_prices=body.unit_prices)
     return _plan_schema(plan)
 

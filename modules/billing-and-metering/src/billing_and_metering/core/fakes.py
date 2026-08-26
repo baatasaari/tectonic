@@ -118,4 +118,18 @@ class StubAuditabilityClient:
         return self.count
 
 
-__all__ = ["InMemoryBillingRepository", "StubAuditabilityClient", "StubFinOpsClient"]
+class StubMultiTenancyClient:
+    """Records every sync call and never raises -- mirrors
+    `HTTPMultiTenancyClient.sync_entitlements`'s own best-effort
+    contract, so a caller test never needs a try/except around it."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    async def sync_entitlements(self, *, tenant_id: str, module_names: list[str]) -> None:
+        self.calls.append({"tenant_id": tenant_id, "module_names": module_names})
+
+
+__all__ = [
+    "InMemoryBillingRepository", "StubAuditabilityClient", "StubFinOpsClient", "StubMultiTenancyClient",
+]

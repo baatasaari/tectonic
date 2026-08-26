@@ -44,6 +44,20 @@ async def test_resolve_active_plan_raises_when_neither_exists(harness):
         await harness.pricing_plan_service.resolve_active_plan("no-plan-tenant")
 
 
+async def test_create_syncs_a_tenant_plans_modules_to_multi_tenancy(harness):
+    await harness.pricing_plan_service.create(
+        tenant_id="acme", name="Standard", unit_prices={"llm.cost_usd": 1.0, "agent-cards": 49.0},
+    )
+
+    assert harness.multi_tenancy.calls == [{"tenant_id": "acme", "module_names": ["agent-cards"]}]
+
+
+async def test_create_does_not_sync_the_global_default_plan(harness):
+    await harness.pricing_plan_service.create(tenant_id=None, name="Default", unit_prices={"llm.cost_usd": 1.0})
+
+    assert harness.multi_tenancy.calls == []
+
+
 async def test_list_plans_filters_by_tenant(harness):
     await harness.pricing_plan_service.create(tenant_id="acme", name="A", unit_prices={})
     await harness.pricing_plan_service.create(tenant_id="other", name="B", unit_prices={})

@@ -70,3 +70,14 @@ class AuditabilityClient(Protocol):
         returns the `total` it reports -- never pages through and
         counts events itself."""
         ...
+
+
+class MultiTenancyClient(Protocol):
+    async def sync_entitlements(self, *, tenant_id: str, module_names: list[str]) -> None:
+        """Pushes this tenant's current module list to Multi-tenancy's
+        feature-flag store. Best-effort: implementations must swallow
+        their own failures (log and return) rather than raise -- a
+        pricing plan is a committed billing record the moment it's
+        created, and Multi-tenancy being unreachable must never block or
+        fail that."""
+        ...

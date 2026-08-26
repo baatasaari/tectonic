@@ -35,6 +35,8 @@ spec:
               value: {{ .Values.finopsBaseUrl | quote }}
             - name: BILLING_AUDITABILITY_BASE_URL
               value: {{ .Values.auditabilityBaseUrl | quote }}
+            - name: BILLING_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: BILLING_DATABASE_URL
               valueFrom:

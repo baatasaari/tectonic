@@ -41,6 +41,7 @@ services:
       BILLING_DATABASE_URL: postgresql+asyncpg://billing_and_metering:billing_and_metering@postgres:5432/billing_and_metering
       BILLING_FINOPS_BASE_URL: http://dependency-stub:9133
       BILLING_AUDITABILITY_BASE_URL: http://dependency-stub:9133
+      BILLING_MULTI_TENANCY_BASE_URL: http://dependency-stub:9133
     depends_on:
       postgres:
         condition: service_healthy

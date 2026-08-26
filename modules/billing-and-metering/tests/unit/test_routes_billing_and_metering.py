@@ -15,6 +15,7 @@ from billing_and_metering.core.fakes import (
     InMemoryBillingRepository,
     StubAuditabilityClient,
     StubFinOpsClient,
+    StubMultiTenancyClient,
 )
 from billing_and_metering.security.jwt_auth import (
     INSECURE_DEFAULT_SECRET,
@@ -26,7 +27,7 @@ SECRET = INSECURE_DEFAULT_SECRET
 AUDIENCE = "billing-and-metering"
 
 
-def _app(repository, *, finops=None, auditability=None):
+def _app(repository, *, finops=None, auditability=None, multi_tenancy=None):
     app = FastAPI()
     app.add_middleware(ServiceAuthMiddleware, audience=AUDIENCE, shared_secret=SECRET)
     app.include_router(router)
@@ -35,6 +36,7 @@ def _app(repository, *, finops=None, auditability=None):
         settings=BillingAndMeteringSettings(), engine=None, session_factory=None,
         finops=finops or StubFinOpsClient(total_cost=100.0),
         auditability=auditability or StubAuditabilityClient(count=10),
+        multi_tenancy=multi_tenancy or StubMultiTenancyClient(),
     )
     app.dependency_overrides[get_ctx] = lambda: ctx
     app.dependency_overrides[get_repository] = lambda: repository
@@ -124,6 +126,39 @@ def test_get_invoice_returns_404_when_missing():
         resp = client.get("/v1/billing/invoices/does-not-exist", headers=_headers())
 
     assert resp.status_code == 404
+
+
+def test_creating_a_tenant_plan_syncs_its_modules_to_multi_tenancy():
+    multi_tenancy = StubMultiTenancyClient()
+    app = _app(InMemoryBillingRepository(), multi_tenancy=multi_tenancy)
+
+    with TestClient(app) as client:
+        client.post(
+            "/v1/billing/pricing-plans",
+            json={
+                "tenant_id": "acme", "name": "Standard",
+                "unit_prices": {"llm.cost_usd": 1.0, "agent-cards": 49.0, "guardrails": 79.0},
+            },
+            headers=_headers(),
+        )
+
+    assert multi_tenancy.calls == [
+        {"tenant_id": "acme", "module_names": ["agent-cards", "guardrails"]},
+    ]
+
+
+def test_creating_the_global_default_plan_does_not_sync_to_multi_tenancy():
+    multi_tenancy = StubMultiTenancyClient()
+    app = _app(InMemoryBillingRepository(), multi_tenancy=multi_tenancy)
+
+    with TestClient(app) as client:
+        client.post(
+            "/v1/billing/pricing-plans",
+            json={"tenant_id": None, "name": "Default", "unit_prices": {"llm.cost_usd": 1.0}},
+            headers=_headers(),
+        )
+
+    assert multi_tenancy.calls == []
 
 
 def test_usage_records_listed_after_generation():

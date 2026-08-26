@@ -6,7 +6,10 @@ from FinOps (Module 26)'s own real `GET /v1/finops/cost-reports/{tenant_id}`;
 every other metered resource in a pricing plan is treated as a real
 `source_module` name and counted from Auditability (Module 20)'s own
 real `GET /v1/auditability/events` — no second usage-tracking pipeline
-of its own. Full design doc: [`../../docs/module-33-billing-and-metering.md`](../../docs/module-33-billing-and-metering.md).
+of its own. A tenant-specific plan's module list is also pushed to
+Multi-tenancy (Module 30)'s feature-flag store, so what a tenant is
+billed for is what its subscription actually entitles it to elsewhere
+in the platform. Full design doc: [`../../docs/module-33-billing-and-metering.md`](../../docs/module-33-billing-and-metering.md).
 
 ## Layout
 
@@ -20,11 +23,11 @@ src/billing_and_metering/
     period.py                   The [start, end) window a period name resolves to — mirrors FinOps's own definition
     ports.py                    Repository, the two real platform-peer client ports
     fakes.py                     In-memory implementations of every port, for unit tests
-    pricing_plan_service.py       Pricing Plan Service — create/get/list, resolve a tenant's active plan
+    pricing_plan_service.py       Pricing Plan Service — create/get/list, resolve a tenant's active plan, sync entitlements
     metering_service.py             Metering Service — pulls real usage from FinOps + Auditability
     invoice_service.py                Invoice Service — aggregates usage into lines/total, draft→finalized
   db/                      SQLAlchemy 2.0 async models + repository (PricingPlan/UsageRecord/Invoice/InvoiceLine)
-  clients/                 Resilient HTTP clients to FinOps + Auditability
+  clients/                 Resilient HTTP clients to FinOps + Auditability + Multi-tenancy
   security/
     jwt_auth.py               Service-to-service JWT (platform-wide shared secret, this module's own inbound protection)
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
@@ -50,6 +53,18 @@ src/billing_and_metering/
   only — the same one-way `_LEGAL_TRANSITIONS` shape Secrets and
   Credential Management (Module 32) established for its own
   revocation lifecycle.
+- **Pricing is entitlement, not just a billing record.** Creating a
+  tenant-specific plan (`tenant_id` set, not the global default)
+  wholesale-syncs its `unit_prices` keys — minus `"llm.cost_usd"`,
+  which is a metered resource, not a module — to Multi-tenancy's
+  `POST /tenants/{id}/entitlements`, so every other module's
+  `gate(tenant_id, module=...)` check reflects the plan the instant it's
+  created. The sync is best-effort and never blocks or fails plan
+  creation: `HTTPMultiTenancyClient.sync_entitlements` swallows its own
+  errors and logs a warning if Multi-tenancy is unreachable — the same
+  fail-open posture the entitlement gate itself takes, since a
+  commercial/entitlement path must never become an availability
+  dependency for the billing record of truth.
 
 ## Running locally
 

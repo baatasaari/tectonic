@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from billing_and_metering.config import BillingAndMeteringSettings
-from billing_and_metering.core.ports import AuditabilityClient, FinOpsClient
+from billing_and_metering.core.ports import AuditabilityClient, FinOpsClient, MultiTenancyClient
 
 
 @dataclass
@@ -16,3 +16,4 @@ class AppContext:
     session_factory: async_sessionmaker[AsyncSession]
     finops: FinOpsClient
     auditability: AuditabilityClient
+    multi_tenancy: MultiTenancyClient | None = None

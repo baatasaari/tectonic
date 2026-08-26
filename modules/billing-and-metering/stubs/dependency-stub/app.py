@@ -1,9 +1,10 @@
 """Dependency-stub service for Billing and Metering.
 
-Stands in for this module's two real platform-peer dependencies --
-FinOps (Module 26) and Auditability (Module 20) -- so the Metering
-Service's full metering-and-invoice path is exercised end to end
-without either real peer deployed alongside it, per the LLD's
+Stands in for this module's three real platform-peer dependencies --
+FinOps (Module 26), Auditability (Module 20), and Multi-tenancy (Module
+30) -- so the Metering Service's full metering-and-invoice path, and
+the Pricing Plan Service's entitlement sync, are exercised end to end
+without any real peer deployed alongside it, per the LLD's
 Deployability and Testability Contract.
 """
 from __future__ import annotations
@@ -25,6 +26,12 @@ async def cost_report(tenant_id: str, period: str) -> dict:
 @app.get("/v1/auditability/events")
 async def list_events() -> dict:
     return {"items": [], "total": 0, "limit": 1, "offset": 0}
+
+
+@app.post("/v1/multi-tenancy/tenants/{tenant_id}/entitlements")
+async def set_entitlements(tenant_id: str, body: dict) -> dict:
+    module_names = body.get("module_names", [])
+    return {"tenant_id": tenant_id, "module_names": module_names, "configured": True}
 
 
 @app.get("/healthz")
