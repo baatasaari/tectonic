@@ -22,7 +22,7 @@ src/agent_cards/
     trust_score_calculator.py       Trust Score Calculator — weighted real-peer signals
   db/                      SQLAlchemy 2.0 async models + repository (AgentCard)
   clients/                 Resilient HTTP clients to Evaluation Framework + Regulatory Compliance
-  security/                 Service-to-service JWT bearer auth (shared signing key)
+  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — register, discover, update, recompute-trust-score
   schemas/                    Pydantic request/response models
@@ -72,6 +72,20 @@ src/agent_cards/
   the start (this platform's standard formula), and `GET /agent-cards`
   is paginated (`limit`/`offset`, default 50/max 200) from its first
   version.
+- **This module carries the platform's reference `EntitlementGateMiddleware`**
+  (`security/entitlement_gate.py`) — the per-module feature-flag check
+  every selectable module is meant to adopt (see the rollout playbook
+  doc, `docs/entitlement-gate-rollout.md`). Layered after
+  `ServiceAuthMiddleware` (authenticate, then entitle), it reads
+  `X-Tenant-Id` off the request and calls Multi-tenancy's real `GET
+  /tenants/{id}/gate?module=agent-cards`, denying with `402 Payment
+  Required` when the tenant's subscription doesn't include this module.
+  It **fails open** if Multi-tenancy is unreachable — a deliberate
+  contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
+  posture: a commercial/entitlement gate must never become a
+  platform-wide outage vector. A short in-process TTL cache plus a
+  circuit breaker bound both the added load on Multi-tenancy and the
+  added latency here during a real outage.
 
 ## Running locally
 

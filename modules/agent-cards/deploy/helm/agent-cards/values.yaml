@@ -33,6 +33,7 @@ config:
   complianceWeight: "0.4"
   complianceFrameworkName: "eu_ai_act"
   cardStalenessTtlSeconds: "86400"
+  entitlementGateCacheTtlSeconds: "30"
 
 database:
   url: "postgresql+asyncpg://agent_cards:agent_cards@postgres:5432/agent_cards"
@@ -41,6 +42,7 @@ database:
 
 evaluationFrameworkBaseUrl: "http://evaluation-framework:8097"
 regulatoryComplianceBaseUrl: "http://regulatory-compliance:8096"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:
   minAvailable: 2

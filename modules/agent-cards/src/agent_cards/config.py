@@ -44,6 +44,13 @@ class AgentCardsSettings(BaseSettings):
     regulatory_compliance_base_url: str = "http://localhost:8096"
     dependency_stub_base_url: str = "http://localhost:9123"
 
+    # Entitlement gate (security/entitlement_gate.py) -- this module is the platform's
+    # reference implementation of the per-module feature-flag check (see the rollout
+    # playbook doc). Multi-tenancy is the system of record; the cache TTL bounds how
+    # stale an entitlement change can appear here versus the added load on Multi-tenancy.
+    multi_tenancy_base_url: str = "http://localhost:8109"
+    entitlement_gate_cache_ttl_seconds: float = 30.0
+
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
     # every module, so this field's env var name is NOT prefixed like the rest of this
     # settings class: every module's Helm chart injects the same Kubernetes Secret under

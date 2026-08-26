@@ -41,6 +41,7 @@ services:
       AGENT_CARDS_DATABASE_URL: postgresql+asyncpg://agent_cards:agent_cards@postgres:5432/agent_cards
       AGENT_CARDS_EVALUATION_FRAMEWORK_BASE_URL: http://dependency-stub:9123
       AGENT_CARDS_REGULATORY_COMPLIANCE_BASE_URL: http://dependency-stub:9123
+      AGENT_CARDS_MULTI_TENANCY_BASE_URL: http://dependency-stub:9123
     depends_on:
       postgres:
         condition: service_healthy
