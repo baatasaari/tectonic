@@ -6,7 +6,12 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from multi_tenancy.core.domain import IsolationProbeResult, TenantRecord, TenantStatus
+from multi_tenancy.core.domain import (
+    IsolationProbeResult,
+    TenantEntitlementRecord,
+    TenantRecord,
+    TenantStatus,
+)
 from multi_tenancy.db import models
 
 
@@ -19,6 +24,7 @@ def _as_utc(dt: datetime | None) -> datetime | None:
 def _tenant_to_domain(m: models.Tenant) -> TenantRecord:
     return TenantRecord(
         id=str(m.id), name=m.name, status=TenantStatus(m.status), tier=m.tier,
+        entitlements_configured_at=_as_utc(m.entitlements_configured_at),
         created_at=_as_utc(m.created_at), updated_at=_as_utc(m.updated_at),
     )
 
@@ -28,6 +34,10 @@ def _probe_result_to_domain(m: models.IsolationProbeResult) -> IsolationProbeRes
         id=str(m.id), tenant_id=m.tenant_id, target_name=m.target_name, passed=m.passed,
         breach_count=m.breach_count, sample_size=m.sample_size, details=m.details, checked_at=_as_utc(m.checked_at),
     )
+
+
+def _entitlement_to_domain(m: models.TenantEntitlement) -> TenantEntitlementRecord:
+    return TenantEntitlementRecord(tenant_id=m.tenant_id, module_name=m.module_name, updated_at=_as_utc(m.updated_at))
 
 
 class SQLAlchemyMultiTenancyRepository:
@@ -95,3 +105,25 @@ class SQLAlchemyMultiTenancyRepository:
         )
         rows = await self.session.execute(stmt)
         return [_probe_result_to_domain(m) for m in rows.scalars().all()], total
+
+    async def replace_entitlements(
+        self, *, tenant_id: str, module_names: list[str],
+    ) -> list[TenantEntitlementRecord]:
+        await self.session.execute(
+            models.TenantEntitlement.__table__.delete().where(models.TenantEntitlement.tenant_id == tenant_id)
+        )
+        rows = [models.TenantEntitlement(tenant_id=tenant_id, module_name=name) for name in module_names]
+        self.session.add_all(rows)
+
+        tenant = await self.session.get(models.Tenant, tenant_id)
+        tenant.entitlements_configured_at = func.now()
+
+        await self.session.commit()
+        for row in rows:
+            await self.session.refresh(row)
+        return [_entitlement_to_domain(m) for m in rows]
+
+    async def list_entitlements(self, tenant_id: str) -> list[TenantEntitlementRecord]:
+        stmt = select(models.TenantEntitlement).where(models.TenantEntitlement.tenant_id == tenant_id)
+        rows = await self.session.execute(stmt)
+        return [_entitlement_to_domain(m) for m in rows.scalars().all()]

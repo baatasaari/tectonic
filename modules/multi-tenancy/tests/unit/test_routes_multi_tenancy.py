@@ -130,6 +130,68 @@ def test_run_isolation_probe_returns_404_for_unregistered_target():
     assert resp.status_code == 404
 
 
+def test_entitlements_round_trip_and_gate_by_module():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        tenant = client.post("/v1/multi-tenancy/tenants", json={"name": "Acme Corp"}, headers=headers).json()
+        tenant_id = tenant["id"]
+
+        unconfigured = client.get(f"/v1/multi-tenancy/tenants/{tenant_id}/entitlements", headers=headers).json()
+        assert unconfigured == {"tenant_id": tenant_id, "module_names": [], "configured": False}
+
+        gate_before = client.get(
+            f"/v1/multi-tenancy/tenants/{tenant_id}/gate", params={"module": "agent-cards"}, headers=headers,
+        ).json()
+        assert gate_before["allowed"] is True
+
+        set_resp = client.post(
+            f"/v1/multi-tenancy/tenants/{tenant_id}/entitlements",
+            json={"module_names": ["agent-cards", "guardrails"]}, headers=headers,
+        )
+        assert set_resp.status_code == 200
+        body = set_resp.json()
+        assert body["configured"] is True
+        assert sorted(body["module_names"]) == ["agent-cards", "guardrails"]
+
+        gate_allowed = client.get(
+            f"/v1/multi-tenancy/tenants/{tenant_id}/gate", params={"module": "agent-cards"}, headers=headers,
+        ).json()
+        assert gate_allowed["allowed"] is True
+
+        gate_denied = client.get(
+            f"/v1/multi-tenancy/tenants/{tenant_id}/gate", params={"module": "finops"}, headers=headers,
+        ).json()
+        assert gate_denied["allowed"] is False
+        assert "finops" in gate_denied["reason"]
+
+        listed = client.get(f"/v1/multi-tenancy/tenants/{tenant_id}/entitlements", headers=headers).json()
+        assert listed["configured"] is True
+        assert sorted(listed["module_names"]) == ["agent-cards", "guardrails"]
+
+
+def test_set_entitlements_returns_404_for_an_unknown_tenant():
+    app = _app(InMemoryMultiTenancyRepository())
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/multi-tenancy/tenants/does-not-exist/entitlements",
+            json={"module_names": ["agent-cards"]}, headers=_headers(),
+        )
+
+    assert resp.status_code == 404
+
+
+def test_list_entitlements_returns_404_for_an_unknown_tenant():
+    app = _app(InMemoryMultiTenancyRepository())
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/multi-tenancy/tenants/does-not-exist/entitlements", headers=_headers())
+
+    assert resp.status_code == 404
+
+
 def test_list_isolation_probes():
     app = _app(InMemoryMultiTenancyRepository())
     headers = _headers()

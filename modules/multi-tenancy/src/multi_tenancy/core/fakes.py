@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from multi_tenancy.core.domain import IsolationProbeResult, TenantRecord, TenantStatus
+from multi_tenancy.core.domain import (
+    IsolationProbeResult,
+    TenantEntitlementRecord,
+    TenantRecord,
+    TenantStatus,
+    now,
+)
 
 _UNSET = object()
 
@@ -13,6 +19,7 @@ class InMemoryMultiTenancyRepository:
     def __init__(self) -> None:
         self.tenants: dict[str, TenantRecord] = {}
         self.probe_results: list[IsolationProbeResult] = []
+        self.entitlements: dict[str, list[TenantEntitlementRecord]] = {}
 
     async def create_tenant(self, record: TenantRecord) -> TenantRecord:
         self.tenants[record.id] = record
@@ -24,6 +31,19 @@ class InMemoryMultiTenancyRepository:
     async def update_tenant(self, record: TenantRecord) -> TenantRecord:
         self.tenants[record.id] = record
         return record
+
+    async def replace_entitlements(
+        self, *, tenant_id: str, module_names: list[str],
+    ) -> list[TenantEntitlementRecord]:
+        records = [TenantEntitlementRecord(tenant_id=tenant_id, module_name=name) for name in module_names]
+        self.entitlements[tenant_id] = records
+        tenant = self.tenants.get(tenant_id)
+        if tenant is not None:
+            tenant.entitlements_configured_at = now()
+        return records
+
+    async def list_entitlements(self, tenant_id: str) -> list[TenantEntitlementRecord]:
+        return list(self.entitlements.get(tenant_id, []))
 
     async def list_tenants(
         self, *, status: TenantStatus | None = None, limit: int = 50, offset: int = 0,

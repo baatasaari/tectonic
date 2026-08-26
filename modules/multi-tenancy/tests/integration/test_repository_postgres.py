@@ -84,6 +84,34 @@ async def test_isolation_probe_result_round_trip(migrated_url):
         await engine.dispose()
 
 
+async def test_entitlements_round_trip_and_stamp_configured_at(migrated_url):
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyMultiTenancyRepository(session)
+            tenant = await repo.create_tenant(TenantRecord(id=new_id(), name="Acme Corp entitlements-test"))
+            assert tenant.entitlements_configured_at is None
+
+            replaced = await repo.replace_entitlements(
+                tenant_id=tenant.id, module_names=["agent-cards", "guardrails"],
+            )
+            assert {e.module_name for e in replaced} == {"agent-cards", "guardrails"}
+
+            fetched = await repo.get_tenant(tenant.id)
+            assert fetched.entitlements_configured_at is not None
+
+            listed = await repo.list_entitlements(tenant.id)
+            assert {e.module_name for e in listed} == {"agent-cards", "guardrails"}
+
+            # wholesale replace: a second call drops what isn't in the new list
+            replaced_again = await repo.replace_entitlements(tenant_id=tenant.id, module_names=["guardrails"])
+            assert {e.module_name for e in replaced_again} == {"guardrails"}
+            listed_again = await repo.list_entitlements(tenant.id)
+            assert {e.module_name for e in listed_again} == {"guardrails"}
+    finally:
+        await engine.dispose()
+
+
 async def test_list_probe_results_orders_newest_first_and_paginates(migrated_url):
     engine = create_async_engine(migrated_url)
     try:

@@ -27,6 +27,7 @@ class Tenant(Base):
     name: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(16), default="active")
     tier: Mapped[str] = mapped_column(String(32), default="standard")
+    entitlements_configured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
@@ -44,3 +45,18 @@ class IsolationProbeResult(Base):
     sample_size: Mapped[int] = mapped_column(Integer(), default=0)
     details: Mapped[str] = mapped_column(Text())
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TenantEntitlement(Base):
+    """The platform's feature-flag store: one row per (tenant, module)
+    the tenant's subscription currently includes. See
+    `core/domain.py`'s `TenantEntitlementRecord` docstring for why
+    writes are always a wholesale replace."""
+
+    __tablename__ = "tenant_entitlements"
+
+    tenant_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    module_name: Mapped[str] = mapped_column(String(255), primary_key=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    )

@@ -59,6 +59,12 @@ class TenantRecord:
     name: str
     status: TenantStatus = TenantStatus.ACTIVE
     tier: str = "standard"
+    # `None` means this tenant's module entitlements have never been explicitly set --
+    # ungated, every module allowed -- distinct from a real, explicit empty set (a plan
+    # that includes zero modules), which denies everything. Set by
+    # `replace_entitlements`, including when called with an empty list; see
+    # `TenantRegistryService.gate`'s own docstring for how the two states differ.
+    entitlements_configured_at: datetime | None = None
     created_at: datetime = field(default_factory=now)
     updated_at: datetime = field(default_factory=now)
 
@@ -79,3 +85,17 @@ class IsolationProbeResult:
 class TenantGateResult:
     allowed: bool
     reason: str
+
+
+@dataclass
+class TenantEntitlementRecord:
+    """One (tenant, module) feature flag: does this tenant's subscription
+    include this module. `replace_entitlements` is the only write path --
+    a tenant's entitlement set is always replaced wholesale (mirroring
+    the pricing plan it's derived from), never patched field-by-field, so
+    there's never a stale flag left behind after a plan change drops a
+    module."""
+
+    tenant_id: str
+    module_name: str
+    updated_at: datetime = field(default_factory=now)

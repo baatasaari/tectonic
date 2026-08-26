@@ -36,6 +36,16 @@ class TenantGateResultSchema(BaseModel):
     reason: str
 
 
+class SetEntitlementsRequest(BaseModel):
+    module_names: list[str]
+
+
+class EntitlementListResponse(BaseModel):
+    tenant_id: str
+    module_names: list[str]
+    configured: bool
+
+
 class RunIsolationProbeRequest(BaseModel):
     tenant_id: str
     target_name: str

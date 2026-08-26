@@ -18,10 +18,12 @@ from multi_tenancy.core.domain import (
 )
 from multi_tenancy.core.ports import MultiTenancyRepository
 from multi_tenancy.schemas.multi_tenancy import (
+    EntitlementListResponse,
     IsolationProbeResultListResponse,
     IsolationProbeResultSchema,
     RegisterTenantRequest,
     RunIsolationProbeRequest,
+    SetEntitlementsRequest,
     SuspendTenantRequest,
     TenantGateResultSchema,
     TenantListResponse,
@@ -85,11 +87,45 @@ async def get_tenant(
 @router.get("/tenants/{tenant_id}/gate", response_model=TenantGateResultSchema)
 async def tenant_gate(
     tenant_id: str,
+    module: str | None = Query(None, description="If given, also checks this module against the tenant's entitlements"),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> TenantGateResultSchema:
     service = build_tenant_registry_service(repository)
-    result = await service.gate(tenant_id)
+    result = await service.gate(tenant_id, module=module)
     return TenantGateResultSchema(allowed=result.allowed, reason=result.reason)
+
+
+@router.get("/tenants/{tenant_id}/entitlements", response_model=EntitlementListResponse)
+async def list_entitlements(
+    tenant_id: str,
+    repository: MultiTenancyRepository = Depends(get_repository),
+) -> EntitlementListResponse:
+    service = build_tenant_registry_service(repository)
+    try:
+        tenant = await service.get(tenant_id)
+        entitlements = await service.list_entitlements(tenant_id)
+    except TenantNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return EntitlementListResponse(
+        tenant_id=tenant_id, module_names=[e.module_name for e in entitlements],
+        configured=tenant.entitlements_configured_at is not None,
+    )
+
+
+@router.post("/tenants/{tenant_id}/entitlements", response_model=EntitlementListResponse)
+async def set_entitlements(
+    tenant_id: str,
+    body: SetEntitlementsRequest,
+    repository: MultiTenancyRepository = Depends(get_repository),
+) -> EntitlementListResponse:
+    service = build_tenant_registry_service(repository)
+    try:
+        entitlements = await service.set_entitlements(tenant_id, module_names=body.module_names)
+    except TenantNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return EntitlementListResponse(
+        tenant_id=tenant_id, module_names=[e.module_name for e in entitlements], configured=True,
+    )
 
 
 @router.post("/tenants/{tenant_id}/suspend", response_model=TenantSchema)

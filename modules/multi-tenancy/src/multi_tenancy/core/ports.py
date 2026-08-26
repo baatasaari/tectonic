@@ -6,7 +6,12 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from multi_tenancy.core.domain import IsolationProbeResult, TenantRecord, TenantStatus
+from multi_tenancy.core.domain import (
+    IsolationProbeResult,
+    TenantEntitlementRecord,
+    TenantRecord,
+    TenantStatus,
+)
 
 
 class MultiTenancyRepository(Protocol):
@@ -25,6 +30,18 @@ class MultiTenancyRepository(Protocol):
     async def list_probe_results(
         self, *, tenant_id: str | None = None, target_name: str | None = None, limit: int = 50, offset: int = 0,
     ) -> tuple[list[IsolationProbeResult], int]: ...
+
+    async def replace_entitlements(
+        self, *, tenant_id: str, module_names: list[str],
+    ) -> list[TenantEntitlementRecord]:
+        """Wholesale replace: deletes every existing entitlement row for
+        this tenant, inserts one per `module_names`, and stamps the
+        tenant's own `entitlements_configured_at` -- even when
+        `module_names` is empty, since that's a real, meaningful state
+        (see `TenantRecord.entitlements_configured_at`'s docstring)."""
+        ...
+
+    async def list_entitlements(self, tenant_id: str) -> list[TenantEntitlementRecord]: ...
 
 
 class TenantScopedListClient(Protocol):
