@@ -396,6 +396,27 @@ fixed as of this batch's latest commit:
    and a downstream FastAPI server span, all sharing one `trace_id`), not
    just installed and assumed to work.
 
+## Subscription model and the entitlement gate
+
+The platform's real, checked answer to "does a tenant's subscription
+plan actually control what it can use": Multi-tenancy (Module 30) holds
+a per-tenant module entitlement set (a feature-flag store, not a second
+billing system); Billing and Metering (Module 33) syncs it whenever a
+tenant-specific pricing plan is created; and Agent Cards (Module 23)
+carries the reference `EntitlementGateMiddleware` every other
+selectable module is meant to adopt at its own request path. Full
+design and the mechanical per-module rollout checklist:
+[`docs/entitlement-gate-rollout.md`](docs/entitlement-gate-rollout.md).
+
+An unconfigured tenant (never had entitlements explicitly set) is
+allowed through every module unchanged — this is a deliberate
+rollout-safety default, not a gap: shipping the check must never
+silently start denying tenants that predate it. The gate also fails
+**open** (allows the request, with a loud warning log) if Multi-tenancy
+itself is unreachable, a deliberate contrast with `ServiceAuthMiddleware`'s
+zero-trust fail-closed posture — a commercial/entitlement check must
+never become a platform-wide outage vector.
+
 ## Modules
 
 ### Module 1: Workflow Engine
