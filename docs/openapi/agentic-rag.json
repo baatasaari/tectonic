@@ -1,0 +1,362 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Agentic RAG",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 6: multi-hop, self-correcting retrieval that reformulates queries, checks groundedness and re-retrieves when needed.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/agentic-rag/retrieve": {
+      "post": {
+        "tags": [
+          "agentic-rag"
+        ],
+        "summary": "Retrieve",
+        "operationId": "retrieve_v1_agentic_rag_retrieve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetrieveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetrieveResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agentic-rag/requests/{request_id}": {
+      "get": {
+        "tags": [
+          "agentic-rag"
+        ],
+        "summary": "Get Request",
+        "operationId": "get_request_v1_agentic_rag_requests__request_id__get",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Request Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Healthz",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Metrics",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HopSummary": {
+        "properties": {
+          "hop_number": {
+            "type": "integer",
+            "title": "Hop Number"
+          },
+          "reformulated_query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reformulated Query"
+          },
+          "groundedness_score": {
+            "type": "number",
+            "title": "Groundedness Score"
+          },
+          "item_count": {
+            "type": "integer",
+            "title": "Item Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "hop_number",
+          "reformulated_query",
+          "groundedness_score",
+          "item_count"
+        ],
+        "title": "HopSummary"
+      },
+      "RequestDetail": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "scope": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scope"
+          },
+          "max_hops": {
+            "type": "integer",
+            "title": "Max Hops"
+          },
+          "groundedness_threshold": {
+            "type": "number",
+            "title": "Groundedness Threshold"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "hops": {
+            "items": {
+              "$ref": "#/components/schemas/HopSummary"
+            },
+            "type": "array",
+            "title": "Hops"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RetrieveResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "query",
+          "scope",
+          "max_hops",
+          "groundedness_threshold",
+          "created_at",
+          "hops"
+        ],
+        "title": "RequestDetail"
+      },
+      "RetrieveRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "scope": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scope",
+            "default": []
+          },
+          "max_hops": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Hops"
+          },
+          "groundedness_threshold": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Groundedness Threshold"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "RetrieveRequest"
+      },
+      "RetrieveResponse": {
+        "properties": {
+          "synthesized_context": {
+            "type": "string",
+            "title": "Synthesized Context"
+          },
+          "groundedness_score": {
+            "type": "number",
+            "title": "Groundedness Score"
+          },
+          "hop_count": {
+            "type": "integer",
+            "title": "Hop Count"
+          },
+          "outcome": {
+            "type": "string",
+            "title": "Outcome"
+          },
+          "provenance_chain": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Provenance Chain"
+          }
+        },
+        "type": "object",
+        "required": [
+          "synthesized_context",
+          "groundedness_score",
+          "hop_count",
+          "outcome",
+          "provenance_chain"
+        ],
+        "title": "RetrieveResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
