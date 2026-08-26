@@ -1,0 +1,21 @@
+{
+  "tier": "sandbox",
+  "tenant_name": "Demo Sandbox Co",
+  "description": "The public demo site's tenant: every module unlocked, no pricing plan (a trial tenant doesn't get billed), mirroring SDK and Developer Portal's own real convention of tagging trial tenants with tier=\"sandbox\" as the queryable signal separating them from paying tenants. Entitlements are set directly against Multi-tenancy rather than derived from a Billing pricing plan, since there is no plan to derive them from.",
+  "direct_entitlements": [
+    "workflow-engine", "conversational-engine", "llm-gateway", "tool-orchestration",
+    "intent-detection", "agentic-rag", "context-engineering",
+    "data-source-plugins", "knowledge-base", "vector-db", "graph-db",
+    "short-term-memory", "long-term-memory",
+    "guardrails", "sentinel-agents", "human-oversight", "regulatory-compliance",
+    "evaluation-framework", "observability",
+    "mcp", "a2a", "agent-cards", "agent-marketplace",
+    "llmops", "finops", "deployment-strategy", "promptops",
+    "multi-modality"
+  ],
+  "admin_identity": {
+    "name": "Demo Sandbox Co Admin",
+    "type": "user",
+    "role_names": ["tenant-admin"]
+  }
+}

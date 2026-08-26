@@ -407,6 +407,11 @@ carries the reference `EntitlementGateMiddleware` every other
 selectable module is meant to adopt at its own request path. Full
 design and the mechanical per-module rollout checklist:
 [`docs/entitlement-gate-rollout.md`](docs/entitlement-gate-rollout.md).
+Real test data for each subscription tier (Starter, Growth, Enterprise,
+a hand-assembled Custom plan, and the public Demo/sandbox site) lives in
+[`test-data/subscription-tiers/`](test-data/subscription-tiers/), seeded
+against real running module APIs by
+[`scripts/seed_subscription_tiers.py`](scripts/seed_subscription_tiers.py).
 
 An unconfigured tenant (never had entitlements explicitly set) is
 allowed through every module unchanged — this is a deliberate
