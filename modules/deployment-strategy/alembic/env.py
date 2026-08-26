@@ -13,8 +13,8 @@ from alembic import context
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from deployment_strategy.db.base import Base  # noqa: E402
-from deployment_strategy.db import models  # noqa: E402,F401
+from deployment_strategy.db import models  # noqa: F401
+from deployment_strategy.db.base import Base
 
 config = context.config
 

@@ -13,8 +13,8 @@ from alembic import context
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from promptops.db.base import Base  # noqa: E402
-from promptops.db import models  # noqa: E402,F401
+from promptops.db import models  # noqa: F401
+from promptops.db.base import Base
 
 config = context.config
 

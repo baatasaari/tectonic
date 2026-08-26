@@ -13,8 +13,8 @@ from alembic import context
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from human_oversight.db.base import Base  # noqa: E402
-from human_oversight.db import models  # noqa: E402,F401
+from human_oversight.db import models  # noqa: F401
+from human_oversight.db.base import Base
 
 config = context.config
 
