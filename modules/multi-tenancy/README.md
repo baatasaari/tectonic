@@ -15,16 +15,19 @@ src/multi_tenancy/
   app_context.py           Process-wide dependency container
   config.py                  Pydantic Settings — LLD config schema, incl. probe_targets
   core/
-    domain.py                 TenantRecord/IsolationProbeResult dataclasses, the tenant lifecycle state machine
-    ports.py                    Repository, the one generic tenant-scoped list client shape
+    domain.py                 TenantRecord/IsolationProbeResult, Organisation/Workspace/Environment, the lifecycle state machines
+    ports.py                    Repository, the Auditability client, the one generic tenant-scoped list client shape
     fakes.py                     In-memory implementations of every port, for unit tests
     tenant_registry_service.py    Tenant Registry — register/suspend/reactivate/delete, the gate check
-    isolation_probe_service.py     Isolation Probe Service — the real, executable isolation check
-  db/                      SQLAlchemy 2.0 async models + repository (Tenant/IsolationProbeResult)
-  clients/                 Resilient HTTP client reused against every registered probe target
+    organisation_service.py        Organisation Service — top of the platform hierarchy control plane
+    workspace_service.py            Workspace Service — always scoped to one tenant
+    environment_service.py           Environment Service — always scoped to one workspace
+    isolation_probe_service.py         Isolation Probe Service — the real, executable isolation check
+  db/                      SQLAlchemy 2.0 async models + repository (Tenant/Organisation/Workspace/Environment/IsolationProbeResult)
+  clients/                 Resilient HTTP clients: Auditability, and the one reused against every registered probe target
   security/                 Service-to-service JWT bearer auth (shared signing key)
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
-  api/                       FastAPI router — tenant lifecycle, gate, isolation probes
+  api/                       FastAPI router — tenant lifecycle, gate, isolation probes, the hierarchy control plane
   schemas/                    Pydantic request/response models
 ```
 
@@ -71,6 +74,33 @@ src/multi_tenancy/
   this module is unreachable: a commercial/entitlement gate must never
   become a platform-wide outage vector the way a zero-trust auth check
   correctly does fail closed.
+- **The platform hierarchy control plane** (independent architecture
+  assessment §3.1): `Organisation -> Tenant -> Workspace -> Environment`,
+  each with its own register/suspend/reactivate/delete lifecycle
+  (`/v1/multi-tenancy/organisations`, `/workspaces`, `/environments`),
+  real Auditability events on every create and status transition
+  (`organisation_created`/`_status_changed`, same for `workspace_*` and
+  `environment_*`; `tenant_created`/`_status_changed` too — Multi-tenancy
+  didn't previously call Auditability for its own tenant lifecycle at
+  all, a real gap fixed alongside adding the three new levels), and an
+  `owner_identity_id`/`labels`/`version` field on every one of the new
+  resources. An Organisation is optional — most tenants in this
+  platform's own test data have no need of one — set via
+  `TenantRecord.organisation_id`, nullable, a real valid state rather
+  than an oversight. A Workspace always belongs to exactly one tenant, an
+  Environment to exactly one workspace; both validate their parent
+  exists at registration (`TenantNotFoundError`/`WorkspaceNotFoundError`)
+  the same way `set_entitlements` already validates its own tenant.
+  **What this deliberately does not do yet** (see the assessment's own
+  Phase 1 backlog): cascading offboarding (`delete` on any of the four
+  levels never cascades to its children — a real deletion saga is
+  separate, unbuilt work); `version`'s optimistic-concurrency field is
+  present and incremented on every update but not yet enforced as a
+  real compare-and-swap at the repository layer; `region` is a plain,
+  unvalidated string, not real data-residency policy enforcement; and
+  no other module has adopted `environment_id` scoping yet (Agent
+  Applications — Workflow Engine runs, Conversational Engine sessions —
+  are still tenant-scoped only).
 
 ## Running locally
 

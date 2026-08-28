@@ -5,10 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 from multi_tenancy.core.domain import (
+    EnvironmentRecord,
+    HierarchyStatus,
     IsolationProbeResult,
+    OrganisationRecord,
     TenantEntitlementRecord,
     TenantRecord,
     TenantStatus,
+    WorkspaceRecord,
     now,
 )
 
@@ -20,6 +24,9 @@ class InMemoryMultiTenancyRepository:
         self.tenants: dict[str, TenantRecord] = {}
         self.probe_results: list[IsolationProbeResult] = []
         self.entitlements: dict[str, list[TenantEntitlementRecord]] = {}
+        self.organisations: dict[str, OrganisationRecord] = {}
+        self.workspaces: dict[str, WorkspaceRecord] = {}
+        self.environments: dict[str, EnvironmentRecord] = {}
 
     async def create_tenant(self, record: TenantRecord) -> TenantRecord:
         self.tenants[record.id] = record
@@ -69,6 +76,86 @@ class InMemoryMultiTenancyRepository:
         results = sorted(results, key=lambda r: r.checked_at, reverse=True)
         return results[offset:offset + limit], len(results)
 
+    # --- Organisation / Workspace / Environment ---
+
+    async def create_organisation(self, record: OrganisationRecord) -> OrganisationRecord:
+        self.organisations[record.id] = record
+        return record
+
+    async def get_organisation(self, organisation_id: str) -> OrganisationRecord | None:
+        return self.organisations.get(organisation_id)
+
+    async def update_organisation(self, record: OrganisationRecord) -> OrganisationRecord:
+        self.organisations[record.id] = record
+        return record
+
+    async def list_organisations(
+        self, *, status: HierarchyStatus | None = None, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[OrganisationRecord], int]:
+        results = list(self.organisations.values())
+        if status is not None:
+            results = [o for o in results if o.status == status]
+        results = sorted(results, key=lambda o: o.created_at)
+        return results[offset:offset + limit], len(results)
+
+    async def create_workspace(self, record: WorkspaceRecord) -> WorkspaceRecord:
+        self.workspaces[record.id] = record
+        return record
+
+    async def get_workspace(self, workspace_id: str) -> WorkspaceRecord | None:
+        return self.workspaces.get(workspace_id)
+
+    async def update_workspace(self, record: WorkspaceRecord) -> WorkspaceRecord:
+        self.workspaces[record.id] = record
+        return record
+
+    async def list_workspaces(
+        self, *, tenant_id: str | None = None, status: HierarchyStatus | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[WorkspaceRecord], int]:
+        results = list(self.workspaces.values())
+        if tenant_id is not None:
+            results = [w for w in results if w.tenant_id == tenant_id]
+        if status is not None:
+            results = [w for w in results if w.status == status]
+        results = sorted(results, key=lambda w: w.created_at)
+        return results[offset:offset + limit], len(results)
+
+    async def create_environment(self, record: EnvironmentRecord) -> EnvironmentRecord:
+        self.environments[record.id] = record
+        return record
+
+    async def get_environment(self, environment_id: str) -> EnvironmentRecord | None:
+        return self.environments.get(environment_id)
+
+    async def update_environment(self, record: EnvironmentRecord) -> EnvironmentRecord:
+        self.environments[record.id] = record
+        return record
+
+    async def list_environments(
+        self, *, workspace_id: str | None = None, status: HierarchyStatus | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[EnvironmentRecord], int]:
+        results = list(self.environments.values())
+        if workspace_id is not None:
+            results = [e for e in results if e.workspace_id == workspace_id]
+        if status is not None:
+            results = [e for e in results if e.status == status]
+        results = sorted(results, key=lambda e: e.created_at)
+        return results[offset:offset + limit], len(results)
+
+
+class StubAuditabilityClient:
+    """Records every emitted event and never raises -- mirrors
+    `HTTPAuditabilityClient.emit`'s own best-effort contract, so a
+    caller test never needs a try/except around it."""
+
+    def __init__(self) -> None:
+        self.events: list[dict[str, Any]] = []
+
+    async def emit(self, event: dict[str, Any]) -> None:
+        self.events.append(event)
+
 
 class StubTenantScopedListClient:
     """`items` is the raw list this stub returns as-is -- pass items whose
@@ -88,4 +175,4 @@ class StubTenantScopedListClient:
         return self._items
 
 
-__all__ = ["InMemoryMultiTenancyRepository", "StubTenantScopedListClient"]
+__all__ = ["InMemoryMultiTenancyRepository", "StubAuditabilityClient", "StubTenantScopedListClient"]

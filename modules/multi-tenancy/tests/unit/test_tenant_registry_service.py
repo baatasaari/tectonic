@@ -13,9 +13,37 @@ async def test_register_starts_active(harness):
 
     assert tenant.status == TenantStatus.ACTIVE
     assert tenant.tier == "enterprise"
+    assert tenant.organisation_id is None
 
     fetched = await harness.tenant_registry_service.get(tenant.id)
     assert fetched.id == tenant.id
+
+
+async def test_register_stores_an_organisation_id_when_given(harness):
+    org = await harness.organisation_service.register(name="Acme Holdings")
+
+    tenant = await harness.tenant_registry_service.register(name="Acme Corp", organisation_id=org.id)
+
+    assert tenant.organisation_id == org.id
+
+
+async def test_register_emits_an_audit_event(harness):
+    tenant = await harness.tenant_registry_service.register(name="Acme Corp")
+
+    events = [e for e in harness.auditability.events if e["event"] == "tenant_created"]
+    assert len(events) == 1
+    assert events[0]["tenant_id"] == tenant.id
+
+
+async def test_status_transitions_emit_audit_events(harness):
+    tenant = await harness.tenant_registry_service.register(name="Acme Corp")
+    await harness.tenant_registry_service.suspend(tenant.id, reason="non-payment")
+
+    events = [e for e in harness.auditability.events if e["event"] == "tenant_status_changed"]
+    assert len(events) == 1
+    assert events[0] == {
+        "event": "tenant_status_changed", "tenant_id": tenant.id, "from_status": "active", "to_status": "suspended",
+    }
 
 
 async def test_get_raises_when_missing(harness):

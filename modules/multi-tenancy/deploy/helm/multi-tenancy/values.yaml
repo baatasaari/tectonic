@@ -35,6 +35,8 @@ config:
   # modules' isolation should also be probed, no code change required.
   probeTargets: '[{"name":"agent-cards","base_url":"http://agent-cards:8102","list_path":"/v1/agent-cards","audience":"agent-cards"}]'
 
+auditabilityBaseUrl: "http://auditability:8099"
+
 database:
   url: "postgresql+asyncpg://multi_tenancy:multi_tenancy@postgres:5432/multi_tenancy"
   existingSecret: ""

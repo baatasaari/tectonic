@@ -456,14 +456,32 @@ Portal, Secrets and Credential Management) defaulted
 correctly-*named* config field is still wrong if it points at the
 wrong peer.
 
+**Also fixed**: Multi-tenancy (Module 30) now carries the assessment's
+own canonical resource model (§3.1),
+`Organisation -> Tenant -> Workspace -> Environment`, each with a real
+register/suspend/reactivate/delete lifecycle, an `owner_identity_id`/
+`labels`/`version` field, and real Auditability events on every create
+and status transition — including Tenant's own lifecycle, which this
+module never emitted audit events for at all before now. A Workspace
+always validates its parent tenant exists at registration, an
+Environment its parent workspace, the same "raise *NotFoundError for
+an unknown parent" posture the entitlement store already established.
+Verified against a real Postgres (migration `0003`, real foreign keys,
+real JSONB `labels` columns), not just SQLite fakes. See
+`modules/multi-tenancy/README.md` for what this deliberately does not
+do yet (cascading offboarding, real optimistic-concurrency enforcement,
+real residency-policy enforcement).
+
 **In progress**, tracked against the assessment's own Phase 1 (platform
 kernel) scope: universal entitlement-gate rollout beyond Agent Cards
-(`docs/entitlement-gate-rollout.md`), a canonical Organisation/
-Workspace/Environment resource model, a quota and resource-allocation
+(`docs/entitlement-gate-rollout.md`), a quota and resource-allocation
 service, a CloudEvents-based event backbone, Vector DB's production
-persistence story, OpenAPI security-scheme declarations, and Kubernetes
+persistence story, OpenAPI security-scheme declarations, Kubernetes
 hardening (NetworkPolicy, restricted pod security context) across every
-Helm chart.
+Helm chart, Identity and Access's OIDC/SAML/SCIM federation, Secrets'
+managed-KMS integration, an idempotent metering ledger, Observability's
+trace-query/SLO surfaces, and CI supply-chain gates (SBOM, signing,
+contract tests).
 
 ## Modules
 

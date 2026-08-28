@@ -33,6 +33,8 @@ spec:
               value: {{ .Values.config.otlpEndpoint | quote }}
             - name: MULTI_TENANCY_PROBE_TARGETS
               value: {{ .Values.config.probeTargets | quote }}
+            - name: MULTI_TENANCY_AUDITABILITY_BASE_URL
+              value: {{ .Values.auditabilityBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: MULTI_TENANCY_DATABASE_URL
               valueFrom:

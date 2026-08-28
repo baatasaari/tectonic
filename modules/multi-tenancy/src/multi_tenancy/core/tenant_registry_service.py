@@ -17,16 +17,24 @@ from multi_tenancy.core.domain import (
     new_id,
     now,
 )
-from multi_tenancy.core.ports import MultiTenancyRepository
+from multi_tenancy.core.ports import AuditabilityClient, MultiTenancyRepository
 
 
 class TenantRegistryService:
-    def __init__(self, repository: MultiTenancyRepository) -> None:
+    def __init__(self, repository: MultiTenancyRepository, auditability: AuditabilityClient) -> None:
         self._repository = repository
+        self._auditability = auditability
 
-    async def register(self, *, name: str, tier: str = "standard") -> TenantRecord:
-        record = TenantRecord(id=new_id(), name=name, tier=tier)
-        return await self._repository.create_tenant(record)
+    async def register(
+        self, *, name: str, tier: str = "standard", organisation_id: str | None = None,
+    ) -> TenantRecord:
+        record = TenantRecord(id=new_id(), name=name, tier=tier, organisation_id=organisation_id)
+        created = await self._repository.create_tenant(record)
+        await self._auditability.emit({
+            "event": "tenant_created", "tenant_id": created.id, "name": created.name,
+            "organisation_id": organisation_id,
+        })
+        return created
 
     async def get(self, tenant_id: str) -> TenantRecord:
         record = await self._repository.get_tenant(tenant_id)
@@ -43,9 +51,15 @@ class TenantRegistryService:
         tenant = await self.get(tenant_id)
         if not is_legal_transition(tenant.status, to_status):
             raise InvalidTransitionError(tenant.status, to_status)
+        from_status = tenant.status
         tenant.status = to_status
         tenant.updated_at = now()
-        return await self._repository.update_tenant(tenant)
+        updated = await self._repository.update_tenant(tenant)
+        await self._auditability.emit({
+            "event": "tenant_status_changed", "tenant_id": tenant_id,
+            "from_status": from_status.value, "to_status": to_status.value,
+        })
+        return updated
 
     async def suspend(self, tenant_id: str, *, reason: str) -> TenantRecord:
         # `reason` isn't a stored field on TenantRecord today (LLD keeps the entity

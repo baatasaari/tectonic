@@ -1,16 +1,20 @@
-"""Abstract ports this module depends on: persistence, and the one
-generic client shape the Isolation Probe Service reuses against every
-registered platform module.
+"""Abstract ports this module depends on: persistence, the Auditability
+peer, and the one generic client shape the Isolation Probe Service
+reuses against every registered platform module.
 """
 from __future__ import annotations
 
 from typing import Any, Protocol
 
 from multi_tenancy.core.domain import (
+    EnvironmentRecord,
+    HierarchyStatus,
     IsolationProbeResult,
+    OrganisationRecord,
     TenantEntitlementRecord,
     TenantRecord,
     TenantStatus,
+    WorkspaceRecord,
 )
 
 
@@ -42,6 +46,47 @@ class MultiTenancyRepository(Protocol):
         ...
 
     async def list_entitlements(self, tenant_id: str) -> list[TenantEntitlementRecord]: ...
+
+    # --- Organisation / Workspace / Environment (platform hierarchy control plane) ---
+
+    async def create_organisation(self, record: OrganisationRecord) -> OrganisationRecord: ...
+
+    async def get_organisation(self, organisation_id: str) -> OrganisationRecord | None: ...
+
+    async def update_organisation(self, record: OrganisationRecord) -> OrganisationRecord: ...
+
+    async def list_organisations(
+        self, *, status: HierarchyStatus | None = None, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[OrganisationRecord], int]: ...
+
+    async def create_workspace(self, record: WorkspaceRecord) -> WorkspaceRecord: ...
+
+    async def get_workspace(self, workspace_id: str) -> WorkspaceRecord | None: ...
+
+    async def update_workspace(self, record: WorkspaceRecord) -> WorkspaceRecord: ...
+
+    async def list_workspaces(
+        self, *, tenant_id: str | None = None, status: HierarchyStatus | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[WorkspaceRecord], int]: ...
+
+    async def create_environment(self, record: EnvironmentRecord) -> EnvironmentRecord: ...
+
+    async def get_environment(self, environment_id: str) -> EnvironmentRecord | None: ...
+
+    async def update_environment(self, record: EnvironmentRecord) -> EnvironmentRecord: ...
+
+    async def list_environments(
+        self, *, workspace_id: str | None = None, status: HierarchyStatus | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[EnvironmentRecord], int]: ...
+
+
+class AuditabilityClient(Protocol):
+    async def emit(self, event: dict[str, Any]) -> None:
+        """Best-effort: never the reason a tenancy control-plane write
+        fails. Calls Auditability's real `POST /v1/auditability/events`."""
+        ...
 
 
 class TenantScopedListClient(Protocol):

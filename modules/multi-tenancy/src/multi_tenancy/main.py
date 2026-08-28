@@ -12,6 +12,7 @@ from sqlalchemy import text
 
 from multi_tenancy.api.routes_multi_tenancy import router as multi_tenancy_router
 from multi_tenancy.app_context import AppContext
+from multi_tenancy.clients.auditability_client import HTTPAuditabilityClient
 from multi_tenancy.clients.tenant_scoped_list_client import HTTPTenantScopedListClient
 from multi_tenancy.config import MultiTenancySettings, load_settings
 from multi_tenancy.db.session import make_engine, make_session_factory
@@ -35,6 +36,9 @@ def build_app_context(settings: MultiTenancySettings) -> AppContext:
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
+        auditability=HTTPAuditabilityClient(
+            settings.auditability_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+        ),
         probe_clients=probe_clients,
     )
 

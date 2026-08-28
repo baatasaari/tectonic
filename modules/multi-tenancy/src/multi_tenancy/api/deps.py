@@ -5,9 +5,12 @@ from collections.abc import AsyncIterator
 from fastapi import Depends, Request
 
 from multi_tenancy.app_context import AppContext
+from multi_tenancy.core.environment_service import EnvironmentService
 from multi_tenancy.core.isolation_probe_service import IsolationProbeService
+from multi_tenancy.core.organisation_service import OrganisationService
 from multi_tenancy.core.ports import MultiTenancyRepository
 from multi_tenancy.core.tenant_registry_service import TenantRegistryService
+from multi_tenancy.core.workspace_service import WorkspaceService
 from multi_tenancy.db.repository import SQLAlchemyMultiTenancyRepository
 
 
@@ -20,9 +23,21 @@ async def get_repository(ctx: AppContext = Depends(get_ctx)) -> AsyncIterator[Mu
         yield SQLAlchemyMultiTenancyRepository(session)
 
 
-def build_tenant_registry_service(repository: MultiTenancyRepository) -> TenantRegistryService:
-    return TenantRegistryService(repository)
+def build_tenant_registry_service(repository: MultiTenancyRepository, ctx: AppContext) -> TenantRegistryService:
+    return TenantRegistryService(repository, ctx.auditability)
 
 
 def build_isolation_probe_service(repository: MultiTenancyRepository, ctx: AppContext) -> IsolationProbeService:
     return IsolationProbeService(repository, ctx.probe_clients)
+
+
+def build_organisation_service(repository: MultiTenancyRepository, ctx: AppContext) -> OrganisationService:
+    return OrganisationService(repository, ctx.auditability)
+
+
+def build_workspace_service(repository: MultiTenancyRepository, ctx: AppContext) -> WorkspaceService:
+    return WorkspaceService(repository, ctx.auditability)
+
+
+def build_environment_service(repository: MultiTenancyRepository, ctx: AppContext) -> EnvironmentService:
+    return EnvironmentService(repository, ctx.auditability)

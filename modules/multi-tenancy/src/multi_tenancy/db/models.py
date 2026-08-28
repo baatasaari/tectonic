@@ -1,13 +1,15 @@
 """SQLAlchemy 2.0 declarative models for the Multi-tenancy module data
-model (LLD §3): Tenant, IsolationProbeResult.
+model (LLD §3): Tenant, IsolationProbeResult, and the platform hierarchy
+control plane (Organisation, Workspace, Environment).
 """
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CHAR, Boolean, DateTime, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import CHAR, JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from multi_tenancy.db.base import Base
@@ -17,7 +19,8 @@ def _new_id() -> str:
     return str(uuid.uuid4())
 
 
-UUIDType = UUID(as_uuid=False).with_variant(CHAR(36), "sqlite")
+UUIDType = PG_UUID(as_uuid=False).with_variant(CHAR(36), "sqlite")
+JSONType = JSONB().with_variant(JSON(), "sqlite")
 
 
 class Tenant(Base):
@@ -27,7 +30,70 @@ class Tenant(Base):
     name: Mapped[str] = mapped_column(String(255))
     status: Mapped[str] = mapped_column(String(16), default="active")
     tier: Mapped[str] = mapped_column(String(32), default="standard")
+    organisation_id: Mapped[str | None] = mapped_column(
+        UUIDType, ForeignKey("organisations.id"), nullable=True,
+    )
     entitlements_configured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class Organisation(Base):
+    """Top of the platform hierarchy control plane (LLD §Level 3 "The
+    platform hierarchy control plane"): `Organisation -> Tenant ->
+    Workspace -> Environment`. See `core/domain.py`'s `OrganisationRecord`
+    docstring."""
+
+    __tablename__ = "organisations"
+
+    id: Mapped[str] = mapped_column(UUIDType, primary_key=True, default=_new_id)
+    name: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    owner_identity_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    labels: Mapped[dict] = mapped_column(JSONType, default=dict)
+    version: Mapped[int] = mapped_column(Integer(), default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class Workspace(Base):
+    """Second level of the platform hierarchy -- always scoped to exactly
+    one tenant. See `core/domain.py`'s `WorkspaceRecord` docstring."""
+
+    __tablename__ = "workspaces"
+
+    id: Mapped[str] = mapped_column(UUIDType, primary_key=True, default=_new_id)
+    tenant_id: Mapped[str] = mapped_column(UUIDType, ForeignKey("tenants.id"))
+    name: Mapped[str] = mapped_column(String(255))
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    owner_identity_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    labels: Mapped[dict] = mapped_column(JSONType, default=dict)
+    version: Mapped[int] = mapped_column(Integer(), default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class Environment(Base):
+    """Third level of the platform hierarchy -- always scoped to exactly
+    one workspace. See `core/domain.py`'s `EnvironmentRecord` docstring."""
+
+    __tablename__ = "environments"
+
+    id: Mapped[str] = mapped_column(UUIDType, primary_key=True, default=_new_id)
+    workspace_id: Mapped[str] = mapped_column(UUIDType, ForeignKey("workspaces.id"))
+    name: Mapped[str] = mapped_column(String(255))
+    kind: Mapped[str] = mapped_column(String(32), default="development")
+    region: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    owner_identity_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    labels: Mapped[dict] = mapped_column(JSONType, default=dict)
+    version: Mapped[int] = mapped_column(Integer(), default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),

@@ -40,6 +40,7 @@ services:
     environment:
       MULTI_TENANCY_DATABASE_URL: postgresql+asyncpg://multi_tenancy:multi_tenancy@postgres:5432/multi_tenancy
       MULTI_TENANCY_PROBE_TARGETS: '[{"name":"agent-cards","base_url":"http://dependency-stub:9130","list_path":"/v1/agent-cards","audience":"agent-cards"}]'
+      MULTI_TENANCY_AUDITABILITY_BASE_URL: http://dependency-stub:9130
     depends_on:
       postgres:
         condition: service_healthy

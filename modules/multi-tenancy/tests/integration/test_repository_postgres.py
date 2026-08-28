@@ -12,7 +12,16 @@ from alembic.config import Config as AlembicConfig
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from alembic import command
-from multi_tenancy.core.domain import IsolationProbeResult, TenantRecord, TenantStatus, new_id
+from multi_tenancy.core.domain import (
+    EnvironmentRecord,
+    HierarchyStatus,
+    IsolationProbeResult,
+    OrganisationRecord,
+    TenantRecord,
+    TenantStatus,
+    WorkspaceRecord,
+    new_id,
+)
 from multi_tenancy.db.repository import SQLAlchemyMultiTenancyRepository
 
 pytestmark = pytest.mark.asyncio
@@ -108,6 +117,57 @@ async def test_entitlements_round_trip_and_stamp_configured_at(migrated_url):
             assert {e.module_name for e in replaced_again} == {"guardrails"}
             listed_again = await repo.list_entitlements(tenant.id)
             assert {e.module_name for e in listed_again} == {"guardrails"}
+    finally:
+        await engine.dispose()
+
+
+async def test_organisation_workspace_environment_hierarchy_round_trips(migrated_url):
+    """Proves the full Organisation -> Tenant -> Workspace -> Environment
+    chain through real Postgres foreign keys and JSONB `labels` columns
+    -- exactly what SQLite's unit-tier fakes can't exercise."""
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyMultiTenancyRepository(session)
+
+            org = await repo.create_organisation(
+                OrganisationRecord(id=new_id(), name="Acme Holdings hierarchy-test", labels={"tier": "enterprise"}),
+            )
+            assert org.version == 1
+
+            tenant = await repo.create_tenant(
+                TenantRecord(id=new_id(), name="Acme Corp hierarchy-test", organisation_id=org.id),
+            )
+            fetched_tenant = await repo.get_tenant(tenant.id)
+            assert fetched_tenant.organisation_id == org.id
+
+            ws = await repo.create_workspace(
+                WorkspaceRecord(id=new_id(), tenant_id=tenant.id, name="Production workflows"),
+            )
+            fetched_ws = await repo.get_workspace(ws.id)
+            assert fetched_ws.tenant_id == tenant.id
+
+            env = await repo.create_environment(
+                EnvironmentRecord(id=new_id(), workspace_id=ws.id, name="production", kind="production", region="eu-west-1"),
+            )
+            fetched_env = await repo.get_environment(env.id)
+            assert fetched_env.workspace_id == ws.id
+            assert fetched_env.region == "eu-west-1"
+
+            # optimistic-concurrency version bump on a real status transition
+            env.status = HierarchyStatus.SUSPENDED
+            env.version += 1
+            updated_env = await repo.update_environment(env)
+            assert updated_env.status == HierarchyStatus.SUSPENDED
+            assert updated_env.version == 2
+
+            ws_list, ws_total = await repo.list_workspaces(tenant_id=tenant.id)
+            assert ws_total == 1
+            assert ws_list[0].id == ws.id
+
+            env_list, env_total = await repo.list_environments(workspace_id=ws.id)
+            assert env_total == 1
+            assert env_list[0].id == env.id
     finally:
         await engine.dispose()
 

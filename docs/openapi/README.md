@@ -40,7 +40,7 @@ aggregate in SDK and Developer Portal is the source of truth once deployed.
 ## Ports (all 34, sequential 8080–8113)
 
 "Endpoints" below counts operations (a `GET` and `POST` on the same path
-count as two) — 282 total across 261 distinct URL paths. `index.json`
+count as two) — 300 total across 276 distinct URL paths. `index.json`
 carries both (`operation_count`, `path_count`) per module.
 
 | Port | Module | Endpoints |
@@ -74,7 +74,7 @@ carries both (`operation_count`, `path_count`) per module.
 | 8106 | Deployment Strategy | 9 |
 | 8107 | Multi-modality | 5 |
 | 8108 | PromptOps | 12 |
-| 8109 | Multi-tenancy | 13 |
+| 8109 | Multi-tenancy | 31 |
 | 8110 | Identity and Access | 12 |
 | 8111 | Secrets and Credential Management | 11 |
 | 8112 | Billing and Metering | 10 |

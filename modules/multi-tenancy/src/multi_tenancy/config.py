@@ -57,7 +57,7 @@ class MultiTenancySettings(BaseSettings):
         ProbeTargetConfig(name="agent-cards", base_url="http://localhost:8102", list_path="/v1/agent-cards", audience="agent-cards"),
     ]
 
-    dependency_stub_base_url: str = "http://localhost:9130"
+    auditability_base_url: str = "http://localhost:8099"
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
     # every module, so this field's env var name is NOT prefixed like the rest of this

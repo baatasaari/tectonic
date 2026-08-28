@@ -11,7 +11,11 @@ from multi_tenancy.api.deps import get_ctx, get_repository
 from multi_tenancy.api.routes_multi_tenancy import router
 from multi_tenancy.app_context import AppContext
 from multi_tenancy.config import MultiTenancySettings
-from multi_tenancy.core.fakes import InMemoryMultiTenancyRepository, StubTenantScopedListClient
+from multi_tenancy.core.fakes import (
+    InMemoryMultiTenancyRepository,
+    StubAuditabilityClient,
+    StubTenantScopedListClient,
+)
 from multi_tenancy.security.jwt_auth import (
     INSECURE_DEFAULT_SECRET,
     ServiceAuthMiddleware,
@@ -21,13 +25,14 @@ from multi_tenancy.security.jwt_auth import (
 SECRET = INSECURE_DEFAULT_SECRET
 
 
-def _app(repository, *, probe_clients=None):
+def _app(repository, *, probe_clients=None, auditability=None):
     app = FastAPI()
     app.add_middleware(ServiceAuthMiddleware, audience="multi-tenancy", shared_secret=SECRET)
     app.include_router(router)
 
     ctx = AppContext(
         settings=MultiTenancySettings(), engine=None, session_factory=None,
+        auditability=auditability or StubAuditabilityClient(),
         probe_clients=probe_clients or {"agent-cards": StubTenantScopedListClient()},
     )
     app.dependency_overrides[get_ctx] = lambda: ctx
@@ -206,3 +211,219 @@ def test_list_isolation_probes():
 
     assert resp.status_code == 200
     assert resp.json()["total"] == 1
+
+
+# --- Organisation / Workspace / Environment (platform hierarchy control plane) ---
+
+
+def test_organisation_lifecycle():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        org = client.post(
+            "/v1/multi-tenancy/organisations", json={"name": "Acme Holdings"}, headers=headers,
+        ).json()
+        assert org["status"] == "active"
+        assert org["version"] == 1
+
+        fetched = client.get(f"/v1/multi-tenancy/organisations/{org['id']}", headers=headers).json()
+        assert fetched["id"] == org["id"]
+
+        suspended = client.post(
+            f"/v1/multi-tenancy/organisations/{org['id']}/suspend", json={"reason": "review"}, headers=headers,
+        ).json()
+        assert suspended["status"] == "suspended"
+
+        reactivated = client.post(
+            f"/v1/multi-tenancy/organisations/{org['id']}/reactivate", headers=headers,
+        ).json()
+        assert reactivated["status"] == "active"
+
+        deleted = client.post(f"/v1/multi-tenancy/organisations/{org['id']}/delete", headers=headers).json()
+        assert deleted["status"] == "deleted"
+
+        resp = client.post(f"/v1/multi-tenancy/organisations/{org['id']}/reactivate", headers=headers)
+
+    assert resp.status_code == 409
+
+
+def test_get_organisation_returns_404_when_missing():
+    app = _app(InMemoryMultiTenancyRepository())
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/multi-tenancy/organisations/does-not-exist", headers=_headers())
+
+    assert resp.status_code == 404
+
+
+def test_list_organisations_filters_by_status():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        active = client.post(
+            "/v1/multi-tenancy/organisations", json={"name": "Active Holdings"}, headers=headers,
+        ).json()
+        suspended = client.post(
+            "/v1/multi-tenancy/organisations", json={"name": "Suspended Holdings"}, headers=headers,
+        ).json()
+        client.post(f"/v1/multi-tenancy/organisations/{suspended['id']}/suspend", json={"reason": "r"}, headers=headers)
+
+        resp = client.get("/v1/multi-tenancy/organisations", params={"status": "active"}, headers=headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["items"][0]["id"] == active["id"]
+
+
+def test_tenant_can_be_registered_under_an_organisation():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        org = client.post(
+            "/v1/multi-tenancy/organisations", json={"name": "Acme Holdings"}, headers=headers,
+        ).json()
+        tenant = client.post(
+            "/v1/multi-tenancy/tenants", json={"name": "Acme Corp", "organisation_id": org["id"]}, headers=headers,
+        ).json()
+
+    assert tenant["organisation_id"] == org["id"]
+
+
+def test_workspace_lifecycle():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        tenant = client.post("/v1/multi-tenancy/tenants", json={"name": "Acme Corp"}, headers=headers).json()
+        ws = client.post(
+            "/v1/multi-tenancy/workspaces",
+            json={"tenant_id": tenant["id"], "name": "Production workflows"}, headers=headers,
+        ).json()
+        assert ws["status"] == "active"
+        assert ws["tenant_id"] == tenant["id"]
+
+        fetched = client.get(f"/v1/multi-tenancy/workspaces/{ws['id']}", headers=headers).json()
+        assert fetched["id"] == ws["id"]
+
+        suspended = client.post(
+            f"/v1/multi-tenancy/workspaces/{ws['id']}/suspend", json={"reason": "incident"}, headers=headers,
+        ).json()
+        assert suspended["status"] == "suspended"
+
+        reactivated = client.post(f"/v1/multi-tenancy/workspaces/{ws['id']}/reactivate", headers=headers).json()
+        assert reactivated["status"] == "active"
+
+        deleted = client.post(f"/v1/multi-tenancy/workspaces/{ws['id']}/delete", headers=headers).json()
+        assert deleted["status"] == "deleted"
+
+
+def test_register_workspace_returns_404_for_an_unknown_tenant():
+    app = _app(InMemoryMultiTenancyRepository())
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/multi-tenancy/workspaces",
+            json={"tenant_id": "does-not-exist", "name": "Production workflows"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 404
+
+
+def test_list_workspaces_filters_by_tenant():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        tenant_a = client.post("/v1/multi-tenancy/tenants", json={"name": "Acme Corp"}, headers=headers).json()
+        tenant_b = client.post("/v1/multi-tenancy/tenants", json={"name": "Globex Corp"}, headers=headers).json()
+        ws_a = client.post(
+            "/v1/multi-tenancy/workspaces", json={"tenant_id": tenant_a["id"], "name": "A"}, headers=headers,
+        ).json()
+        client.post(
+            "/v1/multi-tenancy/workspaces", json={"tenant_id": tenant_b["id"], "name": "B"}, headers=headers,
+        )
+
+        resp = client.get("/v1/multi-tenancy/workspaces", params={"tenant_id": tenant_a["id"]}, headers=headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["items"][0]["id"] == ws_a["id"]
+
+
+def test_environment_lifecycle():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        tenant = client.post("/v1/multi-tenancy/tenants", json={"name": "Acme Corp"}, headers=headers).json()
+        ws = client.post(
+            "/v1/multi-tenancy/workspaces",
+            json={"tenant_id": tenant["id"], "name": "Production workflows"}, headers=headers,
+        ).json()
+        env = client.post(
+            "/v1/multi-tenancy/environments",
+            json={"workspace_id": ws["id"], "name": "production", "kind": "production", "region": "eu-west-1"},
+            headers=headers,
+        ).json()
+        assert env["status"] == "active"
+        assert env["workspace_id"] == ws["id"]
+        assert env["kind"] == "production"
+        assert env["region"] == "eu-west-1"
+
+        fetched = client.get(f"/v1/multi-tenancy/environments/{env['id']}", headers=headers).json()
+        assert fetched["id"] == env["id"]
+
+        suspended = client.post(
+            f"/v1/multi-tenancy/environments/{env['id']}/suspend", json={"reason": "incident"}, headers=headers,
+        ).json()
+        assert suspended["status"] == "suspended"
+
+        reactivated = client.post(f"/v1/multi-tenancy/environments/{env['id']}/reactivate", headers=headers).json()
+        assert reactivated["status"] == "active"
+
+        deleted = client.post(f"/v1/multi-tenancy/environments/{env['id']}/delete", headers=headers).json()
+        assert deleted["status"] == "deleted"
+
+
+def test_register_environment_returns_404_for_an_unknown_workspace():
+    app = _app(InMemoryMultiTenancyRepository())
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/multi-tenancy/environments",
+            json={"workspace_id": "does-not-exist", "name": "production"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 404
+
+
+def test_list_environments_filters_by_workspace():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        tenant = client.post("/v1/multi-tenancy/tenants", json={"name": "Acme Corp"}, headers=headers).json()
+        ws_a = client.post(
+            "/v1/multi-tenancy/workspaces", json={"tenant_id": tenant["id"], "name": "A"}, headers=headers,
+        ).json()
+        ws_b = client.post(
+            "/v1/multi-tenancy/workspaces", json={"tenant_id": tenant["id"], "name": "B"}, headers=headers,
+        ).json()
+        env_a = client.post(
+            "/v1/multi-tenancy/environments", json={"workspace_id": ws_a["id"], "name": "prod-a"}, headers=headers,
+        ).json()
+        client.post(
+            "/v1/multi-tenancy/environments", json={"workspace_id": ws_b["id"], "name": "prod-b"}, headers=headers,
+        )
+
+        resp = client.get("/v1/multi-tenancy/environments", params={"workspace_id": ws_a["id"]}, headers=headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["items"][0]["id"] == env_a["id"]
