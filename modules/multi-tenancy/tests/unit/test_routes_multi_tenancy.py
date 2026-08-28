@@ -427,3 +427,211 @@ def test_list_environments_filters_by_workspace():
     body = resp.json()
     assert body["total"] == 1
     assert body["items"][0]["id"] == env_a["id"]
+
+
+# --- Quota Set / real-time quota enforcement ---
+
+
+def test_get_quota_set_before_any_limits_are_set_is_unconfigured():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        tenant = client.post("/v1/multi-tenancy/tenants", json={"name": "Acme Corp"}, headers=headers).json()
+        resp = client.get(f"/v1/multi-tenancy/tenants/{tenant['id']}/quota-set", headers=headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["configured"] is False
+    assert body["limits"] == {}
+
+
+def test_get_quota_set_returns_404_for_an_unknown_tenant():
+    app = _app(InMemoryMultiTenancyRepository())
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/multi-tenancy/tenants/does-not-exist/quota-set", headers=_headers())
+
+    assert resp.status_code == 404
+
+
+def test_set_and_get_quota_set_round_trips():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        tenant = client.post("/v1/multi-tenancy/tenants", json={"name": "Acme Corp"}, headers=headers).json()
+        set_resp = client.post(
+            f"/v1/multi-tenancy/tenants/{tenant['id']}/quota-set",
+            json={"limits": {"requests_per_minute": 600, "storage_gb": 500}}, headers=headers,
+        )
+        get_resp = client.get(f"/v1/multi-tenancy/tenants/{tenant['id']}/quota-set", headers=headers)
+
+    assert set_resp.status_code == 200
+    assert set_resp.json()["configured"] is True
+    assert get_resp.json()["limits"] == {"requests_per_minute": 600, "storage_gb": 500}
+
+
+def test_check_quota_allows_an_unconfigured_tenant():
+    app = _app(InMemoryMultiTenancyRepository())
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/multi-tenancy/tenants/acme/quota/check",
+            json={"resource_class": "requests_per_minute", "amount": 1}, headers=_headers(),
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["allowed"] is True
+
+
+def test_check_quota_denies_once_the_rate_limit_is_exceeded():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        tenant = client.post("/v1/multi-tenancy/tenants", json={"name": "Acme Corp"}, headers=headers).json()
+        set_resp = client.post(
+            f"/v1/multi-tenancy/tenants/{tenant['id']}/quota-set",
+            json={"limits": {"requests_per_minute": 1}}, headers=headers,
+        )
+        assert set_resp.status_code == 200
+        first = client.post(
+            f"/v1/multi-tenancy/tenants/{tenant['id']}/quota/check",
+            json={"resource_class": "requests_per_minute"}, headers=headers,
+        )
+        second = client.post(
+            f"/v1/multi-tenancy/tenants/{tenant['id']}/quota/check",
+            json={"resource_class": "requests_per_minute"}, headers=headers,
+        )
+
+    assert first.json()["allowed"] is True
+    assert second.json()["allowed"] is False
+
+
+def test_check_quota_returns_400_when_a_capacity_shaped_class_is_missing_current_usage():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        tenant = client.post("/v1/multi-tenancy/tenants", json={"name": "Acme Corp"}, headers=headers).json()
+        set_resp = client.post(
+            f"/v1/multi-tenancy/tenants/{tenant['id']}/quota-set",
+            json={"limits": {"storage_gb": 500}}, headers=headers,
+        )
+        assert set_resp.status_code == 200
+        resp = client.post(
+            f"/v1/multi-tenancy/tenants/{tenant['id']}/quota/check",
+            json={"resource_class": "storage_gb"}, headers=headers,
+        )
+
+    assert resp.status_code == 400
+
+
+# --- Resource Allocation ---
+
+
+def _make_environment(client, headers):
+    tenant = client.post("/v1/multi-tenancy/tenants", json={"name": "Acme Corp"}, headers=headers).json()
+    ws = client.post(
+        "/v1/multi-tenancy/workspaces", json={"tenant_id": tenant["id"], "name": "Production"}, headers=headers,
+    ).json()
+    return client.post(
+        "/v1/multi-tenancy/environments", json={"workspace_id": ws["id"], "name": "production"}, headers=headers,
+    ).json()
+
+
+def test_request_resource_allocation_returns_404_for_an_unknown_environment():
+    app = _app(InMemoryMultiTenancyRepository())
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/multi-tenancy/resource-allocations",
+            json={"environment_id": "does-not-exist", "resources": {"cpu_cores": 4}}, headers=_headers(),
+        )
+
+    assert resp.status_code == 404
+
+
+def test_first_request_is_requested_then_approve_makes_it_active():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        env = _make_environment(client, headers)
+        requested = client.post(
+            "/v1/multi-tenancy/resource-allocations",
+            json={"environment_id": env["id"], "resources": {"cpu_cores": 4}, "requested_by": "alice"},
+            headers=headers,
+        ).json()
+        assert requested["status"] == "requested"
+
+        approved = client.post(
+            f"/v1/multi-tenancy/resource-allocations/{requested['id']}/approve",
+            json={"approved_by": "platform-admin"}, headers=headers,
+        )
+
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "active"
+    assert approved.json()["approved_by"] == "platform-admin"
+
+
+def test_reject_stores_the_reason_and_is_terminal():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        env = _make_environment(client, headers)
+        requested = client.post(
+            "/v1/multi-tenancy/resource-allocations",
+            json={"environment_id": env["id"], "resources": {"cpu_cores": 4}}, headers=headers,
+        ).json()
+
+        rejected = client.post(
+            f"/v1/multi-tenancy/resource-allocations/{requested['id']}/reject",
+            json={"reason": "over regional capacity"}, headers=headers,
+        )
+        reapprove = client.post(
+            f"/v1/multi-tenancy/resource-allocations/{requested['id']}/approve",
+            json={"approved_by": "platform-admin"}, headers=headers,
+        )
+
+    assert rejected.status_code == 200
+    assert rejected.json()["status"] == "rejected"
+    assert rejected.json()["rejection_reason"] == "over regional capacity"
+    assert reapprove.status_code == 409
+
+
+def test_get_resource_allocation_returns_404_for_an_unknown_id():
+    app = _app(InMemoryMultiTenancyRepository())
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/multi-tenancy/resource-allocations/does-not-exist", headers=_headers())
+
+    assert resp.status_code == 404
+
+
+def test_list_resource_allocations_filters_by_environment():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        env_a = _make_environment(client, headers)
+        env_b = _make_environment(client, headers)
+        allocation_a = client.post(
+            "/v1/multi-tenancy/resource-allocations",
+            json={"environment_id": env_a["id"], "resources": {"cpu_cores": 4}}, headers=headers,
+        ).json()
+        client.post(
+            "/v1/multi-tenancy/resource-allocations",
+            json={"environment_id": env_b["id"], "resources": {"cpu_cores": 4}}, headers=headers,
+        )
+
+        resp = client.get(
+            "/v1/multi-tenancy/resource-allocations", params={"environment_id": env_a["id"]}, headers=headers,
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["items"][0]["id"] == allocation_a["id"]

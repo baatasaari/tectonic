@@ -492,15 +492,40 @@ applied to the remaining 26, following the same
 "script it once, verify every module" discipline the earlier
 shared-stub peer-routing fix used.
 
+**Also fixed**: a quota and resource-allocation service (assessment
+§5.2), the remaining two legs of the canonical resource chain begun in
+Multi-tenancy's Organisation/Workspace/Environment work above
+(`... -> Entitlement Set -> Quota Set -> ... -> Resource Allocation`).
+`QuotaSet` is a real, wholesale-replace per-tenant resource-limit store
+(`POST/GET /tenants/{id}/quota-set`); `POST /tenants/{id}/quota/check`
+is the real-time enforcement decision — a genuine atomic fixed-window
+counter (`INSERT ... ON CONFLICT DO UPDATE ... RETURNING`, verified
+correct under concurrent callers against real Postgres) for rate-shaped
+resource classes like `requests_per_minute`, and a stateless ceiling
+check against caller-reported usage for capacity-shaped classes like
+`storage_gb`, since the owning module — not Multi-tenancy — is the real
+source of truth for its own current usage. `ResourceAllocation` is the
+assessment's own environment-scoped "canonical allocation object" with
+a real request -> automated-or-manual-approval -> active lifecycle: a
+change within 20% of the current active value on every resource class
+auto-approves; a bigger jump, or a resource class the environment never
+had before, needs an explicit human approval. Like `Organisation`/
+`Workspace`/`Environment`, this deliberately does not yet reconcile
+approved numbers against real Kubernetes/database/vector capacity or
+issue a real billing amendment — see `modules/multi-tenancy/README.md`
+for the full list of what's not built yet, including that no other
+module calls `quota/check` before doing work yet (this ships the real,
+tested capability first, the same sequencing
+`EntitlementGateMiddleware` used before its own 27-module rollout).
+
 **In progress**, tracked against the assessment's own Phase 1 (platform
-kernel) scope: a quota and resource-allocation service, a
-CloudEvents-based event backbone, Vector DB's production persistence
-story, OpenAPI security-scheme declarations, Kubernetes hardening
-(NetworkPolicy, restricted pod security context) across every Helm
-chart, Identity and Access's OIDC/SAML/SCIM federation, Secrets'
-managed-KMS integration, an idempotent metering ledger, Observability's
-trace-query/SLO surfaces, and CI supply-chain gates (SBOM, signing,
-contract tests).
+kernel) scope: a CloudEvents-based event backbone, Vector DB's
+production persistence story, OpenAPI security-scheme declarations,
+Kubernetes hardening (NetworkPolicy, restricted pod security context)
+across every Helm chart, Identity and Access's OIDC/SAML/SCIM
+federation, Secrets' managed-KMS integration, an idempotent metering
+ledger, Observability's trace-query/SLO surfaces, and CI supply-chain
+gates (SBOM, signing, contract tests).
 
 ## Modules
 

@@ -4,6 +4,7 @@ reuses against every registered platform module.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Protocol
 
 from multi_tenancy.core.domain import (
@@ -11,6 +12,9 @@ from multi_tenancy.core.domain import (
     HierarchyStatus,
     IsolationProbeResult,
     OrganisationRecord,
+    QuotaSet,
+    ResourceAllocation,
+    ResourceAllocationStatus,
     TenantEntitlementRecord,
     TenantRecord,
     TenantStatus,
@@ -80,6 +84,48 @@ class MultiTenancyRepository(Protocol):
         self, *, workspace_id: str | None = None, status: HierarchyStatus | None = None,
         limit: int = 50, offset: int = 0,
     ) -> tuple[list[EnvironmentRecord], int]: ...
+
+    # --- Quota Set / real-time quota enforcement ---
+
+    async def get_quota_set(self, tenant_id: str) -> QuotaSet | None: ...
+
+    async def upsert_quota_set(self, *, tenant_id: str, limits: dict[str, float]) -> QuotaSet:
+        """Wholesale replace, the same pattern `replace_entitlements`
+        already established: one row per tenant, the whole `limits`
+        dict is always replaced together, never patched key by key."""
+        ...
+
+    async def increment_quota_counter(
+        self, *, tenant_id: str, resource_class: str, amount: float, window_seconds: int, now: datetime,
+    ) -> float:
+        """Atomically increments the fixed-window counter for
+        `(tenant_id, resource_class, quota_window_start(now,
+        window_seconds))` by `amount` and returns the new total -- a
+        single atomic upsert at the repository layer (real
+        `INSERT ... ON CONFLICT DO UPDATE` in the SQL implementation),
+        so this is correct under concurrent callers, not a
+        read-then-write race."""
+        ...
+
+    # --- Resource Allocation ---
+
+    async def create_resource_allocation(self, record: ResourceAllocation) -> ResourceAllocation: ...
+
+    async def get_resource_allocation(self, allocation_id: str) -> ResourceAllocation | None: ...
+
+    async def update_resource_allocation(self, record: ResourceAllocation) -> ResourceAllocation: ...
+
+    async def get_active_resource_allocation(self, environment_id: str) -> ResourceAllocation | None:
+        """The most recently updated `ACTIVE` allocation for this
+        environment -- the baseline `ResourceAllocationService` compares
+        a new request against. `None` if this environment has never had
+        one approved."""
+        ...
+
+    async def list_resource_allocations(
+        self, *, environment_id: str | None = None, status: ResourceAllocationStatus | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[ResourceAllocation], int]: ...
 
 
 class AuditabilityClient(Protocol):

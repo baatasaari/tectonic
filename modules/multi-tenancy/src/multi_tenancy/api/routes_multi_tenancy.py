@@ -7,6 +7,9 @@ from multi_tenancy.api.deps import (
     build_environment_service,
     build_isolation_probe_service,
     build_organisation_service,
+    build_quota_enforcement_service,
+    build_quota_set_service,
+    build_resource_allocation_service,
     build_tenant_registry_service,
     build_workspace_service,
     get_ctx,
@@ -19,12 +22,15 @@ from multi_tenancy.core.domain import (
     InvalidTransitionError,
     OrganisationNotFoundError,
     ProbeTargetNotFoundError,
+    ResourceAllocationNotFoundError,
+    ResourceAllocationStatus,
     TenantNotFoundError,
     TenantStatus,
     WorkspaceNotFoundError,
 )
 from multi_tenancy.core.ports import MultiTenancyRepository
 from multi_tenancy.schemas.multi_tenancy import (
+    ApproveResourceAllocationRequest,
     EntitlementListResponse,
     EnvironmentListResponse,
     EnvironmentSchema,
@@ -32,12 +38,20 @@ from multi_tenancy.schemas.multi_tenancy import (
     IsolationProbeResultSchema,
     OrganisationListResponse,
     OrganisationSchema,
+    QuotaCheckRequest,
+    QuotaCheckResultSchema,
+    QuotaSetSchema,
     RegisterEnvironmentRequest,
     RegisterOrganisationRequest,
     RegisterTenantRequest,
     RegisterWorkspaceRequest,
+    RejectResourceAllocationRequest,
+    RequestResourceAllocationRequest,
+    ResourceAllocationListResponse,
+    ResourceAllocationSchema,
     RunIsolationProbeRequest,
     SetEntitlementsRequest,
+    SetQuotaLimitsRequest,
     SuspendRequest,
     SuspendTenantRequest,
     TenantGateResultSchema,
@@ -77,6 +91,23 @@ def _environment_schema(env) -> EnvironmentSchema:
         id=env.id, workspace_id=env.workspace_id, name=env.name, kind=env.kind, region=env.region,
         status=env.status.value, owner_identity_id=env.owner_identity_id, labels=env.labels, version=env.version,
         created_at=env.created_at, updated_at=env.updated_at,
+    )
+
+
+def _quota_set_schema(quota_set) -> QuotaSetSchema:
+    return QuotaSetSchema(
+        tenant_id=quota_set.tenant_id, limits=quota_set.limits, configured=quota_set.configured_at is not None,
+        version=quota_set.version, updated_at=quota_set.updated_at,
+    )
+
+
+def _resource_allocation_schema(allocation) -> ResourceAllocationSchema:
+    return ResourceAllocationSchema(
+        id=allocation.id, environment_id=allocation.environment_id, resources=allocation.resources,
+        reserved_capacity=allocation.reserved_capacity, status=allocation.status.value,
+        requested_by=allocation.requested_by, approved_by=allocation.approved_by,
+        rejection_reason=allocation.rejection_reason, version=allocation.version,
+        created_at=allocation.created_at, updated_at=allocation.updated_at,
     )
 
 
@@ -513,6 +544,147 @@ async def delete_environment(
     except InvalidTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _environment_schema(env)
+
+
+# --- Quota Set / real-time quota enforcement ---
+
+
+@router.get("/tenants/{tenant_id}/quota-set", response_model=QuotaSetSchema)
+async def get_quota_set(
+    tenant_id: str,
+    ctx: AppContext = Depends(get_ctx),
+    repository: MultiTenancyRepository = Depends(get_repository),
+) -> QuotaSetSchema:
+    try:
+        await build_tenant_registry_service(repository, ctx).get(tenant_id)  # 404s for an unknown tenant
+    except TenantNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    quota_set = await build_quota_set_service(repository, ctx).get(tenant_id)
+    if quota_set is None:
+        return QuotaSetSchema(tenant_id=tenant_id, limits={}, configured=False, version=0, updated_at=None)
+    return _quota_set_schema(quota_set)
+
+
+@router.post("/tenants/{tenant_id}/quota-set", response_model=QuotaSetSchema)
+async def set_quota_set(
+    tenant_id: str,
+    body: SetQuotaLimitsRequest,
+    ctx: AppContext = Depends(get_ctx),
+    repository: MultiTenancyRepository = Depends(get_repository),
+) -> QuotaSetSchema:
+    try:
+        await build_tenant_registry_service(repository, ctx).get(tenant_id)
+    except TenantNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    quota_set = await build_quota_set_service(repository, ctx).set_limits(tenant_id, limits=body.limits)
+    return _quota_set_schema(quota_set)
+
+
+@router.post("/tenants/{tenant_id}/quota/check", response_model=QuotaCheckResultSchema)
+async def check_quota(
+    tenant_id: str,
+    body: QuotaCheckRequest,
+    ctx: AppContext = Depends(get_ctx),
+    repository: MultiTenancyRepository = Depends(get_repository),
+) -> QuotaCheckResultSchema:
+    service = build_quota_enforcement_service(repository, ctx)
+    try:
+        result = await service.check_and_consume(
+            tenant_id, resource_class=body.resource_class, amount=body.amount, current_usage=body.current_usage,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return QuotaCheckResultSchema(
+        allowed=result.allowed, resource_class=result.resource_class, limit=result.limit,
+        used=result.used, remaining=result.remaining, reason=result.reason,
+    )
+
+
+# --- Resource Allocation ---
+
+
+@router.post("/resource-allocations", response_model=ResourceAllocationSchema, status_code=201)
+async def request_resource_allocation(
+    body: RequestResourceAllocationRequest,
+    ctx: AppContext = Depends(get_ctx),
+    repository: MultiTenancyRepository = Depends(get_repository),
+) -> ResourceAllocationSchema:
+    service = build_resource_allocation_service(repository, ctx)
+    try:
+        allocation = await service.request_change(
+            environment_id=body.environment_id, resources=body.resources,
+            reserved_capacity=body.reserved_capacity, requested_by=body.requested_by,
+        )
+    except EnvironmentNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _resource_allocation_schema(allocation)
+
+
+@router.get("/resource-allocations", response_model=ResourceAllocationListResponse)
+async def list_resource_allocations(
+    environment_id: str | None = Query(None),
+    status: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    ctx: AppContext = Depends(get_ctx),
+    repository: MultiTenancyRepository = Depends(get_repository),
+) -> ResourceAllocationListResponse:
+    service = build_resource_allocation_service(repository, ctx)
+    status_filter = ResourceAllocationStatus(status) if status is not None else None
+    allocations, total = await service.list(
+        environment_id=environment_id, status=status_filter, limit=limit, offset=offset,
+    )
+    return ResourceAllocationListResponse(
+        items=[_resource_allocation_schema(a) for a in allocations], total=total, limit=limit, offset=offset,
+    )
+
+
+@router.get("/resource-allocations/{allocation_id}", response_model=ResourceAllocationSchema)
+async def get_resource_allocation(
+    allocation_id: str,
+    ctx: AppContext = Depends(get_ctx),
+    repository: MultiTenancyRepository = Depends(get_repository),
+) -> ResourceAllocationSchema:
+    service = build_resource_allocation_service(repository, ctx)
+    try:
+        allocation = await service.get(allocation_id)
+    except ResourceAllocationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _resource_allocation_schema(allocation)
+
+
+@router.post("/resource-allocations/{allocation_id}/approve", response_model=ResourceAllocationSchema)
+async def approve_resource_allocation(
+    allocation_id: str,
+    body: ApproveResourceAllocationRequest,
+    ctx: AppContext = Depends(get_ctx),
+    repository: MultiTenancyRepository = Depends(get_repository),
+) -> ResourceAllocationSchema:
+    service = build_resource_allocation_service(repository, ctx)
+    try:
+        allocation = await service.approve(allocation_id, approved_by=body.approved_by)
+    except ResourceAllocationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _resource_allocation_schema(allocation)
+
+
+@router.post("/resource-allocations/{allocation_id}/reject", response_model=ResourceAllocationSchema)
+async def reject_resource_allocation(
+    allocation_id: str,
+    body: RejectResourceAllocationRequest,
+    ctx: AppContext = Depends(get_ctx),
+    repository: MultiTenancyRepository = Depends(get_repository),
+) -> ResourceAllocationSchema:
+    service = build_resource_allocation_service(repository, ctx)
+    try:
+        allocation = await service.reject(allocation_id, reason=body.reason)
+    except ResourceAllocationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _resource_allocation_schema(allocation)
 
 
 @router.post("/isolation-probes", response_model=IsolationProbeResultSchema, status_code=201)

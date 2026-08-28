@@ -40,7 +40,7 @@ aggregate in SDK and Developer Portal is the source of truth once deployed.
 ## Ports (all 34, sequential 8080–8113)
 
 "Endpoints" below counts operations (a `GET` and `POST` on the same path
-count as two) — 300 total across 276 distinct URL paths. `index.json`
+count as two) — 308 total across 282 distinct URL paths. `index.json`
 carries both (`operation_count`, `path_count`) per module.
 
 | Port | Module | Endpoints |
@@ -74,7 +74,7 @@ carries both (`operation_count`, `path_count`) per module.
 | 8106 | Deployment Strategy | 9 |
 | 8107 | Multi-modality | 5 |
 | 8108 | PromptOps | 12 |
-| 8109 | Multi-tenancy | 31 |
+| 8109 | Multi-tenancy | 39 |
 | 8110 | Identity and Access | 12 |
 | 8111 | Secrets and Credential Management | 11 |
 | 8112 | Billing and Metering | 10 |
@@ -88,5 +88,5 @@ surface (see each spec for the exact set FastAPI documents).
 
 [`docs/openapi/`](.) itself is just JSON — for browsing, use the
 **Tectonic API Explorer** artifact (a searchable, categorized UI over
-all 282 operations, with request/response schemas and a generated curl
+all 308 operations, with request/response schemas and a generated curl
 example per endpoint), or any running module's own `/docs`/`/redoc`.

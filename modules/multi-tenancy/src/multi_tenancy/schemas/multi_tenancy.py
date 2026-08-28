@@ -157,3 +157,76 @@ class EnvironmentListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+# --- Quota Set / real-time quota enforcement ---
+
+
+class SetQuotaLimitsRequest(BaseModel):
+    limits: dict[str, float]
+
+
+class QuotaSetSchema(BaseModel):
+    tenant_id: str
+    limits: dict[str, float]
+    configured: bool
+    version: int
+    updated_at: datetime | None = None
+
+
+class QuotaCheckRequest(BaseModel):
+    resource_class: str
+    amount: float = 1.0
+    # Required only for a capacity-shaped resource class (one not ending
+    # `_per_minute`/`_per_second`/`_per_hour`/`_per_day`/`_daily`) -- see
+    # QuotaEnforcementService's own docstring for why this module can't
+    # track that usage itself.
+    current_usage: float | None = None
+
+
+class QuotaCheckResultSchema(BaseModel):
+    allowed: bool
+    resource_class: str
+    limit: float | None
+    used: float
+    remaining: float | None
+    reason: str
+
+
+# --- Resource Allocation ---
+
+
+class RequestResourceAllocationRequest(BaseModel):
+    environment_id: str
+    resources: dict[str, float]
+    reserved_capacity: bool = False
+    requested_by: str | None = None
+
+
+class ResourceAllocationSchema(BaseModel):
+    id: str
+    environment_id: str
+    resources: dict[str, float]
+    reserved_capacity: bool
+    status: str
+    requested_by: str | None = None
+    approved_by: str | None = None
+    rejection_reason: str | None = None
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ResourceAllocationListResponse(BaseModel):
+    items: list[ResourceAllocationSchema]
+    total: int
+    limit: int
+    offset: int
+
+
+class ApproveResourceAllocationRequest(BaseModel):
+    approved_by: str
+
+
+class RejectResourceAllocationRequest(BaseModel):
+    reason: str

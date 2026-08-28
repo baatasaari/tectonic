@@ -15,15 +15,17 @@ src/multi_tenancy/
   app_context.py           Process-wide dependency container
   config.py                  Pydantic Settings — LLD config schema, incl. probe_targets
   core/
-    domain.py                 TenantRecord/IsolationProbeResult, Organisation/Workspace/Environment, the lifecycle state machines
+    domain.py                 TenantRecord/IsolationProbeResult, Organisation/Workspace/Environment, QuotaSet/ResourceAllocation, the lifecycle state machines
     ports.py                    Repository, the Auditability client, the one generic tenant-scoped list client shape
     fakes.py                     In-memory implementations of every port, for unit tests
     tenant_registry_service.py    Tenant Registry — register/suspend/reactivate/delete, the gate check
     organisation_service.py        Organisation Service — top of the platform hierarchy control plane
     workspace_service.py            Workspace Service — always scoped to one tenant
     environment_service.py           Environment Service — always scoped to one workspace
-    isolation_probe_service.py         Isolation Probe Service — the real, executable isolation check
-  db/                      SQLAlchemy 2.0 async models + repository (Tenant/Organisation/Workspace/Environment/IsolationProbeResult)
+    quota_service.py                  Quota Set management + real-time QuotaEnforcementService
+    resource_allocation_service.py     Resource Allocation Service — request/approve/reject
+    isolation_probe_service.py          Isolation Probe Service — the real, executable isolation check
+  db/                      SQLAlchemy 2.0 async models + repository (Tenant/Organisation/Workspace/Environment/QuotaSet/ResourceAllocation/IsolationProbeResult)
   clients/                 Resilient HTTP clients: Auditability, and the one reused against every registered probe target
   security/                 Service-to-service JWT bearer auth (shared signing key)
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
@@ -101,6 +103,51 @@ src/multi_tenancy/
   no other module has adopted `environment_id` scoping yet (Agent
   Applications — Workflow Engine runs, Conversational Engine sessions —
   are still tenant-scoped only).
+- **Quota Set and Resource Allocation** (independent architecture
+  assessment §5.2 "Resource allocation and quota change"): the
+  remaining two legs of the assessment's own canonical resource chain
+  (`... -> Entitlement Set -> Quota Set -> ... -> Resource Allocation`).
+  A `QuotaSet` is one tenant's resource-class limits
+  (`POST/GET /tenants/{id}/quota-set`, a wholesale replace like
+  entitlements — never a field-by-field patch); an unconfigured tenant
+  is unlimited, the same rollout-safety default entitlements already
+  established. `POST /tenants/{id}/quota/check` is the real-time
+  decision every module wanting to enforce a quota before doing
+  expensive work is meant to call — the quota analogue of `gate()`.
+  Two enforcement shapes, chosen by resource-class name convention
+  (`_per_minute`/`_per_second`/`_per_hour`/`_per_day`/`_daily` suffix
+  vs. everything else): **rate-shaped** classes (`requests_per_minute`,
+  `tokens_per_minute`, ...) get a real, atomic, fixed-window counter
+  this module owns outright (`quota_counters` table, a genuine
+  `INSERT ... ON CONFLICT DO UPDATE ... RETURNING`, correct under
+  concurrent callers — verified against real Postgres, not just
+  SQLite fakes); **capacity-shaped** classes (`storage_gb`,
+  `vector_count`, ...) are a stateless ceiling check against
+  `current_usage` the caller reports, since the owning module (Vector
+  DB for `vector_count`, etc.) is the real source of truth for its own
+  usage, the same don't-duplicate-another-module's-state posture
+  FinOps already takes reading Billing's real spend. A
+  `ResourceAllocation` is the assessment's own "canonical allocation
+  object" (CPU/memory/GPU, replicas, concurrent runs, requests/tokens
+  per minute, model spend, workflow concurrency, storage, vector
+  count, ingestion volume, retention, ..., kept as a flexible
+  `resources` dict rather than one field per dimension) scoped to one
+  Environment, with a real request -> automated-or-manual-approval ->
+  active lifecycle (`POST /resource-allocations`, `.../approve`,
+  `.../reject`): a request that changes every resource class by no
+  more than 20% of its current active value auto-approves immediately;
+  a brand-new resource class, or a bigger jump, needs an explicit human
+  `approve`. **What this deliberately does not do yet**: reconcile the
+  approved numbers against real Kubernetes/database/vector capacity, a
+  real regional capacity check, or a real billing amendment — this
+  module owns the *approved intent*, not enforcement against live
+  infrastructure (nor does any other module yet call `quota/check`
+  before doing work — this ships the real, tested capability other
+  modules are meant to adopt next, the same "reference implementation
+  first, rollout second" shape `EntitlementGateMiddleware` used); and a
+  stale `quota_counters` row for a window that's long past is never
+  cleaned up — a real TTL/GC job for old windows is separate, unbuilt
+  work.
 
 ## Running locally
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from multi_tenancy.core.domain import (
@@ -11,10 +12,14 @@ from multi_tenancy.core.domain import (
     HierarchyStatus,
     IsolationProbeResult,
     OrganisationRecord,
+    QuotaSet,
+    ResourceAllocation,
+    ResourceAllocationStatus,
     TenantEntitlementRecord,
     TenantRecord,
     TenantStatus,
     WorkspaceRecord,
+    quota_window_start,
 )
 from multi_tenancy.db import models
 
@@ -68,6 +73,22 @@ def _probe_result_to_domain(m: models.IsolationProbeResult) -> IsolationProbeRes
 
 def _entitlement_to_domain(m: models.TenantEntitlement) -> TenantEntitlementRecord:
     return TenantEntitlementRecord(tenant_id=m.tenant_id, module_name=m.module_name, updated_at=_as_utc(m.updated_at))
+
+
+def _quota_set_to_domain(m: models.TenantQuotaSet) -> QuotaSet:
+    return QuotaSet(
+        tenant_id=str(m.tenant_id), limits=dict(m.limits or {}), configured_at=_as_utc(m.configured_at),
+        version=m.version, updated_at=_as_utc(m.updated_at),
+    )
+
+
+def _resource_allocation_to_domain(m: models.ResourceAllocation) -> ResourceAllocation:
+    return ResourceAllocation(
+        id=str(m.id), environment_id=str(m.environment_id), resources=dict(m.resources or {}),
+        reserved_capacity=m.reserved_capacity, status=ResourceAllocationStatus(m.status),
+        requested_by=m.requested_by, approved_by=m.approved_by, rejection_reason=m.rejection_reason,
+        version=m.version, created_at=_as_utc(m.created_at), updated_at=_as_utc(m.updated_at),
+    )
 
 
 class SQLAlchemyMultiTenancyRepository:
@@ -293,3 +314,108 @@ class SQLAlchemyMultiTenancyRepository:
         )
         rows = await self.session.execute(stmt)
         return [_environment_to_domain(m) for m in rows.scalars().all()], total
+
+    # --- Quota Set / real-time quota enforcement ---
+
+    async def get_quota_set(self, tenant_id: str) -> QuotaSet | None:
+        m = await self.session.get(models.TenantQuotaSet, tenant_id)
+        return _quota_set_to_domain(m) if m else None
+
+    async def upsert_quota_set(self, *, tenant_id: str, limits: dict[str, float]) -> QuotaSet:
+        m = await self.session.get(models.TenantQuotaSet, tenant_id)
+        if m is None:
+            m = models.TenantQuotaSet(tenant_id=tenant_id, limits=limits, configured_at=func.now(), version=1)
+            self.session.add(m)
+        else:
+            m.limits = limits
+            m.configured_at = func.now()
+            m.version += 1
+        await self.session.commit()
+        await self.session.refresh(m)
+        return _quota_set_to_domain(m)
+
+    async def increment_quota_counter(
+        self, *, tenant_id: str, resource_class: str, amount: float, window_seconds: int, now: datetime,
+    ) -> float:
+        # A real atomic upsert -- INSERT ... ON CONFLICT DO UPDATE SET count = count +
+        # amount, RETURNING the new total in the same statement -- so concurrent callers
+        # never race a read-then-write increment; each request's own increment always
+        # lands, whichever order they commit in.
+        window_start = quota_window_start(now, window_seconds)
+        stmt = (
+            pg_insert(models.QuotaCounter)
+            .values(tenant_id=tenant_id, resource_class=resource_class, window_start=window_start, count=amount)
+            .on_conflict_do_update(
+                index_elements=[
+                    models.QuotaCounter.tenant_id, models.QuotaCounter.resource_class,
+                    models.QuotaCounter.window_start,
+                ],
+                set_={"count": models.QuotaCounter.count + amount},
+            )
+            .returning(models.QuotaCounter.count)
+        )
+        result = await self.session.execute(stmt)
+        await self.session.commit()
+        return float(result.scalar_one())
+
+    # --- Resource Allocation ---
+
+    async def create_resource_allocation(self, record: ResourceAllocation) -> ResourceAllocation:
+        m = models.ResourceAllocation(
+            id=record.id, environment_id=record.environment_id, resources=record.resources,
+            reserved_capacity=record.reserved_capacity, status=record.status.value,
+            requested_by=record.requested_by, approved_by=record.approved_by,
+            rejection_reason=record.rejection_reason, version=record.version,
+        )
+        self.session.add(m)
+        await self.session.commit()
+        await self.session.refresh(m)
+        return _resource_allocation_to_domain(m)
+
+    async def get_resource_allocation(self, allocation_id: str) -> ResourceAllocation | None:
+        m = await self.session.get(models.ResourceAllocation, allocation_id)
+        return _resource_allocation_to_domain(m) if m else None
+
+    async def update_resource_allocation(self, record: ResourceAllocation) -> ResourceAllocation:
+        m = await self.session.get(models.ResourceAllocation, record.id)
+        m.resources = record.resources
+        m.status = record.status.value
+        m.approved_by = record.approved_by
+        m.rejection_reason = record.rejection_reason
+        m.version = record.version
+        await self.session.commit()
+        await self.session.refresh(m)
+        return _resource_allocation_to_domain(m)
+
+    async def get_active_resource_allocation(self, environment_id: str) -> ResourceAllocation | None:
+        stmt = (
+            select(models.ResourceAllocation)
+            .where(
+                models.ResourceAllocation.environment_id == environment_id,
+                models.ResourceAllocation.status == ResourceAllocationStatus.ACTIVE.value,
+            )
+            .order_by(models.ResourceAllocation.updated_at.desc())
+            .limit(1)
+        )
+        row = (await self.session.execute(stmt)).scalars().first()
+        return _resource_allocation_to_domain(row) if row else None
+
+    async def list_resource_allocations(
+        self, *, environment_id: str | None = None, status: ResourceAllocationStatus | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[ResourceAllocation], int]:
+        filters = []
+        if environment_id is not None:
+            filters.append(models.ResourceAllocation.environment_id == environment_id)
+        if status is not None:
+            filters.append(models.ResourceAllocation.status == status.value)
+
+        count_stmt = select(func.count(models.ResourceAllocation.id)).where(*filters)
+        total = (await self.session.execute(count_stmt)).scalar_one()
+
+        stmt = (
+            select(models.ResourceAllocation).where(*filters)
+            .order_by(models.ResourceAllocation.created_at.desc()).limit(limit).offset(offset)
+        )
+        rows = await self.session.execute(stmt)
+        return [_resource_allocation_to_domain(m) for m in rows.scalars().all()], total

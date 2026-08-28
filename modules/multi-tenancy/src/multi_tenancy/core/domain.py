@@ -62,6 +62,53 @@ def is_legal_hierarchy_transition(from_status: HierarchyStatus, to_status: Hiera
     return to_status in _HIERARCHY_LEGAL_TRANSITIONS.get(from_status, set())
 
 
+class ResourceAllocationStatus(StrEnum):
+    """`ResourceAllocation`'s own lifecycle (independent architecture
+    assessment §5.2): a request either gets auto-approved immediately
+    by policy or waits for a human decision -- see
+    `ResourceAllocationService._within_auto_approve_threshold`. Both
+    `ACTIVE` and `REJECTED` are terminal; a rejected request is
+    resubmitted as a brand-new allocation, never reopened."""
+
+    REQUESTED = "requested"
+    ACTIVE = "active"
+    REJECTED = "rejected"
+
+
+# Resource-class naming convention this platform's quota enforcement relies on
+# (QuotaEnforcementService): a class name ending in one of these suffixes gets a
+# real, self-contained fixed-window counter (this module owns the state); every
+# other class name is treated as capacity-shaped -- a stateless ceiling check
+# against usage the caller reports, since the owning module (Vector DB for
+# vector_count, etc.) is the real source of truth for its own current usage, not
+# this one. See QuotaEnforcementService's own docstring.
+_RATE_RESOURCE_CLASS_WINDOW_SECONDS: dict[str, int] = {
+    "_per_second": 1,
+    "_per_minute": 60,
+    "_per_hour": 3600,
+    "_per_day": 86400,
+    "_daily": 86400,
+}
+
+
+def resource_class_window_seconds(resource_class: str) -> int | None:
+    for suffix, seconds in _RATE_RESOURCE_CLASS_WINDOW_SECONDS.items():
+        if resource_class.endswith(suffix):
+            return seconds
+    return None
+
+
+def quota_window_start(at: datetime, window_seconds: int) -> datetime:
+    """Real fixed-window bucketing: every timestamp within the same
+    `window_seconds`-wide slice maps to the same `window_start`, so a
+    new window resets the counter implicitly -- no cleanup job needed
+    for correctness (a real counter-row garbage-collection job for old
+    windows is separate, unbuilt work; see this module's README)."""
+    epoch = int(at.timestamp())
+    window_start_epoch = (epoch // window_seconds) * window_seconds
+    return datetime.fromtimestamp(window_start_epoch, tz=UTC)
+
+
 class TenantNotFoundError(Exception):
     def __init__(self, tenant_id: str) -> None:
         super().__init__(f"Tenant not found: {tenant_id}")
@@ -82,8 +129,16 @@ class EnvironmentNotFoundError(Exception):
         super().__init__(f"Environment not found: {environment_id}")
 
 
+class ResourceAllocationNotFoundError(Exception):
+    def __init__(self, allocation_id: str) -> None:
+        super().__init__(f"Resource allocation not found: {allocation_id}")
+
+
+_AnyLifecycleStatus = TenantStatus | HierarchyStatus | ResourceAllocationStatus
+
+
 class InvalidTransitionError(Exception):
-    def __init__(self, from_status: TenantStatus | HierarchyStatus, to_status: TenantStatus | HierarchyStatus) -> None:
+    def __init__(self, from_status: _AnyLifecycleStatus, to_status: _AnyLifecycleStatus) -> None:
         super().__init__(f"Illegal transition: {from_status.value} -> {to_status.value}")
         self.from_status = from_status
         self.to_status = to_status
@@ -213,4 +268,72 @@ class TenantEntitlementRecord:
 
     tenant_id: str
     module_name: str
+    updated_at: datetime = field(default_factory=now)
+
+
+@dataclass
+class QuotaSet:
+    """Per-tenant resource-class limits -- the ceiling side of quota
+    enforcement (independent architecture assessment §5.2's "canonical
+    allocation object" made concrete at the tenant level). `limits` keys
+    are resource-class names (e.g. `"requests_per_minute"`,
+    `"tokens_per_minute"`, `"workflow_concurrency"`, `"storage_gb"`,
+    `"vector_count"`, `"model_spend_daily_usd"`) mapped to a numeric
+    limit; see `resource_class_window_seconds` for which of those get a
+    real rate-counter versus a capacity-ceiling check.
+    `configured_at` is `None` until a tenant's quotas are first set --
+    the same rollout-safety default `TenantRecord.entitlements_configured_at`
+    established: an unconfigured tenant is unlimited, not silently
+    throttled to zero, so shipping quota enforcement never breaks a
+    tenant that predates it."""
+
+    tenant_id: str
+    limits: dict[str, float] = field(default_factory=dict)
+    configured_at: datetime | None = None
+    version: int = 1
+    updated_at: datetime = field(default_factory=now)
+
+
+@dataclass
+class QuotaCheckResult:
+    allowed: bool
+    resource_class: str
+    limit: float | None
+    used: float
+    remaining: float | None
+    reason: str
+
+
+@dataclass
+class ResourceAllocation:
+    """The independent architecture assessment's own §5.2 "canonical
+    allocation object", scoped to one Environment: the reserved/approved
+    capacity across every resource dimension it names (CPU/memory/GPU,
+    replicas, concurrent runs, requests/tokens per minute, model spend,
+    workflow concurrency, storage, vector count, ingestion volume,
+    retention, ...) -- kept as a flexible `resources: dict[str, float]`
+    rather than one field per dimension, the same shape `QuotaSet.limits`
+    already uses, so both share one resource-class vocabulary. A real
+    request -> automated-or-manual-approval -> active lifecycle (§5.2's
+    "submit requested quota -> automated policy decision -> approval if
+    threshold exceeded"), not just a data bag -- see
+    `ResourceAllocationService._within_auto_approve_threshold` for the
+    actual policy decision.
+
+    What this deliberately does NOT do yet (see this module's README):
+    reconcile the approved numbers against real Kubernetes/database/
+    vector capacity, real regional capacity checks, or a real billing
+    amendment -- this module owns the *approved intent*, not enforcement
+    against live infrastructure."""
+
+    id: str
+    environment_id: str
+    resources: dict[str, float] = field(default_factory=dict)
+    reserved_capacity: bool = False
+    status: ResourceAllocationStatus = ResourceAllocationStatus.REQUESTED
+    requested_by: str | None = None
+    approved_by: str | None = None
+    rejection_reason: str | None = None
+    version: int = 1
+    created_at: datetime = field(default_factory=now)
     updated_at: datetime = field(default_factory=now)

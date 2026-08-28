@@ -7,7 +7,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CHAR, JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import CHAR, JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -111,6 +111,61 @@ class IsolationProbeResult(Base):
     sample_size: Mapped[int] = mapped_column(Integer(), default=0)
     details: Mapped[str] = mapped_column(Text())
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TenantQuotaSet(Base):
+    """One row per tenant: the whole resource-class `limits` dict,
+    always replaced wholesale. See `core/domain.py`'s `QuotaSet`
+    docstring."""
+
+    __tablename__ = "tenant_quota_sets"
+
+    tenant_id: Mapped[str] = mapped_column(UUIDType, ForeignKey("tenants.id"), primary_key=True)
+    limits: Mapped[dict] = mapped_column(JSONType, default=dict)
+    configured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    version: Mapped[int] = mapped_column(Integer(), default=1)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    )
+
+
+class QuotaCounter(Base):
+    """A real fixed-window rate counter: one row per (tenant,
+    resource_class, window_start), atomically upserted by
+    `SQLAlchemyMultiTenancyRepository.increment_quota_counter`. A new
+    window is a new row -- no explicit reset needed for correctness,
+    though old rows accumulate; a real cleanup/TTL job for stale windows
+    is separate, unbuilt work (see this module's README)."""
+
+    __tablename__ = "quota_counters"
+
+    tenant_id: Mapped[str] = mapped_column(UUIDType, primary_key=True)
+    resource_class: Mapped[str] = mapped_column(String(128), primary_key=True)
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    count: Mapped[float] = mapped_column(Float(), default=0.0)
+
+
+class ResourceAllocation(Base):
+    """One environment's approved/requested capacity across every
+    resource dimension (`resources`, a flexible dict -- see
+    `core/domain.py`'s `ResourceAllocation` docstring), plus its
+    request -> approve/reject lifecycle."""
+
+    __tablename__ = "resource_allocations"
+
+    id: Mapped[str] = mapped_column(UUIDType, primary_key=True, default=_new_id)
+    environment_id: Mapped[str] = mapped_column(UUIDType, ForeignKey("environments.id"))
+    resources: Mapped[dict] = mapped_column(JSONType, default=dict)
+    reserved_capacity: Mapped[bool] = mapped_column(Boolean(), default=False)
+    status: Mapped[str] = mapped_column(String(16), default="requested")
+    requested_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    version: Mapped[int] = mapped_column(Integer(), default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    )
 
 
 class TenantEntitlement(Base):

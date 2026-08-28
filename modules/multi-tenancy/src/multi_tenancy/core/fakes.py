@@ -2,6 +2,7 @@
 contract")."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from multi_tenancy.core.domain import (
@@ -9,11 +10,15 @@ from multi_tenancy.core.domain import (
     HierarchyStatus,
     IsolationProbeResult,
     OrganisationRecord,
+    QuotaSet,
+    ResourceAllocation,
+    ResourceAllocationStatus,
     TenantEntitlementRecord,
     TenantRecord,
     TenantStatus,
     WorkspaceRecord,
     now,
+    quota_window_start,
 )
 
 _UNSET = object()
@@ -27,6 +32,9 @@ class InMemoryMultiTenancyRepository:
         self.organisations: dict[str, OrganisationRecord] = {}
         self.workspaces: dict[str, WorkspaceRecord] = {}
         self.environments: dict[str, EnvironmentRecord] = {}
+        self.quota_sets: dict[str, QuotaSet] = {}
+        self.quota_counters: dict[tuple[str, str, datetime], float] = {}
+        self.resource_allocations: dict[str, ResourceAllocation] = {}
 
     async def create_tenant(self, record: TenantRecord) -> TenantRecord:
         self.tenants[record.id] = record
@@ -142,6 +150,60 @@ class InMemoryMultiTenancyRepository:
         if status is not None:
             results = [e for e in results if e.status == status]
         results = sorted(results, key=lambda e: e.created_at)
+        return results[offset:offset + limit], len(results)
+
+    # --- Quota Set / real-time quota enforcement ---
+
+    async def get_quota_set(self, tenant_id: str) -> QuotaSet | None:
+        return self.quota_sets.get(tenant_id)
+
+    async def upsert_quota_set(self, *, tenant_id: str, limits: dict[str, float]) -> QuotaSet:
+        existing = self.quota_sets.get(tenant_id)
+        version = existing.version + 1 if existing else 1
+        record = QuotaSet(tenant_id=tenant_id, limits=dict(limits), configured_at=now(), version=version)
+        self.quota_sets[tenant_id] = record
+        return record
+
+    async def increment_quota_counter(
+        self, *, tenant_id: str, resource_class: str, amount: float, window_seconds: int, now: datetime,
+    ) -> float:
+        window_start = quota_window_start(now, window_seconds)
+        key = (tenant_id, resource_class, window_start)
+        self.quota_counters[key] = self.quota_counters.get(key, 0.0) + amount
+        return self.quota_counters[key]
+
+    # --- Resource Allocation ---
+
+    async def create_resource_allocation(self, record: ResourceAllocation) -> ResourceAllocation:
+        self.resource_allocations[record.id] = record
+        return record
+
+    async def get_resource_allocation(self, allocation_id: str) -> ResourceAllocation | None:
+        return self.resource_allocations.get(allocation_id)
+
+    async def update_resource_allocation(self, record: ResourceAllocation) -> ResourceAllocation:
+        self.resource_allocations[record.id] = record
+        return record
+
+    async def get_active_resource_allocation(self, environment_id: str) -> ResourceAllocation | None:
+        candidates = [
+            r for r in self.resource_allocations.values()
+            if r.environment_id == environment_id and r.status == ResourceAllocationStatus.ACTIVE
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda r: r.updated_at)
+
+    async def list_resource_allocations(
+        self, *, environment_id: str | None = None, status: ResourceAllocationStatus | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[ResourceAllocation], int]:
+        results = list(self.resource_allocations.values())
+        if environment_id is not None:
+            results = [r for r in results if r.environment_id == environment_id]
+        if status is not None:
+            results = [r for r in results if r.status == status]
+        results = sorted(results, key=lambda r: r.created_at, reverse=True)
         return results[offset:offset + limit], len(results)
 
 
