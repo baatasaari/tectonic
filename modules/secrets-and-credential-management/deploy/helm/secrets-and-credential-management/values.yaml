@@ -37,7 +37,7 @@ database:
   existingSecretKey: "database-url"
 
 identityAccessBaseUrl: "http://identity-and-access:8110"
-auditabilityBaseUrl: "http://auditability:8090"
+auditabilityBaseUrl: "http://auditability:8099"
 
 # This module's own dedicated encryption-at-rest key -- deliberately a SEPARATE
 # Kubernetes Secret from the platform-wide TECTONIC_JWT_SHARED_SECRET every module's

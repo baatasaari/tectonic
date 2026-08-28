@@ -38,7 +38,7 @@ database:
 
 identityAccessBaseUrl: "http://identity-and-access:8110"
 multiTenancyBaseUrl: "http://multi-tenancy:8109"
-auditabilityBaseUrl: "http://auditability:8090"
+auditabilityBaseUrl: "http://auditability:8099"
 
 # JSON-encoded list, same pattern Multi-tenancy's own probe_targets chart value uses --
 # each entry is a real peer module this portal's catalogue syncs a live OpenAPI spec from.

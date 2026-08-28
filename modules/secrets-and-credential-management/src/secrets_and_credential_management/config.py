@@ -38,7 +38,7 @@ class SecretsAndCredentialManagementSettings(BaseSettings):
     http_port: int = 8111
 
     identity_access_base_url: str = "http://localhost:8110"
-    auditability_base_url: str = "http://localhost:8090"
+    auditability_base_url: str = "http://localhost:8099"
     dependency_stub_base_url: str = "http://localhost:9132"
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across

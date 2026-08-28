@@ -37,7 +37,7 @@ database:
   existingSecretKey: "database-url"
 
 finopsBaseUrl: "http://finops:8105"
-auditabilityBaseUrl: "http://auditability:8090"
+auditabilityBaseUrl: "http://auditability:8099"
 multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:

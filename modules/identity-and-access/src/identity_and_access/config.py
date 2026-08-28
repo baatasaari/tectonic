@@ -36,7 +36,7 @@ class IdentityAndAccessSettings(BaseSettings):
 
     token_default_ttl_seconds: int = 3600
 
-    auditability_base_url: str = "http://localhost:8090"
+    auditability_base_url: str = "http://localhost:8099"
     dependency_stub_base_url: str = "http://localhost:9131"
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
