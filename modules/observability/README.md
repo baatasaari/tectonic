@@ -25,7 +25,7 @@ src/observability/
     completeness.py                       Trace completeness vs configured expected workflow shapes
   db/                      SQLAlchemy 2.0 async model + repository
   clients/                 HTTP client for LLM Gateway (narrative generation)
-  security/                 Service-to-service JWT bearer auth (shared signing key)
+  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate
   telemetry/                OTel tracing, Prometheus meta-metrics, structlog logging
   api/                       FastAPI router — ingest, reasoning-narrative, cost-attribution, trace-completeness
   schemas/                    Pydantic request/response models
@@ -146,6 +146,16 @@ src/observability/
   calls, not the platform's external-facing user-auth story — a real API
   gateway/OAuth layer in front of the platform's own entry points is a
   separate, larger concern, out of scope here.
+
+- **Enforces its own subscription entitlement via `EntitlementGateMiddleware`**
+  (`security/entitlement_gate.py`) — see Agent Cards' README and the rollout
+  playbook doc (`docs/entitlement-gate-rollout.md`) for the shared reference
+  implementation. Layered after `ServiceAuthMiddleware` (authenticate, then
+  entitle), it calls Multi-tenancy's real `GET /tenants/{id}/gate?module=observability`,
+  denying with `402 Payment Required` when the tenant's subscription doesn't
+  include this module. It **fails open** if Multi-tenancy is unreachable — a
+  deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
+  posture.
 
 ## Running locally
 

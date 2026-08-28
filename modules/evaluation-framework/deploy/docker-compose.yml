@@ -41,6 +41,7 @@ services:
     environment:
       EVALUATION_FRAMEWORK_DATABASE_URL: postgresql+asyncpg://evalfw:evalfw@postgres:5432/evalfw
       EVALUATION_FRAMEWORK_LLM_GATEWAY_BASE_URL: http://dependency-stub:9118
+      EVALUATION_FRAMEWORK_MULTI_TENANCY_BASE_URL: http://dependency-stub:9118
     depends_on:
       postgres:
         condition: service_healthy

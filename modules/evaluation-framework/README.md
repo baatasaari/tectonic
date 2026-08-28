@@ -26,7 +26,7 @@ src/evaluation_framework/
   cli/main.py               `agenteval run --gate` — CI/CD pipeline entrypoint
   db/                      SQLAlchemy 2.0 async models + repository
   clients/                 HTTP client for LLM Gateway (LLM-as-judge fallback)
-  security/                 Service-to-service JWT bearer auth (shared signing key)
+  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — evaluate, gate, domain-packs, scores, sample
   schemas/                    Pydantic request/response models
@@ -157,6 +157,16 @@ src/evaluation_framework/
   calls, not the platform's external-facing user-auth story — a real API
   gateway/OAuth layer in front of the platform's own entry points is a
   separate, larger concern, out of scope here.
+
+- **Enforces its own subscription entitlement via `EntitlementGateMiddleware`**
+  (`security/entitlement_gate.py`) — see Agent Cards' README and the rollout
+  playbook doc (`docs/entitlement-gate-rollout.md`) for the shared reference
+  implementation. Layered after `ServiceAuthMiddleware` (authenticate, then
+  entitle), it calls Multi-tenancy's real `GET /tenants/{id}/gate?module=evaluation-framework`,
+  denying with `402 Payment Required` when the tenant's subscription doesn't
+  include this module. It **fails open** if Multi-tenancy is unreachable — a
+  deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
+  posture.
 
 ## Running locally
 

@@ -23,7 +23,7 @@ src/deployment_strategy/
     rollout_service.py              Rollout Service — deploy/promote/rollback, active-deployment query
   db/                      SQLAlchemy 2.0 async models + repository (Deployment)
   clients/                 Resilient HTTP clients to Evaluation Framework and FinOps
-  security/                 Service-to-service JWT bearer auth (shared signing key)
+  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — deploy, canary-health, promote/rollback, active deployment
   schemas/                    Pydantic request/response models
@@ -67,6 +67,16 @@ src/deployment_strategy/
   against an endpoint that doesn't exist, the same "documented
   placeholder, not a half-built feature" posture this platform's own
   Agent Marketplace and LLMOps already take.
+
+- **Enforces its own subscription entitlement via `EntitlementGateMiddleware`**
+  (`security/entitlement_gate.py`) — see Agent Cards' README and the rollout
+  playbook doc (`docs/entitlement-gate-rollout.md`) for the shared reference
+  implementation. Layered after `ServiceAuthMiddleware` (authenticate, then
+  entitle), it calls Multi-tenancy's real `GET /tenants/{id}/gate?module=deployment-strategy`,
+  denying with `402 Payment Required` when the tenant's subscription doesn't
+  include this module. It **fails open** if Multi-tenancy is unreachable — a
+  deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
+  posture.
 
 ## Running locally
 

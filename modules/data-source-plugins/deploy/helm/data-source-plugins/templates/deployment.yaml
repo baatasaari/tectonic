@@ -27,6 +27,8 @@ spec:
           env:
             - name: DATA_SOURCE_PLUGINS_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: DATA_SOURCE_PLUGINS_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: DATA_SOURCE_PLUGINS_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: DATA_SOURCE_PLUGINS_TELEMETRY__OTLP_ENDPOINT

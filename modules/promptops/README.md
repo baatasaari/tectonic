@@ -29,7 +29,7 @@ src/promptops/
     reflection_optimiser.py           Reflection Optimiser — the one bounded autonomous action
   db/                      SQLAlchemy 2.0 async models + repository (PromptVersion/ABTest)
   clients/                 Resilient HTTP clients to Evaluation Framework and LLM Gateway
-  security/                 Service-to-service JWT bearer auth (shared signing key)
+  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — register, A/B test, drift-check, reflect, active version
   schemas/                    Pydantic request/response models
@@ -62,6 +62,16 @@ src/promptops/
   `draft → testing` (via `start`) → `active`/`archived` (via
   `conclude`); `active → archived` on the next promotion. Anything
   outside that legal set is a `409` (`InvalidTransitionError`).
+
+- **Enforces its own subscription entitlement via `EntitlementGateMiddleware`**
+  (`security/entitlement_gate.py`) — see Agent Cards' README and the rollout
+  playbook doc (`docs/entitlement-gate-rollout.md`) for the shared reference
+  implementation. Layered after `ServiceAuthMiddleware` (authenticate, then
+  entitle), it calls Multi-tenancy's real `GET /tenants/{id}/gate?module=promptops`,
+  denying with `402 Payment Required` when the tenant's subscription doesn't
+  include this module. It **fails open** if Multi-tenancy is unreachable — a
+  deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
+  posture.
 
 ## Running locally
 

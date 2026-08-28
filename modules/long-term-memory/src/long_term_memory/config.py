@@ -55,6 +55,8 @@ class LongTermMemorySettings(BaseSettings):
     db_pool_timeout_seconds: int = 30
     db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     service_name: str = "long-term-memory"
+    multi_tenancy_base_url: str = "http://localhost:8109"
+    entitlement_gate_cache_ttl_seconds: float = 30.0
     http_port: int = 8092
     vector_db_base_url: str = "http://localhost:8089"
     graph_db_base_url: str = "http://localhost:8090"

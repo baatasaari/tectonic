@@ -27,6 +27,8 @@ spec:
           env:
             - name: A2A_GATEWAY_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: A2A_GATEWAY_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: A2A_GATEWAY_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: A2A_GATEWAY_TELEMETRY__OTLP_ENDPOINT

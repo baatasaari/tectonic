@@ -27,7 +27,7 @@ src/context_engineering/
     context_assembly_service.py        The assembly orchestrator (this module's "scheduler")
   db/                      SQLAlchemy 2.0 async models + repository
   clients/                 HTTP clients for LLM Gateway and the Evaluation Framework feedback feed
-  security/                 Service-to-service JWT bearer auth (shared signing key)
+  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI routers — assemble, ontologies, weights
   schemas/                    Pydantic request/response models
@@ -107,6 +107,16 @@ src/context_engineering/
   external-facing user-auth story — a real API gateway/OAuth layer in
   front of the platform's own entry points is a separate, larger
   concern, out of scope here.
+
+- **Enforces its own subscription entitlement via `EntitlementGateMiddleware`**
+  (`security/entitlement_gate.py`) — see Agent Cards' README and the rollout
+  playbook doc (`docs/entitlement-gate-rollout.md`) for the shared reference
+  implementation. Layered after `ServiceAuthMiddleware` (authenticate, then
+  entitle), it calls Multi-tenancy's real `GET /tenants/{id}/gate?module=context-engineering`,
+  denying with `402 Payment Required` when the tenant's subscription doesn't
+  include this module. It **fails open** if Multi-tenancy is unreachable — a
+  deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
+  posture.
 
 ## Running locally
 

@@ -37,6 +37,7 @@ database:
 
 llmGatewayBaseUrl: "http://llm-gateway:8082"
 sentinelAgentsBaseUrl: "http://sentinel-agents:8094"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:
   minAvailable: 3

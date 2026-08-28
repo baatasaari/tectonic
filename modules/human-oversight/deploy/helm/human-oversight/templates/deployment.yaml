@@ -27,6 +27,8 @@ spec:
           env:
             - name: HUMAN_OVERSIGHT_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: HUMAN_OVERSIGHT_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: HUMAN_OVERSIGHT_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: HUMAN_OVERSIGHT_TELEMETRY__OTLP_ENDPOINT

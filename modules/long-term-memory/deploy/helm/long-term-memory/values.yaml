@@ -41,6 +41,7 @@ vectorDbBaseUrl: "http://vector-db:8089"
 graphDbBaseUrl: "http://graph-db:8090"
 llmGatewayBaseUrl: "http://llm-gateway:8082"
 guardrailsBaseUrl: "http://guardrails:8093"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:
   minAvailable: 2

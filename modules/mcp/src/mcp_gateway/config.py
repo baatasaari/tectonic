@@ -30,6 +30,8 @@ class MCPGatewaySettings(BaseSettings):
     db_pool_timeout_seconds: int = 30
     db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     service_name: str = "mcp"
+    multi_tenancy_base_url: str = "http://localhost:8109"
+    entitlement_gate_cache_ttl_seconds: float = 30.0
     http_port: int = 8100
     dependency_stub_base_url: str = "http://localhost:9121"
 

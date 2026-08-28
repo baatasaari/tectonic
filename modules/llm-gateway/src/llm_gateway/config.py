@@ -59,6 +59,8 @@ class LLMGatewaySettings(BaseSettings):
     db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     redis_url: str = "redis://localhost:6379/0"
     service_name: str = "llm-gateway"
+    multi_tenancy_base_url: str = "http://localhost:8109"
+    entitlement_gate_cache_ttl_seconds: float = 30.0
     http_port: int = 8082
     secrets_and_credential_management_base_url: str = "http://localhost:8111"
 

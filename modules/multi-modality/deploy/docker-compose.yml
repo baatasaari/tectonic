@@ -39,6 +39,7 @@ services:
     environment:
       MULTI_MODALITY_DATABASE_URL: postgresql+asyncpg://multi_modality:multi_modality@postgres:5432/multi_modality
       MULTI_MODALITY_GUARDRAILS_BASE_URL: http://dependency-stub:9128
+      MULTI_MODALITY_MULTI_TENANCY_BASE_URL: http://dependency-stub:9128
     depends_on:
       postgres:
         condition: service_healthy

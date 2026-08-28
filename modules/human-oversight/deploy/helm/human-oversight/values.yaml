@@ -44,6 +44,7 @@ auditabilityBaseUrl: "http://auditability:8099"
 notificationStubBaseUrl: ""
 
 # HTTPDecisionCallbackDispatcher's real service directory: real base URL to call
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 # back to, keyed by the requesting module's own kebab-case service name. Extend
 # as more modules gain a real oversight-callback endpoint (see that class's
 # docstring in clients/http_clients.py).

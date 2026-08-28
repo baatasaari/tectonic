@@ -22,6 +22,7 @@ from agentic_rag.clients.http_clients import (
 )
 from agentic_rag.config import AgenticRAGSettings, load_settings
 from agentic_rag.db.session import make_engine, make_session_factory
+from agentic_rag.security.entitlement_gate import EntitlementGateMiddleware
 from agentic_rag.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from agentic_rag.telemetry.logging import configure_logging, get_logger
 from agentic_rag.telemetry.tracing import configure_tracing
@@ -81,6 +82,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.add_middleware(
+        EntitlementGateMiddleware,
+        module_name=settings.service_name,
+        multi_tenancy_base_url=settings.multi_tenancy_base_url,
+        issuer=settings.service_name,
+        shared_secret=settings.jwt_shared_secret,
+        cache_ttl_seconds=settings.entitlement_gate_cache_ttl_seconds,
+    )
     app.add_middleware(
         ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )

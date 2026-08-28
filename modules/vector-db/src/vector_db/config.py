@@ -47,6 +47,8 @@ class VectorDbSettings(BaseSettings):
     telemetry: TelemetryConfig = TelemetryConfig()
 
     service_name: str = "vector-db"
+    multi_tenancy_base_url: str = "http://localhost:8109"
+    entitlement_gate_cache_ttl_seconds: float = 30.0
     http_port: int = 8089
     llm_gateway_base_url: str = "http://localhost:8082"
 

@@ -42,6 +42,7 @@ services:
     environment:
       OBSERVABILITY_DATABASE_URL: postgresql+asyncpg://observability:observability@postgres:5432/observability
       OBSERVABILITY_LLM_GATEWAY_BASE_URL: http://dependency-stub:9119
+      OBSERVABILITY_MULTI_TENANCY_BASE_URL: http://dependency-stub:9119
     depends_on:
       postgres:
         condition: service_healthy

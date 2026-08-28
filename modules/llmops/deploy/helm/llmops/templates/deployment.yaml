@@ -27,6 +27,8 @@ spec:
           env:
             - name: LLMOPS_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: LLMOPS_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: LLMOPS_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: LLMOPS_TELEMETRY__OTLP_ENDPOINT

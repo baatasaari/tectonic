@@ -37,6 +37,7 @@ redis:
   existingSecretKey: "redis-url"
 
 llmGatewayBaseUrl: "http://llm-gateway:8082"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:
   minAvailable: 2

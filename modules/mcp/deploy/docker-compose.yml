@@ -39,6 +39,7 @@ services:
     environment:
       MCP_GATEWAY_DATABASE_URL: postgresql+asyncpg://mcp_gateway:mcp_gateway@postgres:5432/mcp_gateway
       MCP_GATEWAY_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9121
+      MCP_GATEWAY_MULTI_TENANCY_BASE_URL: http://dependency-stub:9121
     depends_on:
       postgres:
         condition: service_healthy

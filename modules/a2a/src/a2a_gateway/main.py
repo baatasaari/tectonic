@@ -18,6 +18,7 @@ from a2a_gateway.config import A2AGatewaySettings, load_settings
 from a2a_gateway.core.domain import card_to_dict
 from a2a_gateway.core.local_card import build_local_card
 from a2a_gateway.db.session import make_engine, make_session_factory
+from a2a_gateway.security.entitlement_gate import EntitlementGateMiddleware
 from a2a_gateway.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from a2a_gateway.telemetry.logging import configure_logging, get_logger
 from a2a_gateway.telemetry.tracing import configure_tracing
@@ -72,6 +73,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.add_middleware(
+        EntitlementGateMiddleware,
+        module_name=settings.service_name,
+        multi_tenancy_base_url=settings.multi_tenancy_base_url,
+        issuer=settings.service_name,
+        shared_secret=settings.jwt_shared_secret,
+        cache_ttl_seconds=settings.entitlement_gate_cache_ttl_seconds,
+    )
     app.add_middleware(
         ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )

@@ -36,6 +36,7 @@ database:
   existingSecretKey: "database-url"
 
 agentCardsBaseUrl: "http://agent-cards:8102"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:
   minAvailable: 1

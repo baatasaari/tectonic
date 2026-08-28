@@ -27,6 +27,8 @@ spec:
           env:
             - name: LONG_TERM_MEMORY_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: LONG_TERM_MEMORY_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: LONG_TERM_MEMORY_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: LONG_TERM_MEMORY_TELEMETRY__OTLP_ENDPOINT

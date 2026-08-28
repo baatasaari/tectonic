@@ -40,6 +40,7 @@ services:
     environment:
       DATA_SOURCE_PLUGINS_DATABASE_URL: postgresql+asyncpg://data_source_plugins:data_source_plugins@postgres:5432/data_source_plugins
       DATA_SOURCE_PLUGINS_SECRETS_AND_CREDENTIAL_MANAGEMENT_BASE_URL: http://dependency-stub:9108
+      DATA_SOURCE_PLUGINS_MULTI_TENANCY_BASE_URL: http://dependency-stub:9108
     depends_on:
       postgres:
         condition: service_healthy

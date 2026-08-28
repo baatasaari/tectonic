@@ -37,6 +37,7 @@ database:
 
 vectorDbBaseUrl: "http://vector-db:8089"
 graphDbBaseUrl: "http://graph-db:8090"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:
   minAvailable: 2

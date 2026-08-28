@@ -27,6 +27,8 @@ spec:
           env:
             - name: CONVERSATIONAL_ENGINE_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: CONVERSATIONAL_ENGINE_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: CONVERSATIONAL_ENGINE_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: CONVERSATIONAL_ENGINE_TELEMETRY__OTLP_ENDPOINT

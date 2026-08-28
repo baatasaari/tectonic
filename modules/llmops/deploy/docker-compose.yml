@@ -39,6 +39,7 @@ services:
     environment:
       LLMOPS_DATABASE_URL: postgresql+asyncpg://llmops:llmops@postgres:5432/llmops
       LLMOPS_EVALUATION_FRAMEWORK_BASE_URL: http://dependency-stub:9125
+      LLMOPS_MULTI_TENANCY_BASE_URL: http://dependency-stub:9125
     depends_on:
       postgres:
         condition: service_healthy

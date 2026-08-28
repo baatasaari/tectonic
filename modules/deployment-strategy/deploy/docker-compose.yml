@@ -41,6 +41,7 @@ services:
       DEPLOYMENT_STRATEGY_DATABASE_URL: postgresql+asyncpg://deployment_strategy:deployment_strategy@postgres:5432/deployment_strategy
       DEPLOYMENT_STRATEGY_EVALUATION_FRAMEWORK_BASE_URL: http://dependency-stub:9127
       DEPLOYMENT_STRATEGY_FINOPS_BASE_URL: http://dependency-stub:9127
+      DEPLOYMENT_STRATEGY_MULTI_TENANCY_BASE_URL: http://dependency-stub:9127
     depends_on:
       postgres:
         condition: service_healthy

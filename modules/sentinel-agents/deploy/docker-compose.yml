@@ -44,6 +44,7 @@ services:
       SENTINEL_AGENTS_TOOL_ORCHESTRATION_BASE_URL: http://dependency-stub:9115
       SENTINEL_AGENTS_HUMAN_OVERSIGHT_BASE_URL: http://dependency-stub:9115
       SENTINEL_AGENTS_AUDITABILITY_BASE_URL: http://dependency-stub:9115
+      SENTINEL_AGENTS_MULTI_TENANCY_BASE_URL: http://dependency-stub:9115
     depends_on:
       postgres:
         condition: service_healthy

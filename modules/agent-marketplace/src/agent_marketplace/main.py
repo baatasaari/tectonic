@@ -15,6 +15,7 @@ from agent_marketplace.app_context import AppContext
 from agent_marketplace.clients.agent_cards_client import HTTPAgentCardsClient
 from agent_marketplace.config import AgentMarketplaceSettings, load_settings
 from agent_marketplace.db.session import make_engine, make_session_factory
+from agent_marketplace.security.entitlement_gate import EntitlementGateMiddleware
 from agent_marketplace.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from agent_marketplace.telemetry.logging import configure_logging, get_logger
 from agent_marketplace.telemetry.tracing import configure_tracing
@@ -68,6 +69,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.add_middleware(
+        EntitlementGateMiddleware,
+        module_name=settings.service_name,
+        multi_tenancy_base_url=settings.multi_tenancy_base_url,
+        issuer=settings.service_name,
+        shared_secret=settings.jwt_shared_secret,
+        cache_ttl_seconds=settings.entitlement_gate_cache_ttl_seconds,
+    )
     app.add_middleware(
         ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )

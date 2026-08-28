@@ -39,6 +39,7 @@ workflowEngineBaseUrl: "http://workflow-engine:8080"
 toolOrchestrationBaseUrl: "http://tool-orchestration:8083"
 humanOversightBaseUrl: "http://human-oversight:8095"
 auditabilityBaseUrl: "http://auditability:8099"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:
   minAvailable: 2

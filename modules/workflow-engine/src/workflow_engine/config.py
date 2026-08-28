@@ -86,6 +86,8 @@ class WorkflowEngineSettings(BaseSettings):
     db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     kafka_bootstrap_servers: str = "localhost:9092"
     service_name: str = "workflow-engine"
+    multi_tenancy_base_url: str = "http://localhost:8109"
+    entitlement_gate_cache_ttl_seconds: float = 30.0
     http_port: int = 8080
     llm_gateway_base_url: str = "http://localhost:8082"
     tool_orchestration_base_url: str = "http://localhost:8083"

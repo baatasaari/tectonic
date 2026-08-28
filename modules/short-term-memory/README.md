@@ -22,7 +22,7 @@ src/short_term_memory/
     tokenization.py                 Local token-count estimator
     buffer_manager.py                Buffer Manager — append, overflow detection, summarisation trigger
   clients/                 Redis adapter (literal LLD key patterns) + LLM Gateway HTTP client
-  security/                 Service-to-service JWT bearer auth (shared signing key)
+  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — sessions/{id}/messages, sessions/{id}
   schemas/                    Pydantic request/response models
@@ -68,6 +68,16 @@ implements its three key patterns
   external-facing user-auth story — a real API gateway/OAuth layer in
   front of the platform's own entry points is a separate, larger
   concern, out of scope here.
+
+- **Enforces its own subscription entitlement via `EntitlementGateMiddleware`**
+  (`security/entitlement_gate.py`) — see Agent Cards' README and the rollout
+  playbook doc (`docs/entitlement-gate-rollout.md`) for the shared reference
+  implementation. Layered after `ServiceAuthMiddleware` (authenticate, then
+  entitle), it calls Multi-tenancy's real `GET /tenants/{id}/gate?module=short-term-memory`,
+  denying with `402 Payment Required` when the tenant's subscription doesn't
+  include this module. It **fails open** if Multi-tenancy is unreachable — a
+  deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
+  posture.
 
 ## Running locally
 

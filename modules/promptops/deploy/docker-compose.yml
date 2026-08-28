@@ -41,6 +41,7 @@ services:
       PROMPTOPS_DATABASE_URL: postgresql+asyncpg://promptops:promptops@postgres:5432/promptops
       PROMPTOPS_EVALUATION_FRAMEWORK_BASE_URL: http://dependency-stub:9129
       PROMPTOPS_LLM_GATEWAY_BASE_URL: http://dependency-stub:9129
+      PROMPTOPS_MULTI_TENANCY_BASE_URL: http://dependency-stub:9129
     depends_on:
       postgres:
         condition: service_healthy

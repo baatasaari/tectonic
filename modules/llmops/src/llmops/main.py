@@ -15,6 +15,7 @@ from llmops.app_context import AppContext
 from llmops.clients.evaluation_framework_client import HTTPEvaluationFrameworkClient
 from llmops.config import LLMOpsSettings, load_settings
 from llmops.db.session import make_engine, make_session_factory
+from llmops.security.entitlement_gate import EntitlementGateMiddleware
 from llmops.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from llmops.telemetry.logging import configure_logging, get_logger
 from llmops.telemetry.tracing import configure_tracing
@@ -68,6 +69,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.add_middleware(
+        EntitlementGateMiddleware,
+        module_name=settings.service_name,
+        multi_tenancy_base_url=settings.multi_tenancy_base_url,
+        issuer=settings.service_name,
+        shared_secret=settings.jwt_shared_secret,
+        cache_ttl_seconds=settings.entitlement_gate_cache_ttl_seconds,
+    )
     app.add_middleware(
         ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )

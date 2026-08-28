@@ -41,6 +41,7 @@ services:
     environment:
       GRAPH_DB_DATABASE_URL: postgresql+asyncpg://graph_db:graph_db@postgres:5432/graph_db
       GRAPH_DB_AUDITABILITY_BASE_URL: http://dependency-stub:9111
+      GRAPH_DB_MULTI_TENANCY_BASE_URL: http://dependency-stub:9111
     depends_on:
       postgres:
         condition: service_healthy

@@ -40,6 +40,7 @@ services:
     environment:
       FINOPS_DATABASE_URL: postgresql+asyncpg://finops:finops@postgres:5432/finops
       FINOPS_LLM_GATEWAY_BASE_URL: http://dependency-stub:9126
+      FINOPS_MULTI_TENANCY_BASE_URL: http://dependency-stub:9126
     depends_on:
       postgres:
         condition: service_healthy

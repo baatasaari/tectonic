@@ -37,6 +37,7 @@ qdrant:
   defaultEmbeddingModel: "text-embedding-3-small"
 
 llmGatewayBaseUrl: "http://llm-gateway:8082"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:
   minAvailable: 2

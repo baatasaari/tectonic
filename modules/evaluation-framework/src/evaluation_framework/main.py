@@ -16,6 +16,7 @@ from evaluation_framework.clients.http_clients import HTTPLLMGatewayClient
 from evaluation_framework.config import EvaluationFrameworkSettings, load_settings
 from evaluation_framework.core.sampler import ProductionSampler
 from evaluation_framework.db.session import make_engine, make_session_factory
+from evaluation_framework.security.entitlement_gate import EntitlementGateMiddleware
 from evaluation_framework.security.jwt_auth import (
     INSECURE_DEFAULT_SECRET,
     ServiceAuthMiddleware,
@@ -74,6 +75,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.add_middleware(
+        EntitlementGateMiddleware,
+        module_name=settings.service_name,
+        multi_tenancy_base_url=settings.multi_tenancy_base_url,
+        issuer=settings.service_name,
+        shared_secret=settings.jwt_shared_secret,
+        cache_ttl_seconds=settings.entitlement_gate_cache_ttl_seconds,
+    )
     app.add_middleware(
         ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )

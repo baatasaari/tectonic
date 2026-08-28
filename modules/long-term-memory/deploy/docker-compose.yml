@@ -43,6 +43,7 @@ services:
       LONG_TERM_MEMORY_GRAPH_DB_BASE_URL: http://dependency-stub:9113
       LONG_TERM_MEMORY_LLM_GATEWAY_BASE_URL: http://dependency-stub:9113
       LONG_TERM_MEMORY_GUARDRAILS_BASE_URL: http://dependency-stub:9113
+      LONG_TERM_MEMORY_MULTI_TENANCY_BASE_URL: http://dependency-stub:9113
     depends_on:
       postgres:
         condition: service_healthy

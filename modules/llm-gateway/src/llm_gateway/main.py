@@ -23,6 +23,7 @@ from llm_gateway.clients.redis_quality_scores import RedisQualityScoreProvider
 from llm_gateway.config import LLMGatewaySettings, load_settings
 from llm_gateway.core.semantic_cache import RedisSemanticCache
 from llm_gateway.db.session import make_engine, make_session_factory
+from llm_gateway.security.entitlement_gate import EntitlementGateMiddleware
 from llm_gateway.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from llm_gateway.telemetry.logging import configure_logging, get_logger
 from llm_gateway.telemetry.tracing import configure_tracing
@@ -83,6 +84,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.add_middleware(
+        EntitlementGateMiddleware,
+        module_name=settings.service_name,
+        multi_tenancy_base_url=settings.multi_tenancy_base_url,
+        issuer=settings.service_name,
+        shared_secret=settings.jwt_shared_secret,
+        cache_ttl_seconds=settings.entitlement_gate_cache_ttl_seconds,
+    )
     app.add_middleware(
         ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )

@@ -39,6 +39,7 @@ services:
     environment:
       AGENT_MARKETPLACE_DATABASE_URL: postgresql+asyncpg://agent_marketplace:agent_marketplace@postgres:5432/agent_marketplace
       AGENT_MARKETPLACE_AGENT_CARDS_BASE_URL: http://dependency-stub:9124
+      AGENT_MARKETPLACE_MULTI_TENANCY_BASE_URL: http://dependency-stub:9124
     depends_on:
       postgres:
         condition: service_healthy

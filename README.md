@@ -472,13 +472,32 @@ real JSONB `labels` columns), not just SQLite fakes. See
 do yet (cascading offboarding, real optimistic-concurrency enforcement,
 real residency-policy enforcement).
 
+**Also fixed**: the universal entitlement-gate rollout
+(`docs/entitlement-gate-rollout.md`) — every one of the platform's 27
+other selectable modules (everything outside the 6-module Platform Base
+and Agent Cards, which already carried the reference implementation)
+now runs `EntitlementGateMiddleware`, layered immediately after
+`ServiceAuthMiddleware` in each module's own middleware stack
+(authenticate first, entitle second). Each module got its own copy of
+the middleware (`security/entitlement_gate.py`, this platform's
+established copy-don't-import convention for per-module security
+code), two new config fields (`multi_tenancy_base_url`,
+`entitlement_gate_cache_ttl_seconds`), a same-shape always-allow gate
+route on its own dependency-stub, and the reference test suite
+(9 tests × 27 modules = 243 new tests, all green — `pytest tests/unit`
+clean and `ruff check` clean on every module touched). The mechanical
+diff is identical everywhere: it was applied by a small scripted
+transform, dry-run and hand-verified on Workflow Engine before being
+applied to the remaining 26, following the same
+"script it once, verify every module" discipline the earlier
+shared-stub peer-routing fix used.
+
 **In progress**, tracked against the assessment's own Phase 1 (platform
-kernel) scope: universal entitlement-gate rollout beyond Agent Cards
-(`docs/entitlement-gate-rollout.md`), a quota and resource-allocation
-service, a CloudEvents-based event backbone, Vector DB's production
-persistence story, OpenAPI security-scheme declarations, Kubernetes
-hardening (NetworkPolicy, restricted pod security context) across every
-Helm chart, Identity and Access's OIDC/SAML/SCIM federation, Secrets'
+kernel) scope: a quota and resource-allocation service, a
+CloudEvents-based event backbone, Vector DB's production persistence
+story, OpenAPI security-scheme declarations, Kubernetes hardening
+(NetworkPolicy, restricted pod security context) across every Helm
+chart, Identity and Access's OIDC/SAML/SCIM federation, Secrets'
 managed-KMS integration, an idempotent metering ledger, Observability's
 trace-query/SLO surfaces, and CI supply-chain gates (SBOM, signing,
 contract tests).

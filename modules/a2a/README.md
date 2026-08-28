@@ -25,7 +25,7 @@ src/a2a_gateway/
     rpc_gateway.py                    The `/v1/a2a/rpc` wire surface — message/send, tasks/get, tasks/cancel
   db/                      SQLAlchemy 2.0 async models + repository (A2ATask/A2AAccessPolicy/AgentCardCache)
   clients/                 a2a_peer_client.py (arbitrary external agents) + workflow_engine_client.py (platform peer)
-  security/                 Service-to-service JWT bearer auth (shared signing key)
+  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — delegate, tasks, access-policies, rpc
   schemas/                    Pydantic request/response models
@@ -95,6 +95,16 @@ src/a2a_gateway/
   the start (this platform's standard formula), and `GET /tasks` is
   paginated (`limit`/`offset`, default 50/max 200) from its first
   version.
+
+- **Enforces its own subscription entitlement via `EntitlementGateMiddleware`**
+  (`security/entitlement_gate.py`) — see Agent Cards' README and the rollout
+  playbook doc (`docs/entitlement-gate-rollout.md`) for the shared reference
+  implementation. Layered after `ServiceAuthMiddleware` (authenticate, then
+  entitle), it calls Multi-tenancy's real `GET /tenants/{id}/gate?module=a2a`,
+  denying with `402 Payment Required` when the tenant's subscription doesn't
+  include this module. It **fails open** if Multi-tenancy is unreachable — a
+  deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
+  posture.
 
 ## Running locally
 

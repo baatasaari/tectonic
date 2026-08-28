@@ -47,6 +47,7 @@ llmGatewayBaseUrl: "http://llm-gateway:8082"
 toolOrchestrationBaseUrl: "http://tool-orchestration:8083"
 guardrailsBaseUrl: "http://guardrails:8093"
 humanOversightBaseUrl: "http://human-oversight:8095"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:
   minAvailable: 1

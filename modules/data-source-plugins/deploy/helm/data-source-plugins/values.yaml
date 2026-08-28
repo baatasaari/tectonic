@@ -36,6 +36,7 @@ database:
   existingSecretKey: "database-url"
 
 secretsAndCredentialManagementBaseUrl: "http://secrets-and-credential-management:8111"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:
   minAvailable: 2

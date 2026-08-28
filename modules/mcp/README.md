@@ -24,7 +24,7 @@ src/mcp_gateway/
     capability_sync_service.py       Capability Sync Service — refresh a server's cached tools/list
   db/                      SQLAlchemy 2.0 async models + repository (McpServer/McpTool/AccessPolicy)
   clients/                 Resilient JSON-RPC-over-HTTP client to arbitrary registered servers
-  security/                 Service-to-service JWT bearer auth (shared signing key)
+  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — register, discover, sync, access-policy, rpc
   schemas/                    Pydantic request/response models
@@ -91,6 +91,16 @@ src/mcp_gateway/
   version — unlike the 19 modules built before the platform's
   enterprise-readiness remediation series, this module never had
   un-tuned defaults to fix.
+
+- **Enforces its own subscription entitlement via `EntitlementGateMiddleware`**
+  (`security/entitlement_gate.py`) — see Agent Cards' README and the rollout
+  playbook doc (`docs/entitlement-gate-rollout.md`) for the shared reference
+  implementation. Layered after `ServiceAuthMiddleware` (authenticate, then
+  entitle), it calls Multi-tenancy's real `GET /tenants/{id}/gate?module=mcp`,
+  denying with `402 Payment Required` when the tenant's subscription doesn't
+  include this module. It **fails open** if Multi-tenancy is unreachable — a
+  deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
+  posture.
 
 ## Running locally
 

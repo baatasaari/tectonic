@@ -24,6 +24,7 @@ from sentinel_agents.clients.http_clients import (
 from sentinel_agents.config import SentinelAgentsSettings, load_settings
 from sentinel_agents.core.swarm_correlation import SwarmWindowTracker
 from sentinel_agents.db.session import make_engine, make_session_factory
+from sentinel_agents.security.entitlement_gate import EntitlementGateMiddleware
 from sentinel_agents.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from sentinel_agents.telemetry.logging import configure_logging, get_logger
 from sentinel_agents.telemetry.tracing import configure_tracing
@@ -83,6 +84,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.add_middleware(
+        EntitlementGateMiddleware,
+        module_name=settings.service_name,
+        multi_tenancy_base_url=settings.multi_tenancy_base_url,
+        issuer=settings.service_name,
+        shared_secret=settings.jwt_shared_secret,
+        cache_ttl_seconds=settings.entitlement_gate_cache_ttl_seconds,
+    )
     app.add_middleware(
         ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )

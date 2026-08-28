@@ -36,6 +36,7 @@ database:
   existingSecretKey: "database-url"
 
 dependencyStubBaseUrl: ""  # set to a real registered MCP server's URL once deployed alongside this module
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:
   minAvailable: 2

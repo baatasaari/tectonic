@@ -54,6 +54,7 @@ services:
       TOOL_ORCHESTRATION_LLM_GATEWAY_BASE_URL: http://dependency-stub:9104
       TOOL_ORCHESTRATION_GUARDRAILS_BASE_URL: http://dependency-stub:9104
       TOOL_ORCHESTRATION_SENTINEL_AGENTS_BASE_URL: http://dependency-stub:9104
+      TOOL_ORCHESTRATION_MULTI_TENANCY_BASE_URL: http://dependency-stub:9104
     depends_on:
       postgres:
         condition: service_healthy

@@ -42,6 +42,7 @@ redis:
   url: "redis://redis:6379/0"
 
 secretsAndCredentialManagementBaseUrl: "http://secrets-and-credential-management:8111"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:
   minAvailable: 3

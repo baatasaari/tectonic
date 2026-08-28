@@ -37,6 +37,7 @@ database:
 
 llmGatewayBaseUrl: "http://llm-gateway:8082"
 evaluationFrameworkBaseUrl: "http://evaluation-framework:8097"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:
   minAvailable: 2

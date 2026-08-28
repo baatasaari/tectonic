@@ -24,7 +24,7 @@ src/tool_orchestration/
     orchestration_service.py         The invocation orchestrator (this module's "scheduler")
   db/                      SQLAlchemy 2.0 async models + repository (ToolDefinition/Invocation/ReliabilityScore)
   clients/                 Redis circuit breaker store, MCP HTTP adapter, LLM Gateway/Guardrails/Sentinel clients
-  security/                 Service-to-service JWT bearer auth (shared signing key)
+  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI routers — discovery, invoke, synthesise, approve
   schemas/                    Pydantic request/response models
@@ -125,6 +125,16 @@ src/tool_orchestration/
   calls, not the platform's external-facing user-auth story — a real API
   gateway/OAuth layer in front of the platform's own entry points is a
   separate, larger concern, out of scope here.
+
+- **Enforces its own subscription entitlement via `EntitlementGateMiddleware`**
+  (`security/entitlement_gate.py`) — see Agent Cards' README and the rollout
+  playbook doc (`docs/entitlement-gate-rollout.md`) for the shared reference
+  implementation. Layered after `ServiceAuthMiddleware` (authenticate, then
+  entitle), it calls Multi-tenancy's real `GET /tenants/{id}/gate?module=tool-orchestration`,
+  denying with `402 Payment Required` when the tenant's subscription doesn't
+  include this module. It **fails open** if Multi-tenancy is unreachable — a
+  deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
+  posture.
 
 ## Running locally
 

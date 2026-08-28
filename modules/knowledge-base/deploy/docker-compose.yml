@@ -44,6 +44,7 @@ services:
       KNOWLEDGE_BASE_DATABASE_URL: postgresql+asyncpg://knowledge_base:knowledge_base@postgres:5432/knowledge_base
       KNOWLEDGE_BASE_VECTOR_DB_BASE_URL: http://dependency-stub:9109
       KNOWLEDGE_BASE_GRAPH_DB_BASE_URL: http://dependency-stub:9109
+      KNOWLEDGE_BASE_MULTI_TENANCY_BASE_URL: http://dependency-stub:9109
     depends_on:
       postgres:
         condition: service_healthy

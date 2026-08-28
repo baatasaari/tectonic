@@ -27,6 +27,8 @@ spec:
           env:
             - name: FINOPS_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: FINOPS_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: FINOPS_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: FINOPS_TELEMETRY__OTLP_ENDPOINT

@@ -27,6 +27,8 @@ spec:
           env:
             - name: EVALUATION_FRAMEWORK_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: EVALUATION_FRAMEWORK_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: EVALUATION_FRAMEWORK_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: EVALUATION_FRAMEWORK_TELEMETRY__OTLP_ENDPOINT

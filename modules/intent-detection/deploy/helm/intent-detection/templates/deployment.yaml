@@ -27,6 +27,8 @@ spec:
           env:
             - name: INTENT_DETECTION_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: INTENT_DETECTION_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: INTENT_DETECTION_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: INTENT_DETECTION_TELEMETRY__OTLP_ENDPOINT

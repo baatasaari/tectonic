@@ -27,6 +27,8 @@ spec:
           env:
             - name: OBSERVABILITY_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: OBSERVABILITY_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: OBSERVABILITY_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: OBSERVABILITY_TELEMETRY__OTLP_ENDPOINT

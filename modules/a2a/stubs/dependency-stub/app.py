@@ -53,3 +53,7 @@ async def start_instance(body: dict) -> dict:
 @app.get("/healthz")
 async def healthz() -> dict:
     return {"status": "ok"}
+
+@app.get("/v1/multi-tenancy/tenants/{tenant_id}/gate")
+async def gate(tenant_id: str, module: str | None = None) -> dict:
+    return {"allowed": True, "reason": "active"}

@@ -18,6 +18,7 @@ from short_term_memory.clients.http_clients import HTTPLLMGatewayClient
 from short_term_memory.clients.redis_buffer_store import RedisBufferStore
 from short_term_memory.config import ShortTermMemorySettings, load_settings
 from short_term_memory.core.buffer_manager import BufferManager
+from short_term_memory.security.entitlement_gate import EntitlementGateMiddleware
 from short_term_memory.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from short_term_memory.telemetry.logging import configure_logging, get_logger
 from short_term_memory.telemetry.tracing import configure_tracing
@@ -71,6 +72,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings
+    app.add_middleware(
+        EntitlementGateMiddleware,
+        module_name=settings.service_name,
+        multi_tenancy_base_url=settings.multi_tenancy_base_url,
+        issuer=settings.service_name,
+        shared_secret=settings.jwt_shared_secret,
+        cache_ttl_seconds=settings.entitlement_gate_cache_ttl_seconds,
+    )
     app.add_middleware(
         ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )

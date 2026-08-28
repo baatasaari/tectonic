@@ -36,6 +36,8 @@ class ShortTermMemorySettings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
     service_name: str = "short-term-memory"
+    multi_tenancy_base_url: str = "http://localhost:8109"
+    entitlement_gate_cache_ttl_seconds: float = 30.0
     http_port: int = 8091
     llm_gateway_base_url: str = "http://localhost:8082"
 

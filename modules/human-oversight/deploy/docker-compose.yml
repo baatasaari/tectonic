@@ -41,6 +41,7 @@ services:
       HUMAN_OVERSIGHT_DATABASE_URL: postgresql+asyncpg://human_oversight:human_oversight@postgres:5432/human_oversight
       HUMAN_OVERSIGHT_AUDITABILITY_BASE_URL: http://dependency-stub:9116
       HUMAN_OVERSIGHT_NOTIFICATION_STUB_BASE_URL: http://dependency-stub:9116
+      HUMAN_OVERSIGHT_MULTI_TENANCY_BASE_URL: http://dependency-stub:9116
       # pydantic-settings parses a dict[str, str] field from a JSON-encoded env var --
       # only workflow-engine is listed since that's the only callback route the stub
       # below actually implements; config.py's own _default_service_urls() (the full

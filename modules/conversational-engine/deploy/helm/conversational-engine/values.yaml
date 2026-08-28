@@ -47,6 +47,7 @@ longTermMemoryBaseUrl: "http://long-term-memory:8092"
 humanOversightBaseUrl: "http://human-oversight:8095"
 observabilityBaseUrl: "http://observability:8098"
 auditabilityBaseUrl: "http://auditability:8099"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
 
 podDisruptionBudget:
   minAvailable: 2

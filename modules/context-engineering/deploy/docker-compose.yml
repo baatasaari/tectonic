@@ -41,6 +41,7 @@ services:
       CONTEXT_ENGINEERING_DATABASE_URL: postgresql+asyncpg://context_engineering:context_engineering@postgres:5432/context_engineering
       CONTEXT_ENGINEERING_LLM_GATEWAY_BASE_URL: http://dependency-stub:9107
       CONTEXT_ENGINEERING_EVALUATION_FRAMEWORK_BASE_URL: http://dependency-stub:9107
+      CONTEXT_ENGINEERING_MULTI_TENANCY_BASE_URL: http://dependency-stub:9107
     depends_on:
       postgres:
         condition: service_healthy
