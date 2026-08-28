@@ -100,12 +100,14 @@ class ExecutionScheduler:
         self, instance: WorkflowInstanceRecord, graph: WorkflowGraph
     ) -> WorkflowInstanceRecord:
         workflow_instances_active.labels(tenant_id=instance.tenant_id, status=instance.status.value).inc()
-        await self._publish(
-            events.TOPIC_WORKFLOW_INSTANCE,
-            events.workflow_started(instance.tenant_id, instance.trace_id, instance.id, instance.definition_id),
-        )
         instance = replace(instance, current_step_ids=[graph.entry_point])
-        instance = await self.repository.update_instance(instance)
+        # workflow.started is one of the three top-level instance-lifecycle events with
+        # outbox-grade guaranteed delivery -- see core/events.py's own module docstring
+        # for why these three (and not step/approval/replan events) get this guarantee.
+        instance = await self.repository.update_instance_and_enqueue_event(
+            instance, topic=events.TOPIC_WORKFLOW_INSTANCE,
+            envelope=events.workflow_started(instance.tenant_id, instance.trace_id, instance.id, instance.definition_id),
+        )
         return await self._run(instance, graph)
 
     async def resume_after_approval(
@@ -223,20 +225,18 @@ class ExecutionScheduler:
 
         if instance.status == InstanceStatus.RUNNING:
             instance = replace(instance, status=InstanceStatus.COMPLETED, completed_at=now())
-            instance = await self.repository.update_instance(instance)
-            await self._publish(
-                events.TOPIC_WORKFLOW_INSTANCE,
-                events.workflow_completed(instance.tenant_id, instance.trace_id, instance.id),
+            instance = await self.repository.update_instance_and_enqueue_event(
+                instance, topic=events.TOPIC_WORKFLOW_INSTANCE,
+                envelope=events.workflow_completed(instance.tenant_id, instance.trace_id, instance.id),
             )
             workflow_instances_active.labels(tenant_id=instance.tenant_id, status="running").dec()
         return instance
 
     async def _fail(self, instance: WorkflowInstanceRecord, reason: str) -> WorkflowInstanceRecord:
         instance = replace(instance, status=InstanceStatus.FAILED, completed_at=now())
-        instance = await self.repository.update_instance(instance)
-        await self._publish(
-            events.TOPIC_WORKFLOW_INSTANCE,
-            events.workflow_failed(instance.tenant_id, instance.trace_id, instance.id, reason),
+        instance = await self.repository.update_instance_and_enqueue_event(
+            instance, topic=events.TOPIC_WORKFLOW_INSTANCE,
+            envelope=events.workflow_failed(instance.tenant_id, instance.trace_id, instance.id, reason),
         )
         workflow_instances_active.labels(tenant_id=instance.tenant_id, status="running").dec()
         return instance

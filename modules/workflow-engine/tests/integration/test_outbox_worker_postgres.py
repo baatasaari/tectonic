@@ -1,0 +1,212 @@
+"""Integration tier: the one property of the durable event-outbox worker
+that neither SQLite nor the in-memory fake can prove for real -- that
+`SELECT ... FOR UPDATE SKIP LOCKED` genuinely lets multiple concurrent
+worker processes claim from the same table without ever double-claiming a
+row, and without one blocking on another's held lock. Mirrors Regulatory
+Compliance's own `test_evidence_worker_postgres.py` for its evidence-pack
+worker, applied here to `event_outbox`. See `conftest.py` for how the
+Postgres instance is obtained.
+"""
+from __future__ import annotations
+
+import asyncio
+import os
+
+import pytest
+from alembic.config import Config as AlembicConfig
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+from alembic import command
+from workflow_engine.core import events
+from workflow_engine.core.domain import WorkflowInstanceRecord, new_id
+from workflow_engine.db.repository import SQLAlchemyWorkflowRepository
+
+pytestmark = pytest.mark.asyncio
+
+
+@pytest.fixture(scope="module")
+def migrated_url(postgres_url):
+    alembic_cfg = AlembicConfig("alembic.ini")
+    alembic_cfg.set_main_option("sqlalchemy.url", postgres_url)
+    os.environ["WORKFLOW_ENGINE_DATABASE_URL"] = postgres_url
+    command.upgrade(alembic_cfg, "head")
+    return postgres_url
+
+
+@pytest.fixture(autouse=True)
+async def _empty_event_outbox_table(migrated_url):
+    """claim_next_outbox_event scans across all tenants by design (a real
+    worker claims whatever's oldest and pending, platform-wide) -- so,
+    like Regulatory Compliance's own equivalent fixture, these tests
+    can't isolate themselves from each other with a distinct tenant_id
+    alone. migrated_url is module-scoped (one DB, reused across every
+    test in this file for speed); this resets its data, not its schema,
+    before each test."""
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("DELETE FROM event_outbox"))
+            await conn.execute(text("DELETE FROM workflow_instances"))
+            await conn.execute(text("DELETE FROM workflow_definitions"))
+            await conn.commit()
+    finally:
+        await engine.dispose()
+
+
+async def _seed_instance(repo) -> WorkflowInstanceRecord:
+    from workflow_engine.core.domain import DefinitionStatus, WorkflowDefinitionRecord
+
+    definition = await repo.create_definition(
+        WorkflowDefinitionRecord(
+            id=new_id(), name="test-def", version=1, status=DefinitionStatus.PUBLISHED,
+            graph_schema={"nodes": [], "edges": [], "entry_point": "x", "termination_points": []},
+            tenant_id="acme", created_by="tester",
+        )
+    )
+    return await repo.create_instance(
+        WorkflowInstanceRecord(
+            id=new_id(), definition_id=definition.id, definition_version=1, tenant_id="acme", trace_id="trace-1",
+        )
+    )
+
+
+async def test_update_instance_and_enqueue_event_commits_both_writes_atomically(migrated_url):
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyWorkflowRepository(session)
+            instance = await _seed_instance(repo)
+
+            from dataclasses import replace as dc_replace
+
+            updated_instance = dc_replace(instance, current_step_ids=["step_1"])
+            envelope = events.workflow_started(instance.tenant_id, instance.trace_id, instance.id, instance.definition_id)
+            result = await repo.update_instance_and_enqueue_event(
+                updated_instance, topic=events.TOPIC_WORKFLOW_INSTANCE, envelope=envelope,
+            )
+
+            assert result.current_step_ids == ["step_1"]
+
+            fetched_instance = await repo.get_instance(instance.id)
+            assert fetched_instance.current_step_ids == ["step_1"]
+
+            claimed = await repo.claim_next_outbox_event("worker-a", lease_seconds=60)
+            assert claimed is not None
+            assert claimed.id == envelope["id"]
+            assert claimed.topic == events.TOPIC_WORKFLOW_INSTANCE
+            assert claimed.envelope == envelope  # a real JSONB round trip of the whole envelope
+    finally:
+        await engine.dispose()
+
+
+async def test_concurrent_claims_never_double_claim_the_same_row(migrated_url):
+    engine = create_async_engine(migrated_url)
+    try:
+        event_ids: list[str] = []
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyWorkflowRepository(session)
+            instance = await _seed_instance(repo)
+            for _ in range(8):
+                envelope = events.step_started(instance.tenant_id, instance.trace_id, instance.id, new_id(), "neural")
+                await repo.update_instance_and_enqueue_event(
+                    instance, topic=events.TOPIC_WORKFLOW_STEP, envelope=envelope,
+                )
+                event_ids.append(envelope["id"])
+
+        async def claim_one(worker_id: str) -> str | None:
+            async with engine.connect() as conn, AsyncSession(conn) as session:
+                repo = SQLAlchemyWorkflowRepository(session)
+                claimed = await repo.claim_next_outbox_event(worker_id, lease_seconds=120)
+                return claimed.id if claimed else None
+
+        results = await asyncio.gather(*(claim_one(f"worker-{i}") for i in range(4)))
+
+        assert all(r is not None for r in results)
+        assert len(set(results)) == 4
+        assert set(results) <= set(event_ids)
+    finally:
+        await engine.dispose()
+
+
+async def test_a_claim_with_active_lease_is_invisible_to_a_concurrent_claimer(migrated_url):
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyWorkflowRepository(session)
+            instance = await _seed_instance(repo)
+            envelope = events.workflow_started(instance.tenant_id, instance.trace_id, instance.id, instance.definition_id)
+            await repo.update_instance_and_enqueue_event(
+                instance, topic=events.TOPIC_WORKFLOW_INSTANCE, envelope=envelope,
+            )
+
+        async def claim(worker_id: str) -> str | None:
+            async with engine.connect() as conn, AsyncSession(conn) as session:
+                repo = SQLAlchemyWorkflowRepository(session)
+                claimed = await repo.claim_next_outbox_event(worker_id, lease_seconds=120)
+                return claimed.id if claimed else None
+
+        first, second = await asyncio.gather(claim("worker-a"), claim("worker-b"))
+
+        assert {first, second} == {envelope["id"], None}
+    finally:
+        await engine.dispose()
+
+
+async def test_force_expire_stale_leases_makes_an_in_flight_row_reclaimable(migrated_url):
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyWorkflowRepository(session)
+            instance = await _seed_instance(repo)
+            envelope = events.workflow_started(instance.tenant_id, instance.trace_id, instance.id, instance.definition_id)
+            await repo.update_instance_and_enqueue_event(
+                instance, topic=events.TOPIC_WORKFLOW_INSTANCE, envelope=envelope,
+            )
+
+            claimed = await repo.claim_next_outbox_event("dead-worker", lease_seconds=3600)
+            assert claimed.id == envelope["id"]
+
+            immediate = await repo.claim_next_outbox_event("worker-b", lease_seconds=120)
+            assert immediate is None
+
+            recovered = await repo.force_expire_stale_outbox_leases()
+            assert recovered == 1
+
+            reclaimed = await repo.claim_next_outbox_event("worker-c", lease_seconds=120)
+            assert reclaimed is not None
+            assert reclaimed.id == envelope["id"]
+            assert reclaimed.attempts == 2
+    finally:
+        await engine.dispose()
+
+
+async def test_mark_published_and_fail_exhausted_transitions(migrated_url):
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyWorkflowRepository(session)
+            instance = await _seed_instance(repo)
+            envelope_a = events.workflow_started(instance.tenant_id, instance.trace_id, instance.id, instance.definition_id)
+            envelope_b = events.workflow_completed(instance.tenant_id, instance.trace_id, instance.id)
+            await repo.update_instance_and_enqueue_event(
+                instance, topic=events.TOPIC_WORKFLOW_INSTANCE, envelope=envelope_a,
+            )
+            await repo.update_instance_and_enqueue_event(
+                instance, topic=events.TOPIC_WORKFLOW_INSTANCE, envelope=envelope_b,
+            )
+
+            claimed_a = await repo.claim_next_outbox_event("worker-a", lease_seconds=60)
+            await repo.mark_outbox_event_published(claimed_a.id)
+
+            claimed_b = await repo.claim_next_outbox_event("worker-b", lease_seconds=60)
+            for _ in range(4):
+                await repo.requeue_outbox_event_for_retry(claimed_b.id, error="still failing")
+                await repo.claim_next_outbox_event("worker-b", lease_seconds=0)
+            failed_count = await repo.fail_exhausted_outbox_events(max_attempts=5)
+
+            assert failed_count == 1
+            still_pending = await repo.claim_next_outbox_event("worker-c", lease_seconds=60)
+            assert still_pending is None  # the exhausted one is FAILED, not claimable anymore
+    finally:
+        await engine.dispose()

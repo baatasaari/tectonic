@@ -7,14 +7,18 @@ from __future__ import annotations
 
 import copy
 from dataclasses import replace
+from datetime import timedelta
 from typing import Any
 
 from workflow_engine.core.domain import (
     ApprovalRequestRecord,
+    EventOutboxRecord,
+    OutboxEventStatus,
     ReplanEventRecord,
     StepExecutionRecord,
     WorkflowDefinitionRecord,
     WorkflowInstanceRecord,
+    now,
 )
 
 
@@ -25,6 +29,7 @@ class InMemoryWorkflowRepository:
         self.steps: dict[str, StepExecutionRecord] = {}
         self.approvals: dict[str, ApprovalRequestRecord] = {}
         self.replan_events: list[ReplanEventRecord] = []
+        self.outbox: dict[str, EventOutboxRecord] = {}
 
     async def get_definition(self, definition_id: str) -> WorkflowDefinitionRecord | None:
         rec = self.definitions.get(definition_id)
@@ -90,6 +95,67 @@ class InMemoryWorkflowRepository:
     async def create_replan_event(self, record: ReplanEventRecord) -> ReplanEventRecord:
         self.replan_events.append(copy.deepcopy(record))
         return copy.deepcopy(record)
+
+    async def update_instance_and_enqueue_event(
+        self, record: WorkflowInstanceRecord, *, topic: str, envelope: dict[str, Any],
+    ) -> WorkflowInstanceRecord:
+        self.instances[record.id] = copy.deepcopy(record)
+        outbox_record = EventOutboxRecord(
+            id=envelope["id"], topic=topic, tenant_id=envelope["tenant_id"], envelope=copy.deepcopy(envelope),
+        )
+        self.outbox[outbox_record.id] = outbox_record
+        return copy.deepcopy(record)
+
+    async def claim_next_outbox_event(self, worker_id: str, lease_seconds: int) -> EventOutboxRecord | None:
+        moment = now()
+        candidates = [
+            e for e in self.outbox.values()
+            if e.status == OutboxEventStatus.PENDING and (e.lease_expires_at is None or e.lease_expires_at < moment)
+        ]
+        if not candidates:
+            return None
+        oldest = min(candidates, key=lambda e: e.created_at)
+        oldest.worker_id = worker_id
+        oldest.attempts += 1
+        oldest.lease_expires_at = moment + timedelta(seconds=lease_seconds)
+        return copy.deepcopy(oldest)
+
+    async def mark_outbox_event_published(self, event_id: str) -> None:
+        record = self.outbox.get(event_id)
+        if record is None:
+            return
+        record.status = OutboxEventStatus.PUBLISHED
+        record.published_at = now()
+        record.lease_expires_at = None
+
+    async def requeue_outbox_event_for_retry(self, event_id: str, *, error: str) -> None:
+        record = self.outbox.get(event_id)
+        if record is None:
+            return
+        record.lease_expires_at = None
+        record.last_error = error
+
+    async def fail_exhausted_outbox_events(self, max_attempts: int) -> int:
+        count = 0
+        for record in self.outbox.values():
+            if record.status == OutboxEventStatus.PENDING and record.attempts >= max_attempts:
+                record.status = OutboxEventStatus.FAILED
+                record.last_error = f"exceeded max attempts ({max_attempts})"
+                count += 1
+        return count
+
+    async def force_expire_stale_outbox_leases(self) -> int:
+        moment = now()
+        count = 0
+        for record in self.outbox.values():
+            if (
+                record.status == OutboxEventStatus.PENDING
+                and record.lease_expires_at is not None
+                and record.lease_expires_at > moment
+            ):
+                record.lease_expires_at = moment
+                count += 1
+        return count
 
 
 class InMemoryEventPublisher:

@@ -25,8 +25,9 @@ src/workflow_engine/
     human.py                  Human Approval Handler
     replanner.py               Replanner — structural (symbolic) + content (neural) adaptation
     scheduler.py                Execution Scheduler — the graph runtime
-    events.py                    Event topic/payload builders
-  db/                     SQLAlchemy 2.0 async models + repository
+    events.py                    CloudEvents envelope builders
+    outbox_worker.py              OutboxRelayWorker — durable event-outbox relay to Kafka
+  db/                     SQLAlchemy 2.0 async models + repository (incl. the event_outbox table)
   clients/                Kafka publisher, HTTP clients for the 4 external modules
   security/                Service-to-service JWT bearer auth (shared signing key), the entitlement gate
   telemetry/               OTel tracing, Prometheus metrics, structlog logging
@@ -41,6 +42,48 @@ tests/integration/        Real-Postgres tier via testcontainers (needs Docker)
 ```
 
 ## Design notes vs. the LLD
+
+- **The event backbone: CloudEvents envelopes, and a real transactional
+  outbox for the three top-level instance-lifecycle events**
+  (independent architecture assessment §3.3 "Add an event backbone").
+  `core/events.py` builds real CloudEvents v1.0 envelopes
+  (https://cloudevents.io/) for every event this module emits — not the
+  ad hoc dict shape this module used before: `specversion`/`id`/
+  `source`/`type`/`subject`/`time`/`datacontenttype`/`data` are the
+  spec's own core attributes, and `tenant_id`/`environment_id`/
+  `correlation_id`/`causation_id` are CloudEvents *extension*
+  attributes — the assessment's own §3.3 required-fields list,
+  attribute for attribute. `id` doubles as the delivery idempotency
+  key (CloudEvents' own spec defines `id` + `source` as what a
+  consumer dedupes redelivery on). No module in this platform runs a
+  real Kafka consumer yet, so this is a real, spec-shaped producer
+  contract with nothing live to break — the same "reference
+  implementation before rollout" shape this platform used for
+  `EntitlementGateMiddleware`.
+
+  Three events — `workflow.started`, `workflow.completed`,
+  `workflow.failed` — get outbox-grade guaranteed delivery:
+  `WorkflowRepository.update_instance_and_enqueue_event` writes the
+  instance's state change AND its envelope into a new `event_outbox`
+  table in the *same* DB commit, so a committed transition is
+  guaranteed to have its event durably queued — no dual-write window
+  where the DB write lands but a direct Kafka publish is lost, or vice
+  versa. `core/outbox_worker.py`'s `OutboxRelayWorker` is what actually
+  delivers them, reusing the exact claim/lease/poison-pill shape
+  Regulatory Compliance's `EvidencePackWorker` already established for
+  this platform's durable background jobs (`SELECT ... FOR UPDATE SKIP
+  LOCKED`, verified against real Postgres to never double-claim under
+  concurrent workers — see `tests/integration/test_outbox_worker_postgres.py`).
+  Every other event this module emits (step/approval/replan events)
+  deliberately stays on the pre-existing best-effort direct-publish
+  path (`ExecutionScheduler._publish`) — higher-volume, more tolerant
+  of an occasional drop, and not the events other modules most need a
+  durability guarantee on (billing usage, audit trails, SDK portal
+  dashboards). Extending outbox-grade delivery to the rest, and rolling
+  this same pattern out to other modules with their own event-emission
+  needs, is separate, real, unbuilt follow-up work — the CloudEvents
+  envelope contract above is meant to be that rollout's shared
+  starting point.
 
 - **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
 

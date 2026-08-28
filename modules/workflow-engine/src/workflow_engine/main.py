@@ -4,6 +4,8 @@ separately, reporting degraded rather than binary pass/fail, per the LLD.
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
@@ -23,10 +25,12 @@ from workflow_engine.clients.http_clients import (
 )
 from workflow_engine.clients.kafka_publisher import KafkaEventPublisher
 from workflow_engine.config import WorkflowEngineSettings, load_settings
+from workflow_engine.core.outbox_worker import OutboxRelayWorker
 from workflow_engine.core.symbolic import SymbolicRuleExecutor
+from workflow_engine.db.repository import SQLAlchemyWorkflowRepository
 from workflow_engine.db.session import make_engine, make_session_factory
-from workflow_engine.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from workflow_engine.security.entitlement_gate import EntitlementGateMiddleware
+from workflow_engine.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from workflow_engine.telemetry.logging import configure_logging, get_logger
 from workflow_engine.telemetry.tracing import configure_tracing
 
@@ -81,10 +85,32 @@ async def lifespan(app: FastAPI):
     await event_publisher.start()
     app.state.ctx = ctx
 
-    logger.info("startup_complete", service=settings.service_name, tenant_id=settings.tenant_id)
+    @asynccontextmanager
+    async def repository_factory():
+        async with ctx.session_factory() as session:
+            yield SQLAlchemyWorkflowRepository(session)
+
+    outbox_worker = OutboxRelayWorker(
+        repository_factory, event_publisher,
+        poll_interval_seconds=settings.outbox_worker_poll_interval_seconds,
+        lease_seconds=settings.outbox_worker_lease_seconds,
+        max_attempts=settings.outbox_worker_max_attempts,
+    )
+    await outbox_worker.recover_stuck_events()
+    outbox_worker_task = asyncio.create_task(outbox_worker.run_forever())
+    app.state.outbox_worker = outbox_worker
+
+    logger.info(
+        "startup_complete", service=settings.service_name, tenant_id=settings.tenant_id,
+        outbox_worker_id=outbox_worker.worker_id,
+    )
     try:
         yield
     finally:
+        outbox_worker.stop()
+        outbox_worker_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await outbox_worker_task
         await event_publisher.stop()
         await ctx.engine.dispose()
         logger.info("shutdown_complete")

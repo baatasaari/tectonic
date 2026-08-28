@@ -14,6 +14,7 @@ from typing import Any, Protocol
 
 from workflow_engine.core.domain import (
     ApprovalRequestRecord,
+    EventOutboxRecord,
     ReplanEventRecord,
     StepExecutionRecord,
     WorkflowDefinitionRecord,
@@ -34,6 +35,16 @@ class WorkflowRepository(Protocol):
 
     async def update_instance(self, record: WorkflowInstanceRecord) -> WorkflowInstanceRecord: ...
 
+    async def update_instance_and_enqueue_event(
+        self, record: WorkflowInstanceRecord, *, topic: str, envelope: dict[str, Any],
+    ) -> WorkflowInstanceRecord:
+        """Atomically updates the instance AND enqueues its accompanying
+        CloudEvents envelope into `event_outbox`, one DB commit -- see
+        `EventOutboxRecord`'s own docstring for why this, not
+        `update_instance` + a separate direct publish, is what backs
+        the three top-level instance-lifecycle events."""
+        ...
+
     async def create_step_execution(self, record: StepExecutionRecord) -> StepExecutionRecord: ...
 
     async def update_step_execution(self, record: StepExecutionRecord) -> StepExecutionRecord: ...
@@ -51,6 +62,32 @@ class WorkflowRepository(Protocol):
     async def update_approval_request(self, record: ApprovalRequestRecord) -> ApprovalRequestRecord: ...
 
     async def create_replan_event(self, record: ReplanEventRecord) -> ReplanEventRecord: ...
+
+    # --- Event outbox relay (core/outbox_worker.py) ---
+
+    async def claim_next_outbox_event(self, worker_id: str, lease_seconds: int) -> EventOutboxRecord | None:
+        """`SELECT ... FOR UPDATE SKIP LOCKED` in the SQL implementation --
+        the same claim shape `claim_next_evidence_pack` (Regulatory
+        Compliance) already established for this platform's durable
+        background jobs, so multiple worker processes/pods can poll
+        this table concurrently with no double-claim."""
+        ...
+
+    async def mark_outbox_event_published(self, event_id: str) -> None: ...
+
+    async def requeue_outbox_event_for_retry(self, event_id: str, *, error: str) -> None: ...
+
+    async def fail_exhausted_outbox_events(self, max_attempts: int) -> int:
+        """The poison-pill guard: an event that has failed `max_attempts`
+        times in a row stops being retried and is marked `failed` for
+        good, rather than being reclaimed forever."""
+        ...
+
+    async def force_expire_stale_outbox_leases(self) -> int:
+        """The startup recovery sweep: force-expires every currently-held
+        lease, so anything left mid-flight by a now-dead previous worker
+        instance is reclaimed on the very next poll tick."""
+        ...
 
 
 class EventPublisher(Protocol):

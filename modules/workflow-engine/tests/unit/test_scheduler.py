@@ -50,10 +50,15 @@ async def test_happy_path_symbolic_then_neural_completes(harness):
     assert result.context["step_1"]["decision"] == "eligible"
     steps, _total = await harness.repository.list_step_executions(result.id)
     assert {s.step_id: s.status for s in steps} == {"step_1": StepStatus.COMPLETED, "step_2": StepStatus.COMPLETED}
-    event_types = [e["event_type"] for _, e in harness.event_publisher.published]
-    assert "workflow.started" in event_types
-    assert "workflow.completed" in event_types
-    assert event_types.count("step.completed") == 2
+    # workflow.started/workflow.completed are two of the three top-level instance-
+    # lifecycle events with outbox-grade guaranteed delivery (core/events.py's own
+    # module docstring) -- they land in the transactional outbox, not the direct
+    # best-effort publish path, so they show up here rather than in event_publisher.
+    outbox_types = [e.envelope["type"] for e in harness.repository.outbox.values()]
+    assert "com.tectonic.workflow.started" in outbox_types
+    assert "com.tectonic.workflow.completed" in outbox_types
+    event_types = [e["type"] for _, e in harness.event_publisher.published]
+    assert event_types.count("com.tectonic.step.completed") == 2
 
 
 async def test_low_confidence_pauses_for_approval_then_resumes(harness):
@@ -74,7 +79,9 @@ async def test_low_confidence_pauses_for_approval_then_resumes(harness):
     assert paused.status == InstanceStatus.PAUSED_FOR_APPROVAL
     assert paused.current_step_ids == ["step_1"]
     assert len(harness.human_oversight.requests) == 1
-    approval_events = [e for _, e in harness.event_publisher.published if e["event_type"] == "approval.requested"]
+    approval_events = [
+        e for _, e in harness.event_publisher.published if e["type"] == "com.tectonic.approval.requested"
+    ]
     assert len(approval_events) == 1
 
     completed = await harness.scheduler.resume_after_approval(paused, graph, approved=True)

@@ -6,15 +6,20 @@ non-functional targets table.
 """
 from __future__ import annotations
 
-from sqlalchemy import func, select
+from datetime import timedelta
+from typing import Any
+
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from workflow_engine.core.domain import (
     ApprovalRequestRecord,
     ApprovalStatus,
     DefinitionStatus,
+    EventOutboxRecord,
     ExecutionMode,
     InstanceStatus,
+    OutboxEventStatus,
     ReplanEventRecord,
     StepExecutionRecord,
     StepStatus,
@@ -51,6 +56,15 @@ def _instance_to_domain(m: models.WorkflowInstance) -> WorkflowInstanceRecord:
         context=dict(m.context or {}),
         started_at=m.started_at,
         completed_at=m.completed_at,
+    )
+
+
+def _outbox_to_domain(m: models.EventOutbox) -> EventOutboxRecord:
+    return EventOutboxRecord(
+        id=str(m.id), topic=m.topic, tenant_id=m.tenant_id, envelope=dict(m.envelope or {}),
+        status=OutboxEventStatus(m.status), attempts=m.attempts, worker_id=m.worker_id,
+        lease_expires_at=m.lease_expires_at, last_error=m.last_error,
+        created_at=m.created_at, published_at=m.published_at,
     )
 
 
@@ -250,3 +264,101 @@ class SQLAlchemyWorkflowRepository:
             new_graph_delta=m.new_graph_delta,
             created_at=m.created_at,
         )
+
+    # --- Transactional event outbox ---
+
+    async def update_instance_and_enqueue_event(
+        self, record: WorkflowInstanceRecord, *, topic: str, envelope: dict[str, Any],
+    ) -> WorkflowInstanceRecord:
+        m = await self.session.get(models.WorkflowInstance, record.id)
+        if m is None:
+            raise LookupError(record.id)
+        m.status = record.status.value
+        m.current_step_ids = record.current_step_ids
+        m.context = record.context
+        m.completed_at = record.completed_at
+
+        outbox_row = models.EventOutbox(
+            id=envelope["id"], topic=topic, tenant_id=envelope["tenant_id"], envelope=envelope,
+        )
+        self.session.add(outbox_row)
+
+        # One commit for both writes -- the whole point of the outbox pattern: if this
+        # transaction commits, the instance's new state and its accompanying event are
+        # guaranteed to both be there; if it rolls back, neither is.
+        await self.session.commit()
+        await self.session.refresh(m)
+        return _instance_to_domain(m)
+
+    async def claim_next_outbox_event(self, worker_id: str, lease_seconds: int) -> EventOutboxRecord | None:
+        """`SELECT ... FOR UPDATE SKIP LOCKED`: the row-level lock this
+        takes is what lets multiple worker processes/pods poll
+        concurrently without two of them ever claiming the same pending
+        event — a competing claimant simply skips a row another
+        transaction already has locked, rather than blocking on it or
+        double-claiming it. Same shape `claim_next_evidence_pack`
+        (Regulatory Compliance) already established."""
+        moment = now()
+        stmt = (
+            select(models.EventOutbox)
+            .where(
+                models.EventOutbox.status == OutboxEventStatus.PENDING.value,
+                (models.EventOutbox.lease_expires_at.is_(None)) | (models.EventOutbox.lease_expires_at < moment),
+            )
+            .order_by(models.EventOutbox.created_at)
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+        rows = await self.session.execute(stmt)
+        m = rows.scalars().first()
+        if m is None:
+            return None
+        m.worker_id = worker_id
+        m.attempts += 1
+        m.lease_expires_at = moment + timedelta(seconds=lease_seconds)
+        await self.session.commit()
+        await self.session.refresh(m)
+        return _outbox_to_domain(m)
+
+    async def mark_outbox_event_published(self, event_id: str) -> None:
+        m = await self.session.get(models.EventOutbox, event_id)
+        if m is None:
+            return
+        m.status = OutboxEventStatus.PUBLISHED.value
+        m.published_at = now()
+        m.lease_expires_at = None
+        await self.session.commit()
+
+    async def requeue_outbox_event_for_retry(self, event_id: str, *, error: str) -> None:
+        m = await self.session.get(models.EventOutbox, event_id)
+        if m is None:
+            return
+        m.lease_expires_at = None
+        m.last_error = error[:1024]
+        await self.session.commit()
+
+    async def fail_exhausted_outbox_events(self, max_attempts: int) -> int:
+        result = await self.session.execute(
+            update(models.EventOutbox)
+            .where(
+                models.EventOutbox.status == OutboxEventStatus.PENDING.value,
+                models.EventOutbox.attempts >= max_attempts,
+            )
+            .values(status=OutboxEventStatus.FAILED.value, last_error=f"exceeded max attempts ({max_attempts})")
+        )
+        await self.session.commit()
+        return result.rowcount or 0
+
+    async def force_expire_stale_outbox_leases(self) -> int:
+        moment = now()
+        result = await self.session.execute(
+            update(models.EventOutbox)
+            .where(
+                models.EventOutbox.status == OutboxEventStatus.PENDING.value,
+                models.EventOutbox.lease_expires_at.is_not(None),
+                models.EventOutbox.lease_expires_at > moment,
+            )
+            .values(lease_expires_at=moment)
+        )
+        await self.session.commit()
+        return result.rowcount or 0

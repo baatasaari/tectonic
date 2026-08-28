@@ -518,14 +518,41 @@ module calls `quota/check` before doing work yet (this ships the real,
 tested capability first, the same sequencing
 `EntitlementGateMiddleware` used before its own 27-module rollout).
 
+**Also fixed**: an event backbone (assessment §3.3), reference-built in
+Workflow Engine (Module 1) — the platform's only module with any real
+event-bus publishing before this, and so the natural place to build it
+for real before a later rollout. `core/events.py` now builds real
+CloudEvents v1.0 envelopes (`specversion`/`id`/`source`/`type`/
+`subject`/`time`/`datacontenttype`/`data` plus `tenant_id`/
+`environment_id`/`correlation_id`/`causation_id` extension attributes —
+the assessment's own required-fields list, attribute for attribute) for
+every event this module emits, replacing its previous ad hoc dict
+shape; no module runs a real Kafka consumer yet, so nothing existing
+had to change to absorb this. Three top-level instance-lifecycle events
+(`workflow.started`/`.completed`/`.failed`) get real outbox-grade
+guaranteed delivery: a new `event_outbox` table, written in the *same*
+DB commit as the instance state change it accompanies (no dual-write
+window), relayed by a new `OutboxRelayWorker` that reuses this
+platform's own established durable-background-job shape (Regulatory
+Compliance's `EvidencePackWorker`'s claim/lease/poison-pill pattern,
+`SELECT ... FOR UPDATE SKIP LOCKED`, verified against real Postgres to
+never double-claim under concurrent workers). Step/approval/replan
+events deliberately stay on the pre-existing best-effort direct-publish
+path — a scoped choice, not an oversight; see
+`modules/workflow-engine/README.md` for the full reasoning and for what
+this doesn't do yet (outbox-grade delivery for the rest, and rollout to
+other modules' own event-emission needs — the CloudEvents envelope
+contract here is meant to be that rollout's shared starting point, the
+same "reference implementation before rollout" shape
+`EntitlementGateMiddleware` used).
+
 **In progress**, tracked against the assessment's own Phase 1 (platform
-kernel) scope: a CloudEvents-based event backbone, Vector DB's
-production persistence story, OpenAPI security-scheme declarations,
-Kubernetes hardening (NetworkPolicy, restricted pod security context)
-across every Helm chart, Identity and Access's OIDC/SAML/SCIM
-federation, Secrets' managed-KMS integration, an idempotent metering
-ledger, Observability's trace-query/SLO surfaces, and CI supply-chain
-gates (SBOM, signing, contract tests).
+kernel) scope: Vector DB's production persistence story, OpenAPI
+security-scheme declarations, Kubernetes hardening (NetworkPolicy,
+restricted pod security context) across every Helm chart, Identity and
+Access's OIDC/SAML/SCIM federation, Secrets' managed-KMS integration,
+an idempotent metering ledger, Observability's trace-query/SLO
+surfaces, and CI supply-chain gates (SBOM, signing, contract tests).
 
 ## Modules
 
