@@ -33,8 +33,16 @@ config:
 
 qdrant:
   url: "http://qdrant:6333"  # Qdrant deployed as its own clustered StatefulSet, see the Qdrant Helm chart
+  embeddedInMemory: false  # must stay false in every real cluster -- see the module README
   collectionAlias: "vector_db_points"
   defaultEmbeddingModel: "text-embedding-3-small"
+
+# This module's own migration bookkeeping (core/domain.py's MigrationRecord) -- a
+# separate concern from qdrant.url above, which is the real vector data plane.
+database:
+  url: "postgresql+asyncpg://vector_db:vector_db@postgres:5432/vector_db"
+  existingSecret: ""
+  existingSecretKey: "database-url"
 
 llmGatewayBaseUrl: "http://llm-gateway:8082"
 multiTenancyBaseUrl: "http://multi-tenancy:8109"

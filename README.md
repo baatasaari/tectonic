@@ -546,13 +546,40 @@ contract here is meant to be that rollout's shared starting point, the
 same "reference implementation before rollout" shape
 `EntitlementGateMiddleware` used).
 
+**Also fixed**: Vector DB's (Module 10) production persistence story
+(assessment §10, this module's highest-severity finding). Two separate
+bugs, both real: `qdrant.url` defaulted to `None`, and `main.py` fell
+back to `AsyncQdrantClient(location=":memory:")` whenever it was
+falsy — a deployment that simply forgot to set the URL silently ran
+with zero persistence, losing every indexed point on the next restart,
+no warning logged; and this module's own production wiring
+unconditionally constructed `InMemoryMigrationRepository()`, so a real
+in-flight re-embedding migration's progress also vanished on any
+restart. Fixed: `qdrant.url` now defaults to a real
+`http://localhost:6333` (this platform's usual "give a real local
+component a real localhost default" convention), and the in-memory
+Qdrant client is reachable only through a new, explicit
+`qdrant.embedded_in_memory` flag that logs a loud startup warning
+whenever it's true — the same posture `jwt_shared_secret`'s own
+insecure-default warning already takes; a brand new
+`SQLAlchemyMigrationRepository` (real Postgres, a new `migrations`
+table) replaces the in-memory one, holding a session factory rather
+than a single shared session since it's called both from request
+handlers and a detached background task — the same "safe to hold as a
+long-lived singleton, fresh session per operation" shape
+`OutboxRelayWorker`/`EvidencePackWorker` already use elsewhere in this
+platform. This module's own unit-test harness never read either
+Qdrant field and constructs its own in-memory client directly, so this
+changes zero test behavior, only the previously-unsafe production
+default. See `modules/vector-db/README.md` for the full reasoning.
+
 **In progress**, tracked against the assessment's own Phase 1 (platform
-kernel) scope: Vector DB's production persistence story, OpenAPI
-security-scheme declarations, Kubernetes hardening (NetworkPolicy,
-restricted pod security context) across every Helm chart, Identity and
-Access's OIDC/SAML/SCIM federation, Secrets' managed-KMS integration,
-an idempotent metering ledger, Observability's trace-query/SLO
-surfaces, and CI supply-chain gates (SBOM, signing, contract tests).
+kernel) scope: OpenAPI security-scheme declarations, Kubernetes
+hardening (NetworkPolicy, restricted pod security context) across
+every Helm chart, Identity and Access's OIDC/SAML/SCIM federation,
+Secrets' managed-KMS integration, an idempotent metering ledger,
+Observability's trace-query/SLO surfaces, and CI supply-chain gates
+(SBOM, signing, contract tests).
 
 ## Modules
 

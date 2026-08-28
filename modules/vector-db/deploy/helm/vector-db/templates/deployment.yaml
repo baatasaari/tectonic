@@ -41,12 +41,24 @@ spec:
               value: {{ .Values.config.tenancyModel | quote }}
             - name: VECTOR_DB_QDRANT__URL
               value: {{ .Values.qdrant.url | quote }}
+            - name: VECTOR_DB_QDRANT__EMBEDDED_IN_MEMORY
+              value: {{ .Values.qdrant.embeddedInMemory | quote }}
             - name: VECTOR_DB_QDRANT__COLLECTION_ALIAS
               value: {{ .Values.qdrant.collectionAlias | quote }}
             - name: VECTOR_DB_QDRANT__DEFAULT_EMBEDDING_MODEL
               value: {{ .Values.qdrant.defaultEmbeddingModel | quote }}
             - name: VECTOR_DB_LLM_GATEWAY_BASE_URL
               value: {{ .Values.llmGatewayBaseUrl | quote }}
+            {{- if .Values.database.existingSecret }}
+            - name: VECTOR_DB_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: VECTOR_DB_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           livenessProbe:
