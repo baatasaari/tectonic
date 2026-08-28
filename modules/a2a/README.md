@@ -116,6 +116,16 @@ src/a2a_gateway/
   reusing `jwt_auth.py`'s own `_EXCLUDED_PATHS` as the one source of
   truth for which paths are genuinely unauthenticated.
 
+- **Kubernetes hardening** (`deploy/helm/`; independent architecture
+  assessment §3.7) — see Workflow Engine's README for the full reasoning
+  and reference implementation. A dedicated ServiceAccount with no
+  auto-mounted API token (this module never calls the Kubernetes API);
+  pod/container `securityContext` (non-root, read-only root filesystem
+  with a small `/tmp` `emptyDir`, all capabilities dropped, a seccomp
+  profile); a `NetworkPolicy` restricting ingress to this module's own
+  namespace; separate startup/liveness/readiness probe semantics instead
+  of two identical probes; and `topologySpreadConstraints` across nodes.
+
 ## Running locally
 
 ```bash

@@ -601,12 +601,46 @@ every other operation inherits the document-level default rather than
 overriding it, and the generated schema is cached after the first
 call.
 
+**Also fixed**: Kubernetes hardening, every Helm chart (assessment
+§3.7). Verified before any fix landed: no chart had a dedicated
+ServiceAccount, a pod/container `securityContext`, or a
+`NetworkPolicy` at all; every module's liveness and readiness probes
+were byte-identical (no real startup grace period); no chart spread
+replicas across nodes. Fixed the same "reference implementation
+first" way as every other mechanical rollout this phase (built and
+hand-verified in Workflow Engine, then mechanically rolled out to the
+other 33): a dedicated ServiceAccount with `automountServiceAccountToken:
+false` (none of these modules call the Kubernetes API at all, so the
+correct least-privilege grant is zero permissions, not a fabricated
+Role); pod `securityContext` (`runAsNonRoot`, a fixed non-root
+UID/GID/fsGroup, `seccompProfile: RuntimeDefault`) and container
+`securityContext` (`allowPrivilegeEscalation: false`,
+`readOnlyRootFilesystem: true` with a small `/tmp` `emptyDir` for any
+library that transiently needs scratch space, every capability
+dropped); a `NetworkPolicy` restricting ingress to pods in the
+module's own namespace (this platform's modules address each other by
+short DNS name, which only resolves within one namespace, so this is
+a real restriction) with a documented, operator-tunable
+`allowExternalEgress` default (`true`) rather than a false claim of
+full egress lockdown; a real `startupProbe` plus deliberately
+differentiated liveness (loose — a restart is disruptive) and
+readiness (tight — leaving the load balancer is cheap) probes instead
+of two identical ones; and soft `topologySpreadConstraints` across
+nodes. `priorityClassName` is a real, exposed value left unset by
+default — real prioritization across 34 modules is a genuine
+operational judgment call this chart doesn't make on its own, a
+documented, honest gap rather than fabricated values. No `helm`
+binary is available in this sandbox to run `helm template` directly;
+verified instead with a small, real (not approximate) renderer for
+this platform's own constrained Helm template vocabulary, run against
+every one of the 34 modules' 3 templates (102 renders), each checked
+by parsing the actual rendered YAML — not just visual inspection.
+
 **In progress**, tracked against the assessment's own Phase 1 (platform
-kernel) scope: Kubernetes hardening (NetworkPolicy, restricted pod
-security context) across every Helm chart, Identity and Access's
-OIDC/SAML/SCIM federation, Secrets' managed-KMS integration, an
-idempotent metering ledger, Observability's trace-query/SLO surfaces,
-and CI supply-chain gates (SBOM, signing, contract tests).
+kernel) scope: Identity and Access's OIDC/SAML/SCIM federation,
+Secrets' managed-KMS integration, an idempotent metering ledger,
+Observability's trace-query/SLO surfaces, and CI supply-chain gates
+(SBOM, signing, contract tests).
 
 ## Modules
 

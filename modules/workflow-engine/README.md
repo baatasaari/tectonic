@@ -203,6 +203,56 @@ tests/integration/        Real-Postgres tier via testcontainers (needs Docker)
   deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
   posture.
 
+- **Kubernetes hardening** (`deploy/helm/workflow-engine/`; independent
+  architecture assessment §3.7). Previously: no ServiceAccount (every
+  pod ran under the namespace `default` one, with a full,
+  auto-mounted API token no code here ever needs), no pod/container
+  `securityContext` (root-capable, no seccomp profile, a writable root
+  filesystem, every Linux capability retained), no `NetworkPolicy`
+  (any pod anywhere in the cluster could reach it), identical
+  liveness/readiness probes (no real startup grace period), and no
+  topology spread. Fixed:
+  - **ServiceAccount** (`templates/serviceaccount.yaml`), with
+    `automountServiceAccountToken: false` — this module never calls
+    the Kubernetes API at all, so the correct least-privilege RBAC
+    grant is zero permissions, not a fabricated `Role` for access
+    nothing here needs.
+  - **Pod securityContext**: `runAsNonRoot`, a fixed non-root
+    UID/GID/fsGroup, `seccompProfile: RuntimeDefault`. **Container
+    securityContext**: `allowPrivilegeEscalation: false`,
+    `readOnlyRootFilesystem: true` (a small `emptyDir` mounted at
+    `/tmp` covers any library that transiently needs scratch space —
+    this process itself writes nothing to disk), `capabilities: {drop:
+    [ALL]}`.
+  - **NetworkPolicy** (`templates/networkpolicy.yaml`): ingress
+    restricted to pods in this module's own namespace on its own
+    port — this platform's modules address each other by short DNS
+    name, which only resolves within one namespace, so this is a real
+    restriction, not a theoretical one. Egress: DNS always allowed,
+    same-namespace peers always allowed, and a `networkPolicy.
+    allowExternalEgress` value (default `true`) an operator can set
+    `false` once they've audited which modules genuinely need real
+    external egress (LLM Gateway calling model providers, etc.) and
+    which don't — an honest, documented gap, not a false claim of full
+    lockdown.
+  - **Separate readiness/liveness/startup semantics**: a new
+    `startupProbe` gives a slow-starting pod real time to come up
+    before liveness starts evaluating it at all;
+    `livenessProbe` is deliberately loose (a restart is disruptive, so
+    only fire on genuine deadlock); `readinessProbe` is deliberately
+    tight (pulling a degraded pod out of load balancing is cheap, so
+    react fast).
+  - **`topologySpreadConstraints`**, spreading replicas across nodes
+    (soft — `ScheduleAnyway` — by default, since a hard requirement
+    can strand pods `Pending` on a small/single-node cluster with no
+    real availability benefit to justify that).
+  - **`priorityClassName`** is a real, exposed value but left unset by
+    default: which of this platform's 34 modules should preempt which
+    others under node pressure is a genuine operational judgment call
+    this chart doesn't make on its own — separate, unbuilt work.
+  Same mechanical rollout to the other 33 modules; see the root
+  README's "Platform-kernel hardening" section.
+
 ## Running locally
 
 ```bash
