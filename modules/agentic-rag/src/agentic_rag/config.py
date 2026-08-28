@@ -45,7 +45,10 @@ class AgenticRAGSettings(BaseSettings):
     db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     service_name: str = "agentic-rag"
     http_port: int = 8085
-    dependency_stub_base_url: str = "http://localhost:9106"
+    vector_db_base_url: str = "http://localhost:8089"
+    graph_db_base_url: str = "http://localhost:8090"
+    knowledge_base_base_url: str = "http://localhost:8088"
+    llm_gateway_base_url: str = "http://localhost:8082"
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
     # every module, so this field's env var name is NOT prefixed like the rest of this

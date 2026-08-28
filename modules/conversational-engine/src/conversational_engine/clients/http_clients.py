@@ -1,9 +1,9 @@
 """HTTP adapters for this module's external dependencies: LLM Gateway,
-Guardrails, Long-Term Memory, Human Oversight. Point at the dependency-stub
-service until those modules are deployed for real — LLM Gateway now exists
-as Module 3 in this platform, so point `dependency_stub_base_url` (or a
-dedicated LLM Gateway URL, once each dependency gets its own config knob)
-at its real base URL in any environment running both.
+Guardrails, Long-Term Memory, Human Oversight, Observability, Auditability.
+Each has its own distinct `<peer>_base_url` config field (config.py) — point
+each one at its real peer's base URL in any environment running both;
+`deploy/docker-compose.yml` points all of them at one dependency-stub
+service for standalone dev/test instead.
 
 Every client below is a `ResilientHTTPClient` (retry + circuit breaker on
 every outbound call — see resilience.py) except `stream_complete`, which is

@@ -38,7 +38,9 @@ database:
 redis:
   url: "redis://redis:6379/0"
 
-dependencyStubBaseUrl: ""  # set to real LLM Gateway / Guardrails / Sentinel Agents URLs once deployed
+llmGatewayBaseUrl: "http://llm-gateway:8082"
+guardrailsBaseUrl: "http://guardrails:8093"
+sentinelAgentsBaseUrl: "http://sentinel-agents:8094"
 
 podDisruptionBudget:
   minAvailable: 2

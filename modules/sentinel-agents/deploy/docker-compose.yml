@@ -40,7 +40,10 @@ services:
       - "8094:8094"
     environment:
       SENTINEL_AGENTS_DATABASE_URL: postgresql+asyncpg://sentinel_agents:sentinel_agents@postgres:5432/sentinel_agents
-      SENTINEL_AGENTS_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9115
+      SENTINEL_AGENTS_WORKFLOW_ENGINE_BASE_URL: http://dependency-stub:9115
+      SENTINEL_AGENTS_TOOL_ORCHESTRATION_BASE_URL: http://dependency-stub:9115
+      SENTINEL_AGENTS_HUMAN_OVERSIGHT_BASE_URL: http://dependency-stub:9115
+      SENTINEL_AGENTS_AUDITABILITY_BASE_URL: http://dependency-stub:9115
     depends_on:
       postgres:
         condition: service_healthy

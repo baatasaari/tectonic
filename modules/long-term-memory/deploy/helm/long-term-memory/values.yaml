@@ -37,7 +37,10 @@ database:
   existingSecret: ""
   existingSecretKey: "database-url"
 
-dependencyStubBaseUrl: ""  # set to real Vector DB/Graph DB/LLM Gateway/Guardrails URLs once deployed
+vectorDbBaseUrl: "http://vector-db:8089"
+graphDbBaseUrl: "http://graph-db:8090"
+llmGatewayBaseUrl: "http://llm-gateway:8082"
+guardrailsBaseUrl: "http://guardrails:8093"
 
 podDisruptionBudget:
   minAvailable: 2

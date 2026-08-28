@@ -51,7 +51,8 @@ class KnowledgeBaseSettings(BaseSettings):
     db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     service_name: str = "knowledge-base"
     http_port: int = 8088
-    dependency_stub_base_url: str = "http://localhost:9109"
+    vector_db_base_url: str = "http://localhost:8089"
+    graph_db_base_url: str = "http://localhost:8090"
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
     # every module, so this field's env var name is NOT prefixed like the rest of this

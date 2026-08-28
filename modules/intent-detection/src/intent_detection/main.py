@@ -32,7 +32,7 @@ def build_app_context(settings: IntentDetectionSettings) -> AppContext:
         engine=engine,
         session_factory=make_session_factory(engine),
         llm_gateway=HTTPLLMGatewayClient(
-            settings.dependency_stub_base_url, issuer=settings.service_name,
+            settings.llm_gateway_base_url, issuer=settings.service_name,
             shared_secret=settings.jwt_shared_secret, ttl_seconds=settings.jwt_ttl_seconds,
         ),
         primary_classifier=PrimaryClassifier(),

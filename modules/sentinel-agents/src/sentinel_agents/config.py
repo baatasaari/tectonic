@@ -58,7 +58,10 @@ class SentinelAgentsSettings(BaseSettings):
     db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     service_name: str = "sentinel-agents"
     http_port: int = 8094
-    dependency_stub_base_url: str = "http://localhost:9115"
+    workflow_engine_base_url: str = "http://localhost:8080"
+    tool_orchestration_base_url: str = "http://localhost:8083"
+    human_oversight_base_url: str = "http://localhost:8095"
+    auditability_base_url: str = "http://localhost:8099"
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
     # every module, so this field's env var name is NOT prefixed like the rest of this

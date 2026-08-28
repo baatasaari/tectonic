@@ -60,9 +60,7 @@ class LLMGatewaySettings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     service_name: str = "llm-gateway"
     http_port: int = 8082
-    # Secrets and Credential Management, Evaluation Framework: stubbed until
-    # those modules exist for real.
-    dependency_stub_base_url: str = "http://localhost:9103"
+    secrets_and_credential_management_base_url: str = "http://localhost:8111"
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
     # every module, so this field's env var name is NOT prefixed like the rest of this

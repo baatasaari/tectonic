@@ -50,7 +50,7 @@ services:
     environment:
       LLM_GATEWAY_DATABASE_URL: postgresql+asyncpg://llm_gateway:llm_gateway@postgres:5432/llm_gateway
       LLM_GATEWAY_REDIS_URL: redis://redis:6379/0
-      LLM_GATEWAY_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9103
+      LLM_GATEWAY_SECRETS_AND_CREDENTIAL_MANAGEMENT_BASE_URL: http://dependency-stub:9103
     depends_on:
       postgres:
         condition: service_healthy

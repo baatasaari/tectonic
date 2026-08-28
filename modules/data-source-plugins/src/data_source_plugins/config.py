@@ -47,7 +47,7 @@ class DataSourcePluginsSettings(BaseSettings):
     db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     service_name: str = "data-source-plugins"
     http_port: int = 8087
-    dependency_stub_base_url: str = "http://localhost:9108"
+    secrets_and_credential_management_base_url: str = "http://localhost:8111"
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
     # every module, so this field's env var name is NOT prefixed like the rest of this

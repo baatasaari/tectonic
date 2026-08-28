@@ -37,10 +37,8 @@ spec:
               value: {{ .Values.config.costAttributionEnabled | quote }}
             - name: OBSERVABILITY_RETENTION__TRACES_DAYS
               value: {{ .Values.config.tracesRetentionDays | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: OBSERVABILITY_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: OBSERVABILITY_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: OBSERVABILITY_DATABASE_URL
               valueFrom:

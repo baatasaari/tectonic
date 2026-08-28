@@ -33,7 +33,6 @@ logger = get_logger(component="main")
 
 def build_app_context(settings: SentinelAgentsSettings) -> AppContext:
     engine = make_engine(settings)
-    dep_url = settings.dependency_stub_base_url
     auth_kwargs = {
         "issuer": settings.service_name, "shared_secret": settings.jwt_shared_secret,
         "ttl_seconds": settings.jwt_ttl_seconds,
@@ -42,10 +41,10 @@ def build_app_context(settings: SentinelAgentsSettings) -> AppContext:
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
-        workflow_engine=HTTPWorkflowEngineClient(dep_url, **auth_kwargs),
-        tool_orchestration=HTTPToolOrchestrationClient(dep_url, **auth_kwargs),
-        human_oversight=HTTPHumanOversightClient(dep_url, **auth_kwargs),
-        auditability=HTTPAuditabilityClient(dep_url, **auth_kwargs),
+        workflow_engine=HTTPWorkflowEngineClient(settings.workflow_engine_base_url, **auth_kwargs),
+        tool_orchestration=HTTPToolOrchestrationClient(settings.tool_orchestration_base_url, **auth_kwargs),
+        human_oversight=HTTPHumanOversightClient(settings.human_oversight_base_url, **auth_kwargs),
+        auditability=HTTPAuditabilityClient(settings.auditability_base_url, **auth_kwargs),
         window_tracker=SwarmWindowTracker(),
     )
 

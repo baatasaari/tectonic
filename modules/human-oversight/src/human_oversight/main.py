@@ -33,16 +33,15 @@ logger = get_logger(component="main")
 
 def build_app_context(settings: HumanOversightSettings) -> AppContext:
     engine = make_engine(settings)
-    dep_url = settings.dependency_stub_base_url
     auth_kwargs = {
         "issuer": settings.service_name, "shared_secret": settings.jwt_shared_secret,
         "ttl_seconds": settings.jwt_ttl_seconds,
     }
 
     channels = {
-        "slack": SlackNotificationChannel(f"{dep_url}/v1/notifications/slack"),
-        "teams": TeamsNotificationChannel(f"{dep_url}/v1/notifications/teams"),
-        "webhook": WebhookNotificationChannel(f"{dep_url}/v1/notifications/webhook"),
+        "slack": SlackNotificationChannel(f"{settings.notification_stub_base_url}/v1/notifications/slack"),
+        "teams": TeamsNotificationChannel(f"{settings.notification_stub_base_url}/v1/notifications/teams"),
+        "webhook": WebhookNotificationChannel(f"{settings.notification_stub_base_url}/v1/notifications/webhook"),
         # Real SMTP code path, not exercised in this build's stub-based
         # tests — see the module README.
         "email": SMTPNotificationChannel("localhost", 25, "oversight@tectonic.local", "reviewers@tectonic.local"),
@@ -53,8 +52,8 @@ def build_app_context(settings: HumanOversightSettings) -> AppContext:
         engine=engine,
         session_factory=make_session_factory(engine),
         notification_channels=channels,
-        callback_dispatcher=HTTPDecisionCallbackDispatcher(dep_url, **auth_kwargs),
-        auditability=HTTPAuditabilityClient(dep_url, **auth_kwargs),
+        callback_dispatcher=HTTPDecisionCallbackDispatcher(settings.service_urls, **auth_kwargs),
+        auditability=HTTPAuditabilityClient(settings.auditability_base_url, **auth_kwargs),
     )
 
 

@@ -27,7 +27,7 @@ services:
       - "8089:8089"
     environment:
       VECTOR_DB_QDRANT__URL: http://qdrant:6333
-      VECTOR_DB_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9110
+      VECTOR_DB_LLM_GATEWAY_BASE_URL: http://dependency-stub:9110
     depends_on:
       qdrant:
         condition: service_healthy

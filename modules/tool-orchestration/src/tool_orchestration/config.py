@@ -53,7 +53,9 @@ class ToolOrchestrationSettings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     service_name: str = "tool-orchestration"
     http_port: int = 8083
-    dependency_stub_base_url: str = "http://localhost:9104"
+    llm_gateway_base_url: str = "http://localhost:8082"
+    guardrails_base_url: str = "http://localhost:8093"
+    sentinel_agents_base_url: str = "http://localhost:8094"
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
     # every module, so this field's env var name is NOT prefixed like the rest of this

@@ -41,7 +41,7 @@ database:
 redis:
   url: "redis://redis:6379/0"
 
-dependencyStubBaseUrl: ""  # set to real Secrets and Credential Management / Evaluation Framework URLs once deployed
+secretsAndCredentialManagementBaseUrl: "http://secrets-and-credential-management:8111"
 
 podDisruptionBudget:
   minAvailable: 3

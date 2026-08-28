@@ -37,10 +37,8 @@ spec:
               value: {{ .Values.config.sessionTtlSeconds | quote }}
             - name: SHORT_TERM_MEMORY_SALIENCE__RETENTION_PRIORITY_THRESHOLD
               value: {{ .Values.config.retentionPriorityThreshold | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: SHORT_TERM_MEMORY_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: SHORT_TERM_MEMORY_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
             {{- if .Values.redis.existingSecret }}
             - name: SHORT_TERM_MEMORY_REDIS_URL
               valueFrom:

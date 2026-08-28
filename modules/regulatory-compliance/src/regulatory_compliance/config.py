@@ -48,7 +48,7 @@ class RegulatoryComplianceSettings(BaseSettings):
     db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     service_name: str = "regulatory-compliance"
     http_port: int = 8096
-    dependency_stub_base_url: str = "http://localhost:9117"
+    auditability_base_url: str = "http://localhost:8099"
     mapping_table_path: str = ""  # empty = use bundled default; see core/mapping_data.py
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across

@@ -35,7 +35,7 @@ database:
   existingSecret: ""
   existingSecretKey: "database-url"
 
-dependencyStubBaseUrl: ""  # set to a real LLM Gateway URL once deployed
+llmGatewayBaseUrl: "http://llm-gateway:8082"
 
 podDisruptionBudget:
   minAvailable: 2

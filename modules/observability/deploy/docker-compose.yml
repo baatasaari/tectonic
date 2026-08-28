@@ -41,7 +41,7 @@ services:
       - "8098:8098"
     environment:
       OBSERVABILITY_DATABASE_URL: postgresql+asyncpg://observability:observability@postgres:5432/observability
-      OBSERVABILITY_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9119
+      OBSERVABILITY_LLM_GATEWAY_BASE_URL: http://dependency-stub:9119
     depends_on:
       postgres:
         condition: service_healthy

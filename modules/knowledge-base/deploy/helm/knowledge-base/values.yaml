@@ -35,7 +35,8 @@ database:
   existingSecret: ""
   existingSecretKey: "database-url"
 
-dependencyStubBaseUrl: ""  # set to a real Vector DB + Graph DB URL once deployed
+vectorDbBaseUrl: "http://vector-db:8089"
+graphDbBaseUrl: "http://graph-db:8090"
 
 podDisruptionBudget:
   minAvailable: 2

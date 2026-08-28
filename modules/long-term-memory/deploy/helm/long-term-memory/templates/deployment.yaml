@@ -39,10 +39,14 @@ spec:
               value: {{ .Values.config.crossAgentSharingEnabled | quote }}
             - name: LONG_TERM_MEMORY_ERASURE__SLA_HOURS
               value: {{ .Values.config.erasureSlaHours | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: LONG_TERM_MEMORY_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: LONG_TERM_MEMORY_VECTOR_DB_BASE_URL
+              value: {{ .Values.vectorDbBaseUrl | quote }}
+            - name: LONG_TERM_MEMORY_GRAPH_DB_BASE_URL
+              value: {{ .Values.graphDbBaseUrl | quote }}
+            - name: LONG_TERM_MEMORY_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
+            - name: LONG_TERM_MEMORY_GUARDRAILS_BASE_URL
+              value: {{ .Values.guardrailsBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: LONG_TERM_MEMORY_DATABASE_URL
               valueFrom:

@@ -26,17 +26,16 @@ logger = get_logger(component="main")
 
 def build_app_context(settings: DataSourcePluginsSettings) -> AppContext:
     engine = make_engine(settings)
-    dep_url = settings.dependency_stub_base_url
     return AppContext(
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
         # HTTPSourceConnectorRuntime deliberately excluded from service-to-service JWT
         # auth -- see the comment on that class in clients/http_clients.py.
-        connector_runtime=HTTPSourceConnectorRuntime(dep_url),
+        connector_runtime=HTTPSourceConnectorRuntime(settings.secrets_and_credential_management_base_url),
         secrets_client=HTTPSecretsClient(
-            dep_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
-            ttl_seconds=settings.jwt_ttl_seconds,
+            settings.secrets_and_credential_management_base_url, issuer=settings.service_name,
+            shared_secret=settings.jwt_shared_secret, ttl_seconds=settings.jwt_ttl_seconds,
         ),
     )
 

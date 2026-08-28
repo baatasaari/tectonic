@@ -37,10 +37,14 @@ spec:
               value: {{ .Values.config.groundednessThreshold | quote }}
             - name: AGENTIC_RAG_CRITIC__METHOD
               value: {{ .Values.config.criticMethod | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: AGENTIC_RAG_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: AGENTIC_RAG_VECTOR_DB_BASE_URL
+              value: {{ .Values.vectorDbBaseUrl | quote }}
+            - name: AGENTIC_RAG_GRAPH_DB_BASE_URL
+              value: {{ .Values.graphDbBaseUrl | quote }}
+            - name: AGENTIC_RAG_KNOWLEDGE_BASE_BASE_URL
+              value: {{ .Values.knowledgeBaseBaseUrl | quote }}
+            - name: AGENTIC_RAG_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: AGENTIC_RAG_DATABASE_URL
               valueFrom:

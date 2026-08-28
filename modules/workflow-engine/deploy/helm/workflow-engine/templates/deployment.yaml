@@ -39,10 +39,14 @@ spec:
               value: {{ .Values.config.replanningEnabled | quote }}
             - name: WORKFLOW_ENGINE_KAFKA_BOOTSTRAP_SERVERS
               value: {{ .Values.kafka.bootstrapServers | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: WORKFLOW_ENGINE_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: WORKFLOW_ENGINE_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
+            - name: WORKFLOW_ENGINE_TOOL_ORCHESTRATION_BASE_URL
+              value: {{ .Values.toolOrchestrationBaseUrl | quote }}
+            - name: WORKFLOW_ENGINE_GUARDRAILS_BASE_URL
+              value: {{ .Values.guardrailsBaseUrl | quote }}
+            - name: WORKFLOW_ENGINE_HUMAN_OVERSIGHT_BASE_URL
+              value: {{ .Values.humanOversightBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: WORKFLOW_ENGINE_DATABASE_URL
               valueFrom:

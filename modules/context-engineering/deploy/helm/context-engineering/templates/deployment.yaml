@@ -35,10 +35,10 @@ spec:
               value: {{ .Values.config.defaultTokenBudget | quote }}
             - name: CONTEXT_ENGINEERING_BUDGET__SUMMARISATION_ENABLED
               value: {{ .Values.config.summarisationEnabled | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: CONTEXT_ENGINEERING_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: CONTEXT_ENGINEERING_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
+            - name: CONTEXT_ENGINEERING_EVALUATION_FRAMEWORK_BASE_URL
+              value: {{ .Values.evaluationFrameworkBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: CONTEXT_ENGINEERING_DATABASE_URL
               valueFrom:

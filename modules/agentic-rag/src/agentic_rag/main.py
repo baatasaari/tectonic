@@ -31,7 +31,6 @@ logger = get_logger(component="main")
 
 def build_app_context(settings: AgenticRAGSettings) -> AppContext:
     engine = make_engine(settings)
-    dep_url = settings.dependency_stub_base_url
     jwt_kwargs = {
         "issuer": settings.service_name,
         "shared_secret": settings.jwt_shared_secret,
@@ -41,10 +40,10 @@ def build_app_context(settings: AgenticRAGSettings) -> AppContext:
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
-        vector_db=HTTPVectorDBClient(dep_url, **jwt_kwargs),
-        graph_db=HTTPGraphDBClient(dep_url, **jwt_kwargs),
-        knowledge_base=HTTPKnowledgeBaseClient(dep_url, **jwt_kwargs),
-        llm_gateway=HTTPLLMGatewayClient(dep_url, **jwt_kwargs),
+        vector_db=HTTPVectorDBClient(settings.vector_db_base_url, **jwt_kwargs),
+        graph_db=HTTPGraphDBClient(settings.graph_db_base_url, **jwt_kwargs),
+        knowledge_base=HTTPKnowledgeBaseClient(settings.knowledge_base_base_url, **jwt_kwargs),
+        llm_gateway=HTTPLLMGatewayClient(settings.llm_gateway_base_url, **jwt_kwargs),
     )
 
 

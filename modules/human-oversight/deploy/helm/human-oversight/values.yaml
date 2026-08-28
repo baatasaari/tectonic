@@ -35,7 +35,20 @@ database:
   existingSecret: ""
   existingSecretKey: "database-url"
 
-dependencyStubBaseUrl: ""  # set to real notification webhook URLs and calling-module callback URLs once deployed
+auditabilityBaseUrl: "http://auditability:8099"
+
+# Slack/Teams/generic-webhook are tenant-configured external integrations, not
+# Tectonic peer modules -- empty here (env var left unset, config.py's own
+# placeholder default applies) is a deliberate stand-in; production needs
+# per-tenant webhook URLs from tenant config, not one platform-wide default.
+notificationStubBaseUrl: ""
+
+# HTTPDecisionCallbackDispatcher's real service directory: real base URL to call
+# back to, keyed by the requesting module's own kebab-case service name. Extend
+# as more modules gain a real oversight-callback endpoint (see that class's
+# docstring in clients/http_clients.py).
+serviceUrls:
+  workflow-engine: "http://workflow-engine:8080"
 
 podDisruptionBudget:
   minAvailable: 1

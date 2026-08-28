@@ -35,7 +35,8 @@ database:
   existingSecret: ""
   existingSecretKey: "database-url"
 
-dependencyStubBaseUrl: ""  # set to real LLM Gateway/Sentinel Agents URLs once deployed
+llmGatewayBaseUrl: "http://llm-gateway:8082"
+sentinelAgentsBaseUrl: "http://sentinel-agents:8094"
 
 podDisruptionBudget:
   minAvailable: 3

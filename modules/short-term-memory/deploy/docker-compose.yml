@@ -24,7 +24,7 @@ services:
       - "8091:8091"
     environment:
       SHORT_TERM_MEMORY_REDIS_URL: redis://redis:6379/0
-      SHORT_TERM_MEMORY_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9112
+      SHORT_TERM_MEMORY_LLM_GATEWAY_BASE_URL: http://dependency-stub:9112
     depends_on:
       redis:
         condition: service_healthy

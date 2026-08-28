@@ -26,7 +26,6 @@ logger = get_logger(component="main")
 
 def build_app_context(settings: KnowledgeBaseSettings, *, blob_root: str | None = None) -> AppContext:
     engine = make_engine(settings)
-    dep_url = settings.dependency_stub_base_url
     root = blob_root or tempfile.mkdtemp(prefix="knowledge-base-blobs-")
     return AppContext(
         settings=settings,
@@ -34,11 +33,11 @@ def build_app_context(settings: KnowledgeBaseSettings, *, blob_root: str | None 
         session_factory=make_session_factory(engine),
         blob_storage=FileBlobStorage(root),
         vector_db=HTTPVectorDBClient(
-            dep_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            settings.vector_db_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
             ttl_seconds=settings.jwt_ttl_seconds,
         ),
         graph_db=HTTPGraphDBClient(
-            dep_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            settings.graph_db_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
             ttl_seconds=settings.jwt_ttl_seconds,
         ),
     )

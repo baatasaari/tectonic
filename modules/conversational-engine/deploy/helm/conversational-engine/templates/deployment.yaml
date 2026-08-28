@@ -39,10 +39,18 @@ spec:
               value: {{ .Values.config.streamingProtocol | quote }}
             - name: CONVERSATIONAL_ENGINE_REDIS_URL
               value: {{ .Values.redis.url | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: CONVERSATIONAL_ENGINE_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: CONVERSATIONAL_ENGINE_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
+            - name: CONVERSATIONAL_ENGINE_GUARDRAILS_BASE_URL
+              value: {{ .Values.guardrailsBaseUrl | quote }}
+            - name: CONVERSATIONAL_ENGINE_LONG_TERM_MEMORY_BASE_URL
+              value: {{ .Values.longTermMemoryBaseUrl | quote }}
+            - name: CONVERSATIONAL_ENGINE_HUMAN_OVERSIGHT_BASE_URL
+              value: {{ .Values.humanOversightBaseUrl | quote }}
+            - name: CONVERSATIONAL_ENGINE_OBSERVABILITY_BASE_URL
+              value: {{ .Values.observabilityBaseUrl | quote }}
+            - name: CONVERSATIONAL_ENGINE_AUDITABILITY_BASE_URL
+              value: {{ .Values.auditabilityBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: CONVERSATIONAL_ENGINE_DATABASE_URL
               valueFrom:

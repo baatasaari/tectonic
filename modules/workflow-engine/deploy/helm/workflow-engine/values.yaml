@@ -43,7 +43,10 @@ database:
 kafka:
   bootstrapServers: "kafka:9092"
 
-dependencyStubBaseUrl: ""  # set once LLM Gateway / Tool Orchestration / Guardrails / Human Oversight are deployed for real
+llmGatewayBaseUrl: "http://llm-gateway:8082"
+toolOrchestrationBaseUrl: "http://tool-orchestration:8083"
+guardrailsBaseUrl: "http://guardrails:8093"
+humanOversightBaseUrl: "http://human-oversight:8095"
 
 podDisruptionBudget:
   minAvailable: 1

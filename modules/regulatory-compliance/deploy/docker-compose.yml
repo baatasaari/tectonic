@@ -38,7 +38,7 @@ services:
       - "8096:8096"
     environment:
       REGULATORY_COMPLIANCE_DATABASE_URL: postgresql+asyncpg://regcomp:regcomp@postgres:5432/regcomp
-      REGULATORY_COMPLIANCE_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9117
+      REGULATORY_COMPLIANCE_AUDITABILITY_BASE_URL: http://dependency-stub:9117
     depends_on:
       postgres:
         condition: service_healthy

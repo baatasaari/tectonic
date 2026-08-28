@@ -35,7 +35,7 @@ database:
   existingSecret: ""
   existingSecretKey: "database-url"
 
-dependencyStubBaseUrl: ""  # set to a real Auditability URL once deployed
+auditabilityBaseUrl: "http://auditability:8099"
 
 podDisruptionBudget:
   minAvailable: 2

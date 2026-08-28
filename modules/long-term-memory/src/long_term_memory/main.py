@@ -31,7 +31,6 @@ logger = get_logger(component="main")
 
 def build_app_context(settings: LongTermMemorySettings) -> AppContext:
     engine = make_engine(settings)
-    dep_url = settings.dependency_stub_base_url
     auth_kwargs = {
         "issuer": settings.service_name, "shared_secret": settings.jwt_shared_secret,
         "ttl_seconds": settings.jwt_ttl_seconds,
@@ -40,10 +39,10 @@ def build_app_context(settings: LongTermMemorySettings) -> AppContext:
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
-        vector_db=HTTPVectorDBClient(dep_url, **auth_kwargs),
-        graph_db=HTTPGraphDBClient(dep_url, **auth_kwargs),
-        llm_gateway=HTTPLLMGatewayClient(dep_url, **auth_kwargs),
-        guardrails=HTTPGuardrailsClient(dep_url, **auth_kwargs),
+        vector_db=HTTPVectorDBClient(settings.vector_db_base_url, **auth_kwargs),
+        graph_db=HTTPGraphDBClient(settings.graph_db_base_url, **auth_kwargs),
+        llm_gateway=HTTPLLMGatewayClient(settings.llm_gateway_base_url, **auth_kwargs),
+        guardrails=HTTPGuardrailsClient(settings.guardrails_base_url, **auth_kwargs),
     )
 
 

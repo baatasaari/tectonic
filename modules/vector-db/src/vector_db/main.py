@@ -31,7 +31,7 @@ def build_app_context(settings: VectorDbSettings, *, qdrant_client: AsyncQdrantC
         AsyncQdrantClient(url=settings.qdrant.url) if settings.qdrant.url else AsyncQdrantClient(location=":memory:")
     )
     embeddings = HTTPEmbeddingProvider(
-        settings.dependency_stub_base_url, settings.qdrant.default_embedding_model,
+        settings.llm_gateway_base_url, settings.qdrant.default_embedding_model,
         issuer=settings.service_name, shared_secret=settings.jwt_shared_secret, ttl_seconds=settings.jwt_ttl_seconds,
     )
     migration_repository = InMemoryMigrationRepository()

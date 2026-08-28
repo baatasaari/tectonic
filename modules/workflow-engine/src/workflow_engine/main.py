@@ -37,7 +37,6 @@ def build_app_context(settings: WorkflowEngineSettings) -> tuple[AppContext, Kaf
     session_factory = make_session_factory(engine)
     event_publisher = KafkaEventPublisher(settings.kafka_bootstrap_servers)
 
-    dep_base_url = settings.dependency_stub_base_url
 
     ctx = AppContext(
         settings=settings,
@@ -45,19 +44,19 @@ def build_app_context(settings: WorkflowEngineSettings) -> tuple[AppContext, Kaf
         session_factory=session_factory,
         event_publisher=event_publisher,
         llm_gateway=HTTPLLMGatewayClient(
-            dep_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            settings.llm_gateway_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
             ttl_seconds=settings.jwt_ttl_seconds,
         ),
         tool_orchestration=HTTPToolOrchestrationClient(
-            dep_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            settings.tool_orchestration_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
             ttl_seconds=settings.jwt_ttl_seconds,
         ),
         guardrails=HTTPGuardrailsClient(
-            dep_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            settings.guardrails_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
             ttl_seconds=settings.jwt_ttl_seconds,
         ),
         human_oversight=HTTPHumanOversightClient(
-            dep_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            settings.human_oversight_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
             ttl_seconds=settings.jwt_ttl_seconds,
         ),
         symbolic_executor=SymbolicRuleExecutor(),

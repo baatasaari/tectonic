@@ -35,7 +35,10 @@ database:
   existingSecret: ""
   existingSecretKey: "database-url"
 
-dependencyStubBaseUrl: ""  # set to real Workflow Engine/Tool Orchestration/Human Oversight/Auditability URLs once deployed
+workflowEngineBaseUrl: "http://workflow-engine:8080"
+toolOrchestrationBaseUrl: "http://tool-orchestration:8083"
+humanOversightBaseUrl: "http://human-oversight:8095"
+auditabilityBaseUrl: "http://auditability:8099"
 
 podDisruptionBudget:
   minAvailable: 2

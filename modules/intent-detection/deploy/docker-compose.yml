@@ -39,7 +39,7 @@ services:
       - "8084:8084"
     environment:
       INTENT_DETECTION_DATABASE_URL: postgresql+asyncpg://intent_detection:intent_detection@postgres:5432/intent_detection
-      INTENT_DETECTION_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9105
+      INTENT_DETECTION_LLM_GATEWAY_BASE_URL: http://dependency-stub:9105
     depends_on:
       postgres:
         condition: service_healthy

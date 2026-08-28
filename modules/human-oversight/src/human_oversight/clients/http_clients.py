@@ -131,29 +131,41 @@ class SMTPNotificationChannel:
 
 class HTTPDecisionCallbackDispatcher(ResilientHTTPClient):
     """Unlike every other HTTP client in this module (and this platform),
-    this one's target audience isn't known at construction time: `notify()`
-    calls back to whichever `requesting_module` raised the original
-    oversight request, a value that varies per call. That rules out the
-    usual construction-time `ServiceBearerAuth` (an `httpx.Auth` bound to
-    one fixed `audience`) — instead, a fresh token scoped to that specific
-    call's target is minted inline, per call, in `notify()` itself.
+    this one's target *host* isn't known at construction time either:
+    `notify()` calls back to whichever `requesting_module` raised the
+    original oversight request, a value that varies per call -- so it
+    needs a real service directory (`service_urls`, config.py's
+    `_default_service_urls()`), not one fixed `base_url`. Constructed
+    with `base_url=""`; every call passes an absolute URL built from the
+    resolved target's own base_url, which httpx uses as-is regardless of
+    the client's configured base_url (same technique the webhook
+    notification channels above already use). A fresh token scoped to
+    that specific call's target is minted inline, per call, for the same
+    reason -- the usual construction-time `ServiceBearerAuth` is bound to
+    one fixed `audience`.
     """
 
     def __init__(
-        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        self, service_urls: dict[str, str], client: httpx.AsyncClient | None = None, *,
         issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
     ) -> None:
-        super().__init__(base_url, client=client, timeout=_VERY_SHORT_TIMEOUT, breaker_name="decision-callback")
+        super().__init__("", client=client, timeout=_VERY_SHORT_TIMEOUT, breaker_name="decision-callback")
+        self._service_urls = service_urls
         self._issuer = issuer
         self._shared_secret = shared_secret
         self._ttl_seconds = ttl_seconds
 
     async def notify(self, requesting_module: str, requesting_ref: str, decision: DecisionRecord) -> None:
+        # Kebab-case the target module name to match this platform's
+        # service-name convention (e.g. "workflow_engine" -> "workflow-engine").
+        audience = requesting_module.replace("_", "-")
+        target_base_url = self._service_urls.get(audience)
+        if target_base_url is None:
+            logger.warning("oversight_callback_unknown_module", requesting_module=requesting_module)
+            return
+
         headers = {}
         if self._issuer:
-            # Kebab-case the target module name to match this platform's
-            # service-name convention (e.g. "workflow_engine" -> "workflow-engine").
-            audience = requesting_module.replace("_", "-")
             token = mint_service_token(
                 issuer=self._issuer, audience=audience,
                 shared_secret=self._shared_secret, ttl_seconds=self._ttl_seconds,
@@ -163,7 +175,7 @@ class HTTPDecisionCallbackDispatcher(ResilientHTTPClient):
         if requesting_module == "workflow_engine" and ":" in requesting_ref:
             instance_id, approval_id = requesting_ref.split(":", 1)
             await self._post(
-                f"/v1/workflow-engine/instances/{instance_id}/approvals/{approval_id}/callback",
+                f"{target_base_url}/v1/workflow-engine/instances/{instance_id}/approvals/{approval_id}/callback",
                 json={"decision": decision.decision.value, "resolved_by": decision.decided_by},
                 headers=headers,
             )
@@ -171,7 +183,7 @@ class HTTPDecisionCallbackDispatcher(ResilientHTTPClient):
 
         try:
             await self._post(
-                f"/v1/{requesting_module}/oversight-callback",
+                f"{target_base_url}/v1/{requesting_module}/oversight-callback",
                 json={"requesting_ref": requesting_ref, "decision": decision.decision.value, "decided_by": decision.decided_by},
                 headers=headers,
             )

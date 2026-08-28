@@ -35,7 +35,8 @@ database:
   existingSecret: ""
   existingSecretKey: "database-url"
 
-dependencyStubBaseUrl: ""  # set to real LLM Gateway / Evaluation Framework URLs once deployed
+llmGatewayBaseUrl: "http://llm-gateway:8082"
+evaluationFrameworkBaseUrl: "http://evaluation-framework:8097"
 
 podDisruptionBudget:
   minAvailable: 2

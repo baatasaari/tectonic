@@ -39,7 +39,10 @@ services:
       - "8092:8092"
     environment:
       LONG_TERM_MEMORY_DATABASE_URL: postgresql+asyncpg://long_term_memory:long_term_memory@postgres:5432/long_term_memory
-      LONG_TERM_MEMORY_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9113
+      LONG_TERM_MEMORY_VECTOR_DB_BASE_URL: http://dependency-stub:9113
+      LONG_TERM_MEMORY_GRAPH_DB_BASE_URL: http://dependency-stub:9113
+      LONG_TERM_MEMORY_LLM_GATEWAY_BASE_URL: http://dependency-stub:9113
+      LONG_TERM_MEMORY_GUARDRAILS_BASE_URL: http://dependency-stub:9113
     depends_on:
       postgres:
         condition: service_healthy

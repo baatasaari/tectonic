@@ -35,10 +35,8 @@ spec:
               value: {{ .Values.config.auditPackOutputFormat | quote }}
             - name: AUDITABILITY_NL_QUERY__ENABLED
               value: {{ .Values.config.nlQueryEnabled | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: AUDITABILITY_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: AUDITABILITY_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: AUDITABILITY_DATABASE_URL
               valueFrom:

@@ -24,7 +24,6 @@ logger = get_logger(component="main")
 
 def build_app_context(settings: GuardrailsSettings) -> AppContext:
     engine = make_engine(settings)
-    dep_url = settings.dependency_stub_base_url
     auth_kwargs = {
         "issuer": settings.service_name, "shared_secret": settings.jwt_shared_secret,
         "ttl_seconds": settings.jwt_ttl_seconds,
@@ -33,8 +32,8 @@ def build_app_context(settings: GuardrailsSettings) -> AppContext:
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
-        llm_gateway=HTTPLLMGatewayClient(dep_url, **auth_kwargs),
-        sentinel_agents=HTTPSentinelAgentsClient(dep_url, **auth_kwargs),
+        llm_gateway=HTTPLLMGatewayClient(settings.llm_gateway_base_url, **auth_kwargs),
+        sentinel_agents=HTTPSentinelAgentsClient(settings.sentinel_agents_base_url, **auth_kwargs),
     )
 
 

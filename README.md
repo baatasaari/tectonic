@@ -422,6 +422,49 @@ itself is unreachable, a deliberate contrast with `ServiceAuthMiddleware`'s
 zero-trust fail-closed posture — a commercial/entitlement check must
 never become a platform-wide outage vector.
 
+## Platform-kernel hardening (independent architecture assessment)
+
+An independent architecture assessment reviewed this repository (commit
+`1c5639d`) and scored it 41/100 — functional prototype to early alpha —
+recommending a sequenced "platform kernel, then product slices" build
+order rather than deepening all 34 modules equally. Its highest-severity
+finding, verified in the code before any fix landed: 20 modules
+instantiated multiple distinct real peers (LLM Gateway, Guardrails,
+Tool Orchestration, etc.) from one shared `dependency_stub_base_url`
+config field, so none of them could address their real peers
+independently outside the single-stub dev/test topology.
+
+**Fixed**: all 20 modules (Workflow Engine, Conversational Engine,
+Agentic RAG, Context Engineering, Data Source Plugins, Knowledge Base,
+Long-Term Memory, Sentinel Agents, Tool Orchestration, Guardrails,
+Human Oversight, Graph DB, Regulatory and Compliance, Auditability,
+Evaluation Framework, Intent Detection, Observability, LLM Gateway,
+Short-Term Memory, Vector DB) now carry one distinct `<peer>_base_url`
+config field per real dependency, wired through to Helm (real
+per-service Kubernetes DNS names) independently of the docker-compose
+dev/test profile (which still legitimately points every field at one
+shared dependency-stub — that's the documented standalone
+Deployability and Testability Contract, not the bug). Human Oversight
+needed a real service-directory fix, not just a rename: its decision
+callback dispatcher calls back to *whichever module* raised the
+original oversight request, a target that varies per call, so it now
+resolves from a real `service_urls: dict[str, str]` map
+(`config.py`) instead of one fixed host. Also fixed along the way: 4
+modules (Billing and Metering, Identity and Access, SDK and Developer
+Portal, Secrets and Credential Management) defaulted
+`auditability_base_url` to Graph DB's port by mistake — a distinct,
+correctly-*named* config field is still wrong if it points at the
+wrong peer.
+
+**In progress**, tracked against the assessment's own Phase 1 (platform
+kernel) scope: universal entitlement-gate rollout beyond Agent Cards
+(`docs/entitlement-gate-rollout.md`), a canonical Organisation/
+Workspace/Environment resource model, a quota and resource-allocation
+service, a CloudEvents-based event backbone, Vector DB's production
+persistence story, OpenAPI security-scheme declarations, and Kubernetes
+hardening (NetworkPolicy, restricted pod security context) across every
+Helm chart.
+
 ## Modules
 
 ### Module 1: Workflow Engine

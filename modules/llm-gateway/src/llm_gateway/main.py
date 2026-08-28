@@ -41,7 +41,7 @@ def build_app_context(settings: LLMGatewaySettings) -> AppContext:
         cache=RedisSemanticCache(redis, similarity_threshold=settings.cache.similarity_threshold),
         quality_scores=RedisQualityScoreProvider(redis),
         secrets=HTTPSecretsClient(
-            settings.dependency_stub_base_url, issuer=settings.service_name,
+            settings.secrets_and_credential_management_base_url, issuer=settings.service_name,
             shared_secret=settings.jwt_shared_secret, ttl_seconds=settings.jwt_ttl_seconds,
         ),
         provider_client=HTTPProviderClient(providers={}),

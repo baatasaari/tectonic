@@ -43,10 +43,8 @@ spec:
               value: {{ .Values.qdrant.collectionAlias | quote }}
             - name: VECTOR_DB_QDRANT__DEFAULT_EMBEDDING_MODEL
               value: {{ .Values.qdrant.defaultEmbeddingModel | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: VECTOR_DB_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: VECTOR_DB_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           livenessProbe:

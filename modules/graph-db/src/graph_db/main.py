@@ -32,7 +32,7 @@ def build_app_context(settings: GraphDbSettings) -> AppContext:
         engine=engine,
         session_factory=make_session_factory(engine),
         auditability=HTTPAuditabilityClient(
-            settings.dependency_stub_base_url, issuer=settings.service_name,
+            settings.auditability_base_url, issuer=settings.service_name,
             shared_secret=settings.jwt_shared_secret, ttl_seconds=settings.jwt_ttl_seconds,
         ),
     )

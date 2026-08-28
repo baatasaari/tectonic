@@ -29,7 +29,7 @@ def build_app_context(settings: ShortTermMemorySettings, *, redis: Redis | None 
     redis = redis or Redis.from_url(settings.redis_url)
     buffer_manager = BufferManager(
         RedisBufferStore(redis), HTTPLLMGatewayClient(
-            settings.dependency_stub_base_url, issuer=settings.service_name,
+            settings.llm_gateway_base_url, issuer=settings.service_name,
             shared_secret=settings.jwt_shared_secret, ttl_seconds=settings.jwt_ttl_seconds,
         ),
         settings.buffer, settings.salience,

@@ -30,7 +30,6 @@ logger = get_logger(component="main")
 
 def build_app_context(settings: ContextEngineeringSettings) -> AppContext:
     engine = make_engine(settings)
-    dep_url = settings.dependency_stub_base_url
     jwt_kwargs = {
         "issuer": settings.service_name,
         "shared_secret": settings.jwt_shared_secret,
@@ -40,8 +39,8 @@ def build_app_context(settings: ContextEngineeringSettings) -> AppContext:
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
-        llm_gateway=HTTPLLMGatewayClient(dep_url, **jwt_kwargs),
-        evaluation_feedback=HTTPEvaluationFeedbackClient(dep_url, **jwt_kwargs),
+        llm_gateway=HTTPLLMGatewayClient(settings.llm_gateway_base_url, **jwt_kwargs),
+        evaluation_feedback=HTTPEvaluationFeedbackClient(settings.evaluation_framework_base_url, **jwt_kwargs),
         token_counter=SimpleTokenCounter(),
     )
 

@@ -38,7 +38,7 @@ services:
       - "8099:8099"
     environment:
       AUDITABILITY_DATABASE_URL: postgresql+asyncpg://auditability:auditability@postgres:5432/auditability
-      AUDITABILITY_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9120
+      AUDITABILITY_LLM_GATEWAY_BASE_URL: http://dependency-stub:9120
     depends_on:
       postgres:
         condition: service_healthy

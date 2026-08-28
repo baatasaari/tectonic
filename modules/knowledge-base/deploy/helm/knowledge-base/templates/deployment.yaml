@@ -35,10 +35,10 @@ spec:
               value: {{ .Values.config.defaultChunkingStrategy | quote }}
             - name: KNOWLEDGE_BASE_STALENESS__DEFAULT_THRESHOLD_DAYS
               value: {{ .Values.config.staleThresholdDays | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: KNOWLEDGE_BASE_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: KNOWLEDGE_BASE_VECTOR_DB_BASE_URL
+              value: {{ .Values.vectorDbBaseUrl | quote }}
+            - name: KNOWLEDGE_BASE_GRAPH_DB_BASE_URL
+              value: {{ .Values.graphDbBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: KNOWLEDGE_BASE_DATABASE_URL
               valueFrom:

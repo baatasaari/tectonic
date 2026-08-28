@@ -41,7 +41,12 @@ database:
 redis:
   url: "redis://redis:6379/0"
 
-dependencyStubBaseUrl: ""  # set to a real LLM Gateway / Guardrails / Long-Term Memory / Human Oversight URL once deployed
+llmGatewayBaseUrl: "http://llm-gateway:8082"
+guardrailsBaseUrl: "http://guardrails:8093"
+longTermMemoryBaseUrl: "http://long-term-memory:8092"
+humanOversightBaseUrl: "http://human-oversight:8095"
+observabilityBaseUrl: "http://observability:8098"
+auditabilityBaseUrl: "http://auditability:8099"
 
 podDisruptionBudget:
   minAvailable: 2

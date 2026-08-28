@@ -37,7 +37,7 @@ class ShortTermMemorySettings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     service_name: str = "short-term-memory"
     http_port: int = 8091
-    dependency_stub_base_url: str = "http://localhost:9112"
+    llm_gateway_base_url: str = "http://localhost:8082"
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
     # every module, so this field's env var name is NOT prefixed like the rest of this

@@ -1,9 +1,10 @@
-"""Unit tests for `HTTPDecisionCallbackDispatcher`'s per-call JWT minting
-(clients/http_clients.py). Unlike every other HTTP client in this module,
-this dispatcher's target audience is only known per-call (`requesting_module`
-varies per notify() call), so it can't use the shared construction-time
-`ServiceBearerAuth` httpx.Auth flow every other client uses — it mints a
-fresh token inline, in `notify()`, scoped to that call's target instead.
+"""Unit tests for `HTTPDecisionCallbackDispatcher`'s per-call service
+resolution and JWT minting (clients/http_clients.py). Unlike every other
+HTTP client in this module, this dispatcher's target *host* and audience
+are only known per-call (`requesting_module` varies per notify() call), so
+it can't use one fixed `base_url`/construction-time `ServiceBearerAuth`
+the way every other client here does — it resolves the target from a real
+service directory and mints a fresh token inline, in `notify()`, instead.
 """
 from __future__ import annotations
 
@@ -28,7 +29,7 @@ async def test_notify_mints_a_token_scoped_to_the_workflow_engine_audience():
     ).mock(return_value=Response(200, json={}))
 
     dispatcher = HTTPDecisionCallbackDispatcher(
-        "http://dep.local", issuer="human-oversight", shared_secret=SECRET, ttl_seconds=300,
+        {"workflow-engine": "http://dep.local"}, issuer="human-oversight", shared_secret=SECRET, ttl_seconds=300,
     )
     await dispatcher.notify("workflow_engine", "inst-1:appr-1", _decision())
 
@@ -50,7 +51,7 @@ async def test_notify_mints_a_token_scoped_to_the_generic_requesting_module_audi
     )
 
     dispatcher = HTTPDecisionCallbackDispatcher(
-        "http://dep.local", issuer="human-oversight", shared_secret=SECRET, ttl_seconds=300,
+        {"sentinel-agents": "http://dep.local"}, issuer="human-oversight", shared_secret=SECRET, ttl_seconds=300,
     )
     await dispatcher.notify("sentinel_agents", "alert-1", _decision())
 
@@ -72,8 +73,20 @@ async def test_notify_sends_no_authorization_header_when_no_issuer_configured():
         return_value=Response(200, json={}),
     )
 
-    dispatcher = HTTPDecisionCallbackDispatcher("http://dep.local")
+    dispatcher = HTTPDecisionCallbackDispatcher({"sentinel-agents": "http://dep.local"})
     await dispatcher.notify("sentinel_agents", "alert-1", _decision())
 
     assert route.called
     assert "authorization" not in route.calls[0].request.headers
+
+
+@respx.mock
+async def test_notify_on_an_unknown_module_logs_and_does_not_call_out():
+    """A requesting_module with no entry in the service directory is a real,
+    honest failure mode -- log and return, never guess a host."""
+    dispatcher = HTTPDecisionCallbackDispatcher(
+        {"sentinel-agents": "http://dep.local"}, issuer="human-oversight", shared_secret=SECRET,
+    )
+    await dispatcher.notify("some_future_module", "ref-1", _decision())
+    # No route registered at all for this call -- respx would raise on any
+    # unmocked outbound request, so reaching here proves none was attempted.

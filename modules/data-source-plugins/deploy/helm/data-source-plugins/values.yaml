@@ -35,7 +35,7 @@ database:
   existingSecret: ""
   existingSecretKey: "database-url"
 
-dependencyStubBaseUrl: ""  # set to a real Secrets/Credential Management + source-connector URL once deployed
+secretsAndCredentialManagementBaseUrl: "http://secrets-and-credential-management:8111"
 
 podDisruptionBudget:
   minAvailable: 2

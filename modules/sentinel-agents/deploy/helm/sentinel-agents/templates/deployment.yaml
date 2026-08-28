@@ -35,10 +35,14 @@ spec:
               value: {{ .Values.config.sensitivity | quote }}
             - name: SENTINEL_AGENTS_SWARM_DETECTION__ENABLED
               value: {{ .Values.config.swarmDetectionEnabled | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: SENTINEL_AGENTS_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: SENTINEL_AGENTS_WORKFLOW_ENGINE_BASE_URL
+              value: {{ .Values.workflowEngineBaseUrl | quote }}
+            - name: SENTINEL_AGENTS_TOOL_ORCHESTRATION_BASE_URL
+              value: {{ .Values.toolOrchestrationBaseUrl | quote }}
+            - name: SENTINEL_AGENTS_HUMAN_OVERSIGHT_BASE_URL
+              value: {{ .Values.humanOversightBaseUrl | quote }}
+            - name: SENTINEL_AGENTS_AUDITABILITY_BASE_URL
+              value: {{ .Values.auditabilityBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: SENTINEL_AGENTS_DATABASE_URL
               valueFrom:

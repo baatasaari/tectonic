@@ -87,12 +87,10 @@ class WorkflowEngineSettings(BaseSettings):
     kafka_bootstrap_servers: str = "localhost:9092"
     service_name: str = "workflow-engine"
     http_port: int = 8080
-    # Base URL for LLM Gateway / Tool Orchestration / Guardrails / Human
-    # Oversight when none of those modules is deployed yet — points at the
-    # dependency-stub service from deploy/docker-compose.yml (LLD's
-    # Deployability and Testability Contract). Override per-dependency once
-    # each real module exists.
-    dependency_stub_base_url: str = "http://localhost:9100"
+    llm_gateway_base_url: str = "http://localhost:8082"
+    tool_orchestration_base_url: str = "http://localhost:8083"
+    guardrails_base_url: str = "http://localhost:8093"
+    human_oversight_base_url: str = "http://localhost:8095"
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
     # every module, so this field's env var name is NOT prefixed like the rest of this

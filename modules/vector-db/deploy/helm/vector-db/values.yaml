@@ -36,7 +36,7 @@ qdrant:
   collectionAlias: "vector_db_points"
   defaultEmbeddingModel: "text-embedding-3-small"
 
-dependencyStubBaseUrl: ""  # set to a real LLM Gateway URL once deployed
+llmGatewayBaseUrl: "http://llm-gateway:8082"
 
 podDisruptionBudget:
   minAvailable: 2

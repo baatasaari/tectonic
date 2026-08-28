@@ -50,7 +50,12 @@ services:
     environment:
       CONVERSATIONAL_ENGINE_DATABASE_URL: postgresql+asyncpg://conversational_engine:conversational_engine@postgres:5432/conversational_engine
       CONVERSATIONAL_ENGINE_REDIS_URL: redis://redis:6379/0
-      CONVERSATIONAL_ENGINE_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9101
+      CONVERSATIONAL_ENGINE_LLM_GATEWAY_BASE_URL: http://dependency-stub:9101
+      CONVERSATIONAL_ENGINE_GUARDRAILS_BASE_URL: http://dependency-stub:9101
+      CONVERSATIONAL_ENGINE_LONG_TERM_MEMORY_BASE_URL: http://dependency-stub:9101
+      CONVERSATIONAL_ENGINE_HUMAN_OVERSIGHT_BASE_URL: http://dependency-stub:9101
+      CONVERSATIONAL_ENGINE_OBSERVABILITY_BASE_URL: http://dependency-stub:9101
+      CONVERSATIONAL_ENGINE_AUDITABILITY_BASE_URL: http://dependency-stub:9101
     depends_on:
       postgres:
         condition: service_healthy

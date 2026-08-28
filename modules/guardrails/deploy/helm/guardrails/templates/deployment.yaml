@@ -35,10 +35,10 @@ spec:
               value: {{ .Values.config.groundednessThreshold | quote }}
             - name: GUARDRAILS_RED_TEAM__ENABLED
               value: {{ .Values.config.redTeamEnabled | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: GUARDRAILS_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: GUARDRAILS_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
+            - name: GUARDRAILS_SENTINEL_AGENTS_BASE_URL
+              value: {{ .Values.sentinelAgentsBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: GUARDRAILS_DATABASE_URL
               valueFrom:

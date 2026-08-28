@@ -37,10 +37,12 @@ spec:
               value: {{ .Values.config.synthesisEnabled | quote }}
             - name: TOOL_ORCHESTRATION_REDIS_URL
               value: {{ .Values.redis.url | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: TOOL_ORCHESTRATION_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: TOOL_ORCHESTRATION_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
+            - name: TOOL_ORCHESTRATION_GUARDRAILS_BASE_URL
+              value: {{ .Values.guardrailsBaseUrl | quote }}
+            - name: TOOL_ORCHESTRATION_SENTINEL_AGENTS_BASE_URL
+              value: {{ .Values.sentinelAgentsBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: TOOL_ORCHESTRATION_DATABASE_URL
               valueFrom:

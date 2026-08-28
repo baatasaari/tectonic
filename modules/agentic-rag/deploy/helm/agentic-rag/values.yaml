@@ -36,7 +36,10 @@ database:
   existingSecret: ""
   existingSecretKey: "database-url"
 
-dependencyStubBaseUrl: ""  # set to real Vector DB / Graph DB / Knowledge Base / LLM Gateway URLs once deployed
+vectorDbBaseUrl: "http://vector-db:8089"
+graphDbBaseUrl: "http://graph-db:8090"
+knowledgeBaseBaseUrl: "http://knowledge-base:8088"
+llmGatewayBaseUrl: "http://llm-gateway:8082"
 
 podDisruptionBudget:
   minAvailable: 2
