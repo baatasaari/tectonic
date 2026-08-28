@@ -29,7 +29,7 @@ src/workflow_engine/
     outbox_worker.py              OutboxRelayWorker — durable event-outbox relay to Kafka
   db/                     SQLAlchemy 2.0 async models + repository (incl. the event_outbox table)
   clients/                Kafka publisher, HTTP clients for the 4 external modules
-  security/                Service-to-service JWT bearer auth (shared signing key), the entitlement gate
+  security/                Service-to-service JWT bearer auth (shared signing key), the entitlement gate, real OpenAPI security scheme declarations
   telemetry/               OTel tracing, Prometheus metrics, structlog logging
   api/                     FastAPI routers (LLD §3.3)
   schemas/                  Pydantic request/response models
@@ -177,6 +177,21 @@ tests/integration/        Real-Postgres tier via testcontainers (needs Docker)
   for inter-module calls, not the platform's external-facing user-auth
   story — a real API gateway/OAuth layer in front of the platform's own
   entry points is a separate, larger concern, out of scope here.
+
+- **Its generated OpenAPI document declares the real auth it enforces**
+  (`security/openapi_security.py`; independent architecture assessment
+  §3.6: "Every OpenAPI document must include OAuth/OIDC security
+  schemes"). `ServiceAuthMiddleware` is plain Starlette middleware, so
+  FastAPI's automatic OpenAPI generation has zero visibility into it —
+  every module's spec previously declared no `securitySchemes` and no
+  per-operation `security` requirement at all, even though every
+  request (`/healthz`/`/metrics` excepted) genuinely needs one.
+  `configure_openapi_security` overrides `app.openapi` to declare a
+  real `ServiceBearerAuth` HTTP-bearer/JWT scheme, set it as the
+  document-level default, and explicitly mark the same paths
+  `jwt_auth.py`'s own `_EXCLUDED_PATHS` skips as unauthenticated — one
+  source of truth, reused rather than duplicated, so a module with a
+  non-default exclusion set is handled correctly with no special-casing.
 
 - **Enforces its own subscription entitlement via `EntitlementGateMiddleware`**
   (`security/entitlement_gate.py`) — see Agent Cards' README and the rollout

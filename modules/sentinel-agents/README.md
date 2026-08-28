@@ -26,7 +26,7 @@ src/sentinel_agents/
     event_processor.py                The orchestrator tying every component together per event
   db/                      SQLAlchemy 2.0 async models + repository
   clients/                 HTTP clients for Workflow Engine, Tool Orchestration, Human Oversight, Auditability
-  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate
+  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate, real OpenAPI security scheme declarations
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — events, alerts, baselines, config
   schemas/                    Pydantic request/response models
@@ -157,6 +157,16 @@ src/sentinel_agents/
   include this module. It **fails open** if Multi-tenancy is unreachable — a
   deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
   posture.
+
+- **Its generated OpenAPI document declares the real auth it enforces**
+  (`security/openapi_security.py`) — see Workflow Engine's README and the
+  independent architecture assessment's §3.6 for the shared reference
+  implementation and full reasoning. `ServiceAuthMiddleware` is plain
+  Starlette middleware, invisible to FastAPI's automatic OpenAPI
+  generation, so this module's spec previously declared no
+  `securitySchemes` at all; `configure_openapi_security` fixes that,
+  reusing `jwt_auth.py`'s own `_EXCLUDED_PATHS` as the one source of
+  truth for which paths are genuinely unauthenticated.
 
 ## Running locally
 

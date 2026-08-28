@@ -309,7 +309,8 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     },
     "/.well-known/agent.json": {
@@ -329,7 +330,8 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     },
     "/healthz": {
@@ -345,7 +347,8 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     },
     "/metrics": {
@@ -361,7 +364,8 @@
               }
             }
           }
-        }
+        },
+        "security": []
       }
     }
   },
@@ -695,6 +699,19 @@
         ],
         "title": "ValidationError"
       }
+    },
+    "securitySchemes": {
+      "ServiceBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Service-to-service HS256 JWT bearer auth (security/jwt_auth.py): every inbound request must carry `Authorization: Bearer <token>`, verified against this module's own service_name as the required audience (TECTONIC_JWT_SHARED_SECRET, one shared signing key across every module in this deployment). Not a user-facing OAuth/OIDC flow -- see this module's README for the full design note."
+      }
     }
-  }
+  },
+  "security": [
+    {
+      "ServiceBearerAuth": []
+    }
+  ]
 }

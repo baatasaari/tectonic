@@ -24,6 +24,7 @@ from agentic_rag.config import AgenticRAGSettings, load_settings
 from agentic_rag.db.session import make_engine, make_session_factory
 from agentic_rag.security.entitlement_gate import EntitlementGateMiddleware
 from agentic_rag.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from agentic_rag.security.openapi_security import configure_openapi_security
 from agentic_rag.telemetry.logging import configure_logging, get_logger
 from agentic_rag.telemetry.tracing import configure_tracing
 
@@ -120,6 +121,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

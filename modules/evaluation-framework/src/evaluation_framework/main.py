@@ -21,6 +21,7 @@ from evaluation_framework.security.jwt_auth import (
     INSECURE_DEFAULT_SECRET,
     ServiceAuthMiddleware,
 )
+from evaluation_framework.security.openapi_security import configure_openapi_security
 from evaluation_framework.telemetry.logging import configure_logging, get_logger
 from evaluation_framework.telemetry.tracing import configure_tracing
 
@@ -113,6 +114,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

@@ -17,6 +17,7 @@ from finops.config import FinOpsSettings, load_settings
 from finops.db.session import make_engine, make_session_factory
 from finops.security.entitlement_gate import EntitlementGateMiddleware
 from finops.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from finops.security.openapi_security import configure_openapi_security
 from finops.telemetry.logging import configure_logging, get_logger
 from finops.telemetry.tracing import configure_tracing
 
@@ -107,6 +108,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

@@ -30,6 +30,7 @@ src/billing_and_metering/
   clients/                 Resilient HTTP clients to FinOps + Auditability + Multi-tenancy
   security/
     jwt_auth.py               Service-to-service JWT (platform-wide shared secret, this module's own inbound protection)
+    openapi_security.py       Real OpenAPI security scheme declaration
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — pricing plans, invoices, usage records
   schemas/                    Pydantic request/response models
@@ -65,6 +66,16 @@ src/billing_and_metering/
   fail-open posture the entitlement gate itself takes, since a
   commercial/entitlement path must never become an availability
   dependency for the billing record of truth.
+
+- **Its generated OpenAPI document declares the real auth it enforces**
+  (`security/openapi_security.py`) — see Workflow Engine's README and the
+  independent architecture assessment's §3.6 for the shared reference
+  implementation and full reasoning. `ServiceAuthMiddleware` is plain
+  Starlette middleware, invisible to FastAPI's automatic OpenAPI
+  generation, so this module's spec previously declared no
+  `securitySchemes` at all; `configure_openapi_security` fixes that,
+  reusing `jwt_auth.py`'s own `_EXCLUDED_PATHS` as the one source of
+  truth for which paths are genuinely unauthenticated.
 
 ## Running locally
 

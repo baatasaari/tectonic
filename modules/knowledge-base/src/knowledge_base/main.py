@@ -19,6 +19,7 @@ from knowledge_base.config import KnowledgeBaseSettings, load_settings
 from knowledge_base.db.session import make_engine, make_session_factory
 from knowledge_base.security.entitlement_gate import EntitlementGateMiddleware
 from knowledge_base.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from knowledge_base.security.openapi_security import configure_openapi_security
 from knowledge_base.telemetry.logging import configure_logging, get_logger
 from knowledge_base.telemetry.tracing import configure_tracing
 
@@ -116,6 +117,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

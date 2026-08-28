@@ -22,6 +22,7 @@ from sdk_and_developer_portal.security.jwt_auth import (
     INSECURE_DEFAULT_SECRET,
     ServiceAuthMiddleware,
 )
+from sdk_and_developer_portal.security.openapi_security import configure_openapi_security
 from sdk_and_developer_portal.telemetry.logging import configure_logging, get_logger
 from sdk_and_developer_portal.telemetry.tracing import configure_tracing
 
@@ -113,6 +114,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

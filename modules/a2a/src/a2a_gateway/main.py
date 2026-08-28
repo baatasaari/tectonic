@@ -20,6 +20,7 @@ from a2a_gateway.core.local_card import build_local_card
 from a2a_gateway.db.session import make_engine, make_session_factory
 from a2a_gateway.security.entitlement_gate import EntitlementGateMiddleware
 from a2a_gateway.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from a2a_gateway.security.openapi_security import configure_openapi_security
 from a2a_gateway.telemetry.logging import configure_logging, get_logger
 from a2a_gateway.telemetry.tracing import configure_tracing
 
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

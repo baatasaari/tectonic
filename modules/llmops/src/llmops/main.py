@@ -17,6 +17,7 @@ from llmops.config import LLMOpsSettings, load_settings
 from llmops.db.session import make_engine, make_session_factory
 from llmops.security.entitlement_gate import EntitlementGateMiddleware
 from llmops.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from llmops.security.openapi_security import configure_openapi_security
 from llmops.telemetry.logging import configure_logging, get_logger
 from llmops.telemetry.tracing import configure_tracing
 
@@ -107,6 +108,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

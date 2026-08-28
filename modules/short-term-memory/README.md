@@ -22,7 +22,7 @@ src/short_term_memory/
     tokenization.py                 Local token-count estimator
     buffer_manager.py                Buffer Manager — append, overflow detection, summarisation trigger
   clients/                 Redis adapter (literal LLD key patterns) + LLM Gateway HTTP client
-  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate
+  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate, real OpenAPI security scheme declarations
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — sessions/{id}/messages, sessions/{id}
   schemas/                    Pydantic request/response models
@@ -78,6 +78,16 @@ implements its three key patterns
   include this module. It **fails open** if Multi-tenancy is unreachable — a
   deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
   posture.
+
+- **Its generated OpenAPI document declares the real auth it enforces**
+  (`security/openapi_security.py`) — see Workflow Engine's README and the
+  independent architecture assessment's §3.6 for the shared reference
+  implementation and full reasoning. `ServiceAuthMiddleware` is plain
+  Starlette middleware, invisible to FastAPI's automatic OpenAPI
+  generation, so this module's spec previously declared no
+  `securitySchemes` at all; `configure_openapi_security` fixes that,
+  reusing `jwt_auth.py`'s own `_EXCLUDED_PATHS` as the one source of
+  truth for which paths are genuinely unauthenticated.
 
 ## Running locally
 

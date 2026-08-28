@@ -20,6 +20,7 @@ from auditability.core.audit_pack_worker import AuditPackWorker
 from auditability.db.repository import SQLAlchemyAuditabilityRepository
 from auditability.db.session import make_engine, make_session_factory
 from auditability.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from auditability.security.openapi_security import configure_openapi_security
 from auditability.telemetry.logging import configure_logging, get_logger
 from auditability.telemetry.tracing import configure_tracing
 
@@ -125,6 +126,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

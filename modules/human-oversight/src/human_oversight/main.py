@@ -26,6 +26,7 @@ from human_oversight.config import HumanOversightSettings, load_settings
 from human_oversight.db.session import make_engine, make_session_factory
 from human_oversight.security.entitlement_gate import EntitlementGateMiddleware
 from human_oversight.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from human_oversight.security.openapi_security import configure_openapi_security
 from human_oversight.telemetry.logging import configure_logging, get_logger
 from human_oversight.telemetry.tracing import configure_tracing
 
@@ -130,6 +131,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

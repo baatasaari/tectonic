@@ -16,6 +16,7 @@ from identity_and_access.clients.auditability_client import HTTPAuditabilityClie
 from identity_and_access.config import IdentityAndAccessSettings, load_settings
 from identity_and_access.db.session import make_engine, make_session_factory
 from identity_and_access.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from identity_and_access.security.openapi_security import configure_openapi_security
 from identity_and_access.security.token_signer import JWTTokenSigner
 from identity_and_access.telemetry.logging import configure_logging, get_logger
 from identity_and_access.telemetry.tracing import configure_tracing
@@ -107,6 +108,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

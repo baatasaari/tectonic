@@ -18,6 +18,7 @@ from agent_cards.config import AgentCardsSettings, load_settings
 from agent_cards.db.session import make_engine, make_session_factory
 from agent_cards.security.entitlement_gate import EntitlementGateMiddleware
 from agent_cards.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from agent_cards.security.openapi_security import configure_openapi_security
 from agent_cards.telemetry.logging import configure_logging, get_logger
 from agent_cards.telemetry.tracing import configure_tracing
 
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

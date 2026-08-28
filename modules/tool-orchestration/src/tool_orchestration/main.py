@@ -26,6 +26,7 @@ from tool_orchestration.config import ToolOrchestrationSettings, load_settings
 from tool_orchestration.db.session import make_engine, make_session_factory
 from tool_orchestration.security.entitlement_gate import EntitlementGateMiddleware
 from tool_orchestration.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from tool_orchestration.security.openapi_security import configure_openapi_security
 from tool_orchestration.telemetry.logging import configure_logging, get_logger
 from tool_orchestration.telemetry.tracing import configure_tracing
 
@@ -134,6 +135,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

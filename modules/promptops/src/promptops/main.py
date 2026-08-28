@@ -18,6 +18,7 @@ from promptops.config import PromptOpsSettings, load_settings
 from promptops.db.session import make_engine, make_session_factory
 from promptops.security.entitlement_gate import EntitlementGateMiddleware
 from promptops.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from promptops.security.openapi_security import configure_openapi_security
 from promptops.telemetry.logging import configure_logging, get_logger
 from promptops.telemetry.tracing import configure_tracing
 
@@ -111,6 +112,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

@@ -19,6 +19,7 @@ from data_source_plugins.config import DataSourcePluginsSettings, load_settings
 from data_source_plugins.db.session import make_engine, make_session_factory
 from data_source_plugins.security.entitlement_gate import EntitlementGateMiddleware
 from data_source_plugins.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from data_source_plugins.security.openapi_security import configure_openapi_security
 from data_source_plugins.telemetry.logging import configure_logging, get_logger
 from data_source_plugins.telemetry.tracing import configure_tracing
 
@@ -119,6 +120,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

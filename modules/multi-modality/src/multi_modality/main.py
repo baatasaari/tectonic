@@ -17,6 +17,7 @@ from multi_modality.config import MultiModalitySettings, load_settings
 from multi_modality.db.session import make_engine, make_session_factory
 from multi_modality.security.entitlement_gate import EntitlementGateMiddleware
 from multi_modality.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from multi_modality.security.openapi_security import configure_openapi_security
 from multi_modality.telemetry.logging import configure_logging, get_logger
 from multi_modality.telemetry.tracing import configure_tracing
 
@@ -107,6 +108,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

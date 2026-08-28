@@ -20,6 +20,7 @@ from short_term_memory.config import ShortTermMemorySettings, load_settings
 from short_term_memory.core.buffer_manager import BufferManager
 from short_term_memory.security.entitlement_gate import EntitlementGateMiddleware
 from short_term_memory.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from short_term_memory.security.openapi_security import configure_openapi_security
 from short_term_memory.telemetry.logging import configure_logging, get_logger
 from short_term_memory.telemetry.tracing import configure_tracing
 
@@ -109,6 +110,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

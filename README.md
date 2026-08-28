@@ -573,13 +573,40 @@ Qdrant field and constructs its own in-memory client directly, so this
 changes zero test behavior, only the previously-unsafe production
 default. See `modules/vector-db/README.md` for the full reasoning.
 
+**Also fixed**: OpenAPI security-scheme declarations, all 34 modules
+(assessment §3.6: "Every OpenAPI document must include OAuth/OIDC
+security schemes"). `ServiceAuthMiddleware` is plain Starlette
+middleware, so FastAPI's automatic OpenAPI generation had zero
+visibility into it — every module's generated spec declared no
+`securitySchemes` and no per-operation `security` requirement at all,
+verified before any fix landed by checking `docs/openapi/*.json`
+directly, even though every request (`/healthz`/`/metrics` excepted)
+genuinely does need one. Fixed the same "reference implementation
+first" way as `EntitlementGateMiddleware`: a new
+`security/openapi_security.py`, first built and verified in Workflow
+Engine, overrides `app.openapi` to declare a real `ServiceBearerAuth`
+HTTP-bearer/JWT scheme, set it as the document-level default, and mark
+each module's own genuinely-unauthenticated paths accordingly — reused
+directly from that module's own `jwt_auth.py`'s `_EXCLUDED_PATHS`
+(one source of truth, not a second hardcoded list; this correctly
+picked up A2A's own non-default exclusion set with zero
+special-casing) rather than duplicated. Then mechanically rolled out
+to the remaining 33 modules by the same small scripted transform this
+platform has used for every mechanical multi-module rollout this
+phase: dry-run and hand-verified on one module first, applied and
+independently `ruff check`- and `pytest`-verified on every other one
+before committing. 5 new tests per module (170 total) confirm the
+scheme is declared, the excluded paths are explicitly unauthenticated,
+every other operation inherits the document-level default rather than
+overriding it, and the generated schema is cached after the first
+call.
+
 **In progress**, tracked against the assessment's own Phase 1 (platform
-kernel) scope: OpenAPI security-scheme declarations, Kubernetes
-hardening (NetworkPolicy, restricted pod security context) across
-every Helm chart, Identity and Access's OIDC/SAML/SCIM federation,
-Secrets' managed-KMS integration, an idempotent metering ledger,
-Observability's trace-query/SLO surfaces, and CI supply-chain gates
-(SBOM, signing, contract tests).
+kernel) scope: Kubernetes hardening (NetworkPolicy, restricted pod
+security context) across every Helm chart, Identity and Access's
+OIDC/SAML/SCIM federation, Secrets' managed-KMS integration, an
+idempotent metering ledger, Observability's trace-query/SLO surfaces,
+and CI supply-chain gates (SBOM, signing, contract tests).
 
 ## Modules
 

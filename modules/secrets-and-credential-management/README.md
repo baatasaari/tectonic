@@ -28,6 +28,7 @@ src/secrets_and_credential_management/
   clients/                 Resilient HTTP clients to Identity and Access + Auditability
   security/
     jwt_auth.py               Service-to-service JWT (platform-wide shared secret, this module's own inbound protection)
+    openapi_security.py       Real OpenAPI security scheme declaration
     envelope_encryption.py      This module's own distinct encryption-at-rest key (Fernet)
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — secrets, retrieve, rotate, revoke, compliance
@@ -65,6 +66,16 @@ src/secrets_and_credential_management/
   over the credential at the third-party system of record is the
   caller's job; `list_due_for_rotation` is what a scheduler polls to
   know what still needs that real-world rotation done.
+
+- **Its generated OpenAPI document declares the real auth it enforces**
+  (`security/openapi_security.py`) — see Workflow Engine's README and the
+  independent architecture assessment's §3.6 for the shared reference
+  implementation and full reasoning. `ServiceAuthMiddleware` is plain
+  Starlette middleware, invisible to FastAPI's automatic OpenAPI
+  generation, so this module's spec previously declared no
+  `securitySchemes` at all; `configure_openapi_security` fixes that,
+  reusing `jwt_auth.py`'s own `_EXCLUDED_PATHS` as the one source of
+  truth for which paths are genuinely unauthenticated.
 
 ## Running locally
 

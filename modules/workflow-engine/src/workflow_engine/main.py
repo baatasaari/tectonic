@@ -31,6 +31,7 @@ from workflow_engine.db.repository import SQLAlchemyWorkflowRepository
 from workflow_engine.db.session import make_engine, make_session_factory
 from workflow_engine.security.entitlement_gate import EntitlementGateMiddleware
 from workflow_engine.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from workflow_engine.security.openapi_security import configure_openapi_security
 from workflow_engine.telemetry.logging import configure_logging, get_logger
 from workflow_engine.telemetry.tracing import configure_tracing
 
@@ -174,6 +175,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

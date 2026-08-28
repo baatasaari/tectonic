@@ -27,6 +27,7 @@ src/sdk_and_developer_portal/
   clients/                 Resilient HTTP clients to Identity and Access, Multi-tenancy, Auditability, and any catalogued peer's own OpenAPI endpoint
   security/
     jwt_auth.py               Service-to-service JWT (platform-wide shared secret, this module's own inbound protection)
+    openapi_security.py       Real OpenAPI security scheme declaration
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — developers, catalogue, SDKs, adoption metrics
   schemas/                    Pydantic request/response models
@@ -58,6 +59,16 @@ src/sdk_and_developer_portal/
 - **Honest about what isn't measured.** "Support ticket volume" is
   the module table's third key metric; this platform has no
   support-ticketing module, so this LLD does not invent one.
+
+- **Its generated OpenAPI document declares the real auth it enforces**
+  (`security/openapi_security.py`) — see Workflow Engine's README and the
+  independent architecture assessment's §3.6 for the shared reference
+  implementation and full reasoning. `ServiceAuthMiddleware` is plain
+  Starlette middleware, invisible to FastAPI's automatic OpenAPI
+  generation, so this module's spec previously declared no
+  `securitySchemes` at all; `configure_openapi_security` fixes that,
+  reusing `jwt_auth.py`'s own `_EXCLUDED_PATHS` as the one source of
+  truth for which paths are genuinely unauthenticated.
 
 ## Running locally
 

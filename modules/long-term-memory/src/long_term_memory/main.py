@@ -24,6 +24,7 @@ from long_term_memory.config import LongTermMemorySettings, load_settings
 from long_term_memory.db.session import make_engine, make_session_factory
 from long_term_memory.security.entitlement_gate import EntitlementGateMiddleware
 from long_term_memory.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from long_term_memory.security.openapi_security import configure_openapi_security
 from long_term_memory.telemetry.logging import configure_logging, get_logger
 from long_term_memory.telemetry.tracing import configure_tracing
 
@@ -119,6 +120,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

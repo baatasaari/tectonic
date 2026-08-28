@@ -20,6 +20,7 @@ from graph_db.config import GraphDbSettings, load_settings
 from graph_db.db.session import make_engine, make_session_factory
 from graph_db.security.entitlement_gate import EntitlementGateMiddleware
 from graph_db.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from graph_db.security.openapi_security import configure_openapi_security
 from graph_db.telemetry.logging import configure_logging, get_logger
 from graph_db.telemetry.tracing import configure_tracing
 
@@ -111,6 +112,7 @@ def create_app() -> FastAPI:
 
     HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 
