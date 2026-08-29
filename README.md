@@ -992,7 +992,63 @@ scenario that still exercises nearly every module for a real reason
 genuine human-escalation path, and the identity/entitlement/billing/
 audit/tracing governance every one of those needs in production), not
 a contrived one. Building and verifying it end-to-end against real
-running module instances is separate, tracked follow-up work.
+running module instances is ticket #82's own work, now done: all
+three of the design doc's own scripted conversations ("what's your
+return policy?", "where's my order #A1029?", "I want a refund for
+order #A1029, it's $850.") run correctly against 15 real module
+processes plus one small mock stub (an LLM provider and a merchant's
+order-status backend — the only two things genuinely outside this
+platform's own 34 modules), no Docker (this sandbox has none —
+`scripts/product-slice-stubs/stack.py` launches every module as a
+real `uvicorn` process against its own real per-module Postgres
+database instead). The refund scenario's own real escalation reaches
+Human Oversight's real queue and a real reviewer decision resumes the
+conversation correctly; Auditability shows a real, hash-chained event
+trail for it; Billing and Metering shows real, non-zero usage against
+Acme Corp's own seeded pricing plan. `tests/product-slices/` is the
+one net-new automated test this added (`test_support_agent.py`, run
+against a real stack it stands up and tears down itself; see that
+directory's own README for how to run it) plus a standalone,
+platform-wide regression test for the cross-process trace-propagation
+fix Observability's own README already documented but never actually
+had a committed test for (`test_trace_propagation.py`) — proving real
+W3C `traceparent` continuity across a real HTTP hop, not spans
+landing in Observability's own store (no real OTel Collector/Tempo is
+available in this sandbox either, a documented, unclosed gap, not a
+silently skipped one).
+
+Standing the slice up for real surfaced a long tail of genuine
+module-level gaps invisible under every module's own stubbed test
+suite — every peer HTTP client this slice's own critical path
+actually exercises had at least one real wire-shape mismatch (LLM
+Gateway, Tool Orchestration, Guardrails, Human Oversight, Intent
+Detection, Agentic RAG's own Vector DB and LLM Gateway clients, Vector
+DB's own LLM Gateway client, Knowledge Base's own Vector DB client),
+each fixed against the real peer's actual route and schema, not
+against another invented shape. Real, not merely wire-shape, bugs
+turned up too: a `KafkaEventPublisher.start()` that left a
+half-initialized producer assigned on a failed connect, hanging
+`publish()` forever instead of failing fast (Workflow Engine and
+Multi-tenancy both carried this); a synthesized default Guardrails
+policy profile using the literal string `"default"` as its id where a
+real UUID column expected one; Billing and Metering's own
+`PricingPlanService.create()` silently re-syncing (not adding to) a
+tenant's Multi-tenancy entitlements to exactly its own plan's resource
+keys, clobbering a wider entitlement grant made moments earlier if the
+plan's own `unit_prices` didn't name every module the tenant needed;
+and several missing admin/provisioning endpoints this slice needed to
+configure real infrastructure end-to-end that no prior caller had ever
+needed (LLM Gateway provider/budget-policy creation, Tool
+Orchestration's own known-tool registration bypassing the
+LLM-synthesis pipeline, Billing's own real HTTP trigger for its
+already-tested `meter_tenant()`, Workflow Engine's own by-name
+definition lookup and symbolic-ruleset configuration, and a real
+Conversational-Engine-to-Workflow-Engine integration that plainly
+didn't exist before — Conversational Engine called LLM Gateway
+directly for every turn, never routing through Workflow Engine's own
+neurosymbolic orchestration the design doc's own sequence diagram
+always assumed). Every fix has its own focused unit test and its own
+module's README entry; nothing here duplicates that detail.
 
 ## Modules
 

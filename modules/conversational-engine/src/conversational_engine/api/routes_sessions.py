@@ -142,6 +142,37 @@ async def send_message(
     return EventSourceResponse(event_generator())
 
 
+@router.post("/{session_id}/resume", response_model=TurnResponse)
+async def resume_session(
+    session_id: str,
+    ctx: AppContext = Depends(get_ctx),
+    repository: ConversationRepository = Depends(get_repository),
+) -> TurnResponse:
+    """Re-checks a HANDED_OFF session's paused Workflow Engine instance and
+    relays the final answer back into the conversation once Human
+    Oversight's real decision-callback dispatcher has resumed it to
+    completion (ticket #82). A no-op call (still paused, or this session
+    was never routed through Workflow Engine at all) is a 409, not an
+    error -- the caller (a human reviewer's own follow-up, or a client
+    polling after an escalation message) is expected to retry."""
+    session = await repository.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="session not found")
+
+    manager = build_session_manager(ctx, repository)
+    result = await manager.resume_from_workflow(session)
+    if result is None:
+        raise HTTPException(status_code=409, detail="nothing to resume: instance still paused or not workflow-routed")
+
+    return TurnResponse(
+        outbound_message=_message_summary(result.outbound_message) if result.outbound_message else None,
+        refused=result.refused,
+        refusal_category=result.refusal_category,
+        emotion_score=result.emotion_score,
+        handoff_triggered=result.handoff_event is not None,
+    )
+
+
 @router.post("/{session_id}/handoff", response_model=HandoffResponse)
 async def handoff(
     session_id: str,

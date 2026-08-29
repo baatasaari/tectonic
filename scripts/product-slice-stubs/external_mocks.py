@@ -87,6 +87,22 @@ def _compose_content(model: str, prompt_context: dict) -> dict[str, Any]:
         amount = float(match.group(1).replace(",", "")) if match else 0.0
         return {"content": "", "refund_amount": amount}
 
+    if model == "rag-groundedness-critic":
+        # Deterministic and comfortably above Agentic RAG's own default
+        # threshold (0.85) -- this slice's own single indexed document is
+        # always relevant enough that a real critic call would say so too;
+        # a fixed high score here just means the retrieval loop never needs
+        # a second hop, not that critique itself is faked away.
+        return {"content": "", "score": 0.92, "gaps": ""}
+
+    if model == "rag-query-reformulator":
+        # Unreachable in this slice's own scripted conversations (the
+        # groundedness score above always clears the threshold on hop 1),
+        # kept real and deterministic anyway rather than left broken, per
+        # this repo's own "fix the whole gap class once found" discipline.
+        query = prompt_context.get("query", "") if isinstance(prompt_context, dict) else ""
+        return {"content": "", "revised_query": query}
+
     if model == "compose-response-agent":
         tool_result = _find_key(prompt_context, "tool_results")
         if tool_result:
@@ -210,6 +226,20 @@ async def mcp_jsonrpc(payload: dict) -> dict:
 @app.get("/v1/secrets/provider-key")
 async def provider_key(provider: str, tenant_id: str) -> dict:
     return {"api_key": f"mock-key-for-{provider}"}
+
+
+# ---------------------------------------------------------------------------
+# 4. Graph DB stub -- deliberately out of this slice's critical path per the
+#    design doc's own module table; Knowledge Base's real ingestion pipeline
+#    still calls it unconditionally, so it needs *some* answer, exactly the
+#    same "dependency-stub substitutes an out-of-scope peer" pattern every
+#    module's own docker-compose.yml already uses.
+# ---------------------------------------------------------------------------
+
+
+@app.post("/v1/extract-entities")
+async def extract_entities(body: dict) -> dict:
+    return {"entities": [], "relationships": []}
 
 
 @app.get("/healthz")

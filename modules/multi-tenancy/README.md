@@ -246,6 +246,14 @@ src/multi_tenancy/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **The same `KafkaEventPublisher` hang Workflow Engine's own README
+  documents in full** (ticket #82) — `start()` assigned `self._producer`
+  before confirming a successful connect, so a failed start (this
+  sandbox's own permanent no-Kafka condition) left a half-initialized
+  producer in place, defeating `publish()`'s own fast-fail guard and
+  hanging forever instead. Fixed identically, with the same regression
+  test shape (`tests/unit/test_kafka_publisher.py`).
+
 ## Running locally
 
 ```bash

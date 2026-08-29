@@ -50,6 +50,10 @@ class InMemoryConversationRepository:
         self.handoff_events.append(copy.deepcopy(record))
         return copy.deepcopy(record)
 
+    async def get_latest_handoff_event(self, session_id: str) -> HandoffEventRecord | None:
+        matches = [e for e in self.handoff_events if e.session_id == session_id]
+        return copy.deepcopy(matches[-1]) if matches else None
+
     async def get_persona_config(self, persona_config_ref: str, tenant_id: str) -> PersonaConfigRecord | None:
         rec = self.personas.get((tenant_id, persona_config_ref)) or self.personas.get(("*", persona_config_ref))
         return copy.deepcopy(rec) if rec else None
@@ -96,6 +100,7 @@ class StubWorkflowEngineClient:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
         self._responses: list[dict[str, Any]] = []
+        self.instance_responses: dict[str, dict[str, Any]] = {}
         self.default_response: dict[str, Any] = {
             "id": "instance-1", "status": "completed", "trace_id": "trace-1",
             "context": {"respond": {"content": "stub workflow response"}},
@@ -104,12 +109,23 @@ class StubWorkflowEngineClient:
     def queue_response(self, response: dict[str, Any]) -> None:
         self._responses.append(response)
 
+    def queue_instance_response(self, instance_id: str, response: dict[str, Any]) -> None:
+        """Sets what a later `get_instance(instance_id=...)` call returns --
+        for a test to simulate Human Oversight's own decision-callback
+        having resumed a paused instance to completion (ticket #82)."""
+        self.instance_responses[instance_id] = response
+
     async def start_instance(
         self, *, definition_id: str, initial_context: dict[str, Any], tenant_id: str
     ) -> dict[str, Any]:
         self.calls.append({"definition_id": definition_id, "initial_context": initial_context, "tenant_id": tenant_id})
         if self._responses:
             return self._responses.pop(0)
+        return copy.deepcopy(self.default_response)
+
+    async def get_instance(self, *, instance_id: str, tenant_id: str) -> dict[str, Any]:
+        if instance_id in self.instance_responses:
+            return copy.deepcopy(self.instance_responses[instance_id])
         return copy.deepcopy(self.default_response)
 
 

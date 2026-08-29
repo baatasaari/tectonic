@@ -115,6 +115,25 @@ src/billing_and_metering/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **A real HTTP trigger for `MeteringService.meter_tenant()`** (ticket
+  #82) — the service itself was already real and tested, but nothing in
+  this module's own real API could ever call it; a real deployment's
+  scheduler is expected to call this periodically. Added
+  `POST /v1/billing/tenants/{tenant_id}/meter?period=...`.
+
+- **`PricingPlanService.create()`'s own entitlement-sync is a real
+  *replace*, not an add** (ticket #82's own Phase 2 support-agent slice
+  surfaced this seeding a tenant for the first time with a plan that
+  didn't name every module it needed): creating a tenant-specific plan
+  syncs Multi-tenancy's entitlements to exactly the module names in that
+  plan's own `unit_prices` (by design — see this service's own
+  docstring), which silently clobbers a wider entitlement grant made
+  moments earlier if the plan doesn't also name every one of those
+  modules. Not a bug in this module (the sync is deliberate and
+  documented) — the seed script calling it needed fixing instead; noted
+  here since it's exactly the kind of cross-module interaction a
+  single-module test would never catch.
+
 ## Running locally
 
 ```bash

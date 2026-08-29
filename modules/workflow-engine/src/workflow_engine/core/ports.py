@@ -25,6 +25,19 @@ from workflow_engine.core.domain import (
 class WorkflowRepository(Protocol):
     async def get_definition(self, definition_id: str) -> WorkflowDefinitionRecord | None: ...
 
+    async def get_definition_by_name(self, name: str, tenant_id: str) -> WorkflowDefinitionRecord | None:
+        """Returns the highest-version definition matching `name` for this
+        tenant, or None. Added for ticket #82 (Phase 2 support-agent slice):
+        every caller of `POST /instances` before this had to already know a
+        definition's server-generated UUID `id` -- fine for this module's
+        own admin/test tooling, but Conversational Engine's own
+        `settings.workflow_routing.definition_id` is a fixed deployment-time
+        config value (a stable name like "support-agent-v1"), set before
+        the definition it names has even been created and thus before its
+        id is known. `POST /instances` resolves by name when the given
+        value isn't a UUID (see routes_instances.py)."""
+        ...
+
     async def create_definition(self, record: WorkflowDefinitionRecord) -> WorkflowDefinitionRecord: ...
 
     async def publish_definition(self, definition_id: str) -> WorkflowDefinitionRecord: ...

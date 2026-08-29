@@ -122,6 +122,16 @@ class SQLAlchemyWorkflowRepository:
         m = await self.session.get(models.WorkflowDefinition, definition_id)
         return _def_to_domain(m) if m else None
 
+    async def get_definition_by_name(self, name: str, tenant_id: str) -> WorkflowDefinitionRecord | None:
+        rows = await self.session.execute(
+            select(models.WorkflowDefinition)
+            .where(models.WorkflowDefinition.name == name, models.WorkflowDefinition.tenant_id == tenant_id)
+            .order_by(models.WorkflowDefinition.version.desc())
+            .limit(1)
+        )
+        m = rows.scalars().first()
+        return _def_to_domain(m) if m else None
+
     async def create_definition(self, record: WorkflowDefinitionRecord) -> WorkflowDefinitionRecord:
         m = models.WorkflowDefinition(
             id=record.id,

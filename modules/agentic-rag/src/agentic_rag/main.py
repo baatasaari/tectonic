@@ -45,7 +45,9 @@ def build_app_context(settings: AgenticRAGSettings) -> AppContext:
         vector_db=HTTPVectorDBClient(settings.vector_db_base_url, **jwt_kwargs),
         graph_db=HTTPGraphDBClient(settings.graph_db_base_url, **jwt_kwargs),
         knowledge_base=HTTPKnowledgeBaseClient(settings.knowledge_base_base_url, **jwt_kwargs),
-        llm_gateway=HTTPLLMGatewayClient(settings.llm_gateway_base_url, **jwt_kwargs),
+        llm_gateway=HTTPLLMGatewayClient(
+            settings.llm_gateway_base_url, default_virtual_key=settings.llm_gateway_virtual_key, **jwt_kwargs
+        ),
     )
 
 

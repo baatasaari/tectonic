@@ -96,7 +96,7 @@ class VectorService:
         embedding_model_version: str | None = None,
     ) -> str:
         model = embedding_model_version or self._default_model
-        dense = vector if vector is not None else await self._embeddings.embed(content or "", model=model)
+        dense = vector if vector is not None else await self._embeddings.embed(content or "", model=model, tenant_id=tenant_id)
         sparse = sparse_encoder.encode(content or "")
 
         alias = self._alias(tenant_id)
@@ -148,7 +148,7 @@ class VectorService:
 
         limit = top_k or self._query_config.default_top_k
         use_hybrid = self._query_config.hybrid_search_default if hybrid is None else hybrid
-        dense = vector if vector is not None else await self._embeddings.embed(text or "")
+        dense = vector if vector is not None else await self._embeddings.embed(text or "", tenant_id=tenant_id)
         await self._verify_dimension(physical, len(dense))
         filter_tenant = tenant_id if self._isolation.tenancy_model == "shared_collection_with_filter" else None
         qdrant_filter = qdrant_ops.build_filter(filter_tenant, filters)

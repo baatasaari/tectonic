@@ -164,6 +164,21 @@ src/guardrails/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **A real UUID for the synthesized default policy profile** (ticket
+  #82's own Phase 2 support-agent slice, standing this module up against
+  a real running Postgres for the first time for a tenant with no policy
+  profile of its own yet) — `POST /v1/guardrails/check`'s own
+  `_default_profile()` fallback (a real, in-memory, never-persisted
+  stand-in used whenever a tenant hasn't created a profile) used the
+  literal string `"default"` as its `id`. That's harmless against
+  SQLite's own untyped `CHAR(36)` unit-test column, but a genuine
+  `DataError` against a real Postgres UUID column once
+  `create_intervention_log` tried to write it — invisible before because
+  every prior test seeded a real profile first. Fixed to mint a real
+  UUID per call instead (nothing needs to look this ephemeral profile up
+  again by that id, unlike a real, persisted one) — see
+  `tests/integration/test_check_route_postgres.py`.
+
 ## Running locally
 
 ```bash

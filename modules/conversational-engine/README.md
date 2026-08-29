@@ -139,6 +139,32 @@ src/conversational_engine/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **A real Workflow Engine integration** (ticket #82's own Phase 2
+  support-agent slice) — `handle_turn()` called LLM Gateway directly for
+  every turn before this, never routing through Workflow Engine's own
+  neurosymbolic orchestration, contrary to what the slice's own design
+  doc's sequence diagram always assumed. Added `WorkflowEngineClient`
+  (port + real HTTP adapter + fake) and a new
+  `settings.workflow_routing.enabled`-gated path
+  (`_handle_turn_via_workflow_engine`) that creates/drives a real
+  Workflow Engine instance instead; default off, so every existing
+  direct-LLM-Gateway turn is completely unaffected.
+
+- **`resume_from_workflow` — the fix for a real gap this ticket's own
+  live verification surfaced**: escalating a turn to Workflow Engine's
+  own human-approval pause recorded the escalation and stopped there;
+  nothing ever polled the paused instance again once Human Oversight's
+  real decision-callback dispatcher resumed it, so an approved refund had
+  no way back into the conversation at all (the design doc's own
+  Definition of Done item 7: "the reviewer's real decision resumes the
+  conversation correctly"). Added `SessionManager.resume_from_workflow()`
+  and `POST /v1/conversational-engine/sessions/{id}/resume` — re-checks a
+  `HANDED_OFF` session's paused instance and, once it's completed, relays
+  the final answer back into the conversation and reactivates the
+  session. A no-op call (still paused, or a session never routed through
+  Workflow Engine at all) is a `409`, not an error. Needed one small
+  repository addition, `get_latest_handoff_event()`.
+
 ## Running locally
 
 ```bash

@@ -51,6 +51,11 @@ class AgenticRAGSettings(BaseSettings):
     graph_db_base_url: str = "http://localhost:8090"
     knowledge_base_base_url: str = "http://localhost:8088"
     llm_gateway_base_url: str = "http://localhost:8082"
+    # One shared virtual key for every LLM Gateway completion this module makes
+    # (groundedness assessment, query reformulation) -- deployment-configured
+    # rather than resolved per-tenant, matching Workflow Engine's/Vector DB's
+    # own identical simplification (ticket #82).
+    llm_gateway_virtual_key: str = "agentic-rag-default"
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
     # every module, so this field's env var name is NOT prefixed like the rest of this

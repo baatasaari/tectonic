@@ -28,6 +28,19 @@ def _tenant_id(request: Request, ctx: AppContext) -> str:
 
 
 def _default_profile(tenant_id: str, ctx: AppContext) -> PolicyProfileRecord:
+    """A real tenant with no policy profile of its own yet (ticket #82
+    surfaced this against a freshly-seeded tenant, never exercised by any
+    prior stubbed test): an in-memory, never-persisted stand-in, not a
+    real row `get_policy_profile` could ever look up again by this id --
+    that's fine for `engine.evaluate()`, which only reads its fields, but
+    `id` still has to be a real UUID, not the literal string "default",
+    because `create_intervention_log` below writes `profile.id` into a
+    genuine UUID column: the literal string doesn't round-trip through
+    asyncpg's own UUID codec and 500s the whole check, exactly the class
+    of gap this ticket keeps finding once a module runs for real. A fresh
+    id per call is fine -- nothing needs to look this profile up again by
+    it, unlike a real, persisted profile's id.
+    """
     enabled = []
     if ctx.settings.checks.pii_detection_enabled:
         enabled.append("pii_detection")
@@ -36,7 +49,7 @@ def _default_profile(tenant_id: str, ctx: AppContext) -> PolicyProfileRecord:
     if ctx.settings.checks.groundedness_check_enabled:
         enabled.append("groundedness_check")
     return PolicyProfileRecord(
-        id="default", tenant_id=tenant_id, name="default", enabled_checks=enabled,
+        id=new_id(), tenant_id=tenant_id, name="default", enabled_checks=enabled,
         pii_entity_types=ctx.settings.pii.entity_types, denied_topics=ctx.settings.checks.denied_topics,
         groundedness_threshold=ctx.settings.groundedness.threshold,
     )

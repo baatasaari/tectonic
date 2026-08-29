@@ -30,6 +30,13 @@ class ConversationRepository(Protocol):
 
     async def create_handoff_event(self, record: HandoffEventRecord) -> HandoffEventRecord: ...
 
+    async def get_latest_handoff_event(self, session_id: str) -> HandoffEventRecord | None:
+        """Most recent handoff event for a session, if any -- added
+        (ticket #82) so a paused-for-workflow-approval session can be
+        resumed: `target` on a `WORKFLOW_ESCALATION` event carries the
+        `workflow-instance:{id}` this session is waiting on."""
+        ...
+
     async def get_persona_config(self, persona_config_ref: str, tenant_id: str) -> PersonaConfigRecord | None: ...
 
 
@@ -98,6 +105,13 @@ class WorkflowEngineClient(Protocol):
         within the call. Returns {"id", "status", "trace_id", "context"} --
         status is "completed" (context carries the final answer),
         "paused_for_approval" (escalated to Human Oversight), or "failed"."""
+        ...
+
+    async def get_instance(self, *, instance_id: str, tenant_id: str) -> dict[str, Any]:
+        """GETs /instances/{id} directly -- added (ticket #82) so a
+        paused-for-approval session can be resumed once Human Oversight's
+        real decision-callback dispatcher has resumed the instance, without
+        starting a new one. Same response shape as `start_instance`."""
         ...
 
 

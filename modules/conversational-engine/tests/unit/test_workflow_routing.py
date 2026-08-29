@@ -87,3 +87,71 @@ async def test_failed_instance_produces_a_refusal(harness_factory):
 
     assert result.refused is True
     assert result.handoff_event is None
+
+
+async def test_resume_from_workflow_relays_the_answer_once_the_instance_completes(harness_factory):
+    """The gap ticket #82's own Definition of Done item 7 surfaced:
+    escalating paused the session and stopped there -- nothing ever polled
+    the instance again once Human Oversight's real decision-callback
+    dispatcher resumed it. resume_from_workflow is the fix."""
+    harness = harness_factory(settings=_routing_enabled_settings())
+    harness.workflow_engine.queue_response(
+        {"id": "wf-instance-4", "status": "paused_for_approval", "trace_id": "trace-4", "context": {}}
+    )
+    session = await harness.manager.create_session(
+        tenant_id="acme", channel=Channel.WEB, persona_config_ref="default", trace_id="trace-4"
+    )
+    await harness.manager.handle_turn(session, "I want a refund for order #A1029, it's $850.")
+    handed_off = await harness.repository.get_session(session.id)
+    assert handed_off.status == SessionStatus.HANDED_OFF
+
+    harness.workflow_engine.queue_instance_response(
+        "wf-instance-4",
+        {
+            "id": "wf-instance-4", "status": "completed", "trace_id": "trace-4",
+            "context": {"respond": {"content": "Your $850 refund for order #A1029 has been approved."}},
+        },
+    )
+
+    result = await harness.manager.resume_from_workflow(handed_off)
+
+    assert result is not None
+    assert result.refused is False
+    assert result.outbound_message.content == "Your $850 refund for order #A1029 has been approved."
+    resumed = await harness.repository.get_session(session.id)
+    assert resumed.status == SessionStatus.ACTIVE
+
+
+async def test_resume_from_workflow_is_a_noop_while_still_paused(harness_factory):
+    harness = harness_factory(settings=_routing_enabled_settings())
+    harness.workflow_engine.queue_response(
+        {"id": "wf-instance-5", "status": "paused_for_approval", "trace_id": "trace-5", "context": {}}
+    )
+    session = await harness.manager.create_session(
+        tenant_id="acme", channel=Channel.WEB, persona_config_ref="default", trace_id="trace-5"
+    )
+    await harness.manager.handle_turn(session, "I want a refund for order #A1029, it's $850.")
+    handed_off = await harness.repository.get_session(session.id)
+
+    # Default stub instance response's status is "completed", so pin an
+    # explicit still-paused response for this instance id to prove the
+    # no-op path, not just rely on queue_instance_response's own default.
+    harness.workflow_engine.queue_instance_response(
+        "wf-instance-5", {"id": "wf-instance-5", "status": "paused_for_approval", "trace_id": "trace-5", "context": {}}
+    )
+
+    result = await harness.manager.resume_from_workflow(handed_off)
+
+    assert result is None
+    still_handed_off = await harness.repository.get_session(session.id)
+    assert still_handed_off.status == SessionStatus.HANDED_OFF
+
+
+async def test_resume_from_workflow_is_a_noop_for_a_session_never_workflow_routed(harness):
+    session = await harness.manager.create_session(
+        tenant_id="tenant-a", channel=Channel.WEB, persona_config_ref="default", trace_id="trace-1"
+    )
+
+    result = await harness.manager.resume_from_workflow(session)
+
+    assert result is None

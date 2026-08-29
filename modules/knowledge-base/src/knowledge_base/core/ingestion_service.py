@@ -72,6 +72,7 @@ class IngestionService:
                 {
                     "chunk_id": c.id, "content": c.content, "policy_tags": c.policy_tags,
                     "document_id": document.id, "document_version_id": version.id,
+                    "tenant_id": document.tenant_id,
                 }
                 for c in chunk_records
             ]

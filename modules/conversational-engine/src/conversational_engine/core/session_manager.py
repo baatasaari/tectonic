@@ -67,6 +67,12 @@ _DEFAULT_PERSONA = PersonaConfigRecord(id="default", tenant_id="*", name="defaul
 # its own extraction convention.
 _RESPOND_STEP_ID = "respond"
 
+# Prefix a WORKFLOW_ESCALATION handoff event's own `target` field carries,
+# so `resume_from_workflow` below can recover the paused instance id it
+# needs to poll -- kept as one shared constant with the write site in
+# `_handle_turn_via_workflow_engine` rather than duplicating the string.
+_WORKFLOW_INSTANCE_TARGET_PREFIX = "workflow-instance:"
+
 
 def _extract_workflow_response_content(context: dict) -> str:
     step_output = context.get(_RESPOND_STEP_ID)
@@ -265,7 +271,7 @@ class SessionManager:
             )
             event = HandoffEventRecord(
                 id=new_id(), session_id=session.id, trigger_reason=HandoffTriggerReason.WORKFLOW_ESCALATION,
-                target=f"workflow-instance:{result.get('id')}",
+                target=f"{_WORKFLOW_INSTANCE_TARGET_PREFIX}{result.get('id')}",
             )
             handoff_event = await self.repository.create_handoff_event(event)
             await self.auditability.emit(
@@ -306,6 +312,56 @@ class SessionManager:
             refusal_category=refusal_category,
             emotion_score=0.0,
             handoff_event=handoff_event,
+        )
+
+    async def resume_from_workflow(self, session: ConversationSessionRecord) -> TurnResult | None:
+        """Re-checks a HANDED_OFF session's paused Workflow Engine instance
+        and, if Human Oversight's own real decision-callback dispatcher has
+        since resumed it to completion, relays the final answer back into
+        the conversation and reactivates the session (ticket #82's own
+        Definition of Done item 7: "the reviewer's real decision resumes
+        the conversation correctly"). Genuine module-level gap this ticket
+        surfaced: `_handle_turn_via_workflow_engine` above only ever
+        recorded the escalation and stopped -- nothing previously polled
+        the paused instance again, so a resolved approval had no way back
+        into the conversation at all. Returns None when there is nothing
+        to relay yet (instance still paused, or this session was never
+        actually waiting on one) -- callers should treat that as "no
+        change", not an error; the API route below maps it to a 409."""
+        if session.status != SessionStatus.HANDED_OFF or self.workflow_engine is None:
+            return None
+
+        event = await self.repository.get_latest_handoff_event(session.id)
+        if event is None or event.trigger_reason != HandoffTriggerReason.WORKFLOW_ESCALATION:
+            return None
+        if not event.target.startswith(_WORKFLOW_INSTANCE_TARGET_PREFIX):
+            return None
+        instance_id = event.target[len(_WORKFLOW_INSTANCE_TARGET_PREFIX) :]
+
+        result = await self.workflow_engine.get_instance(instance_id=instance_id, tenant_id=session.tenant_id)
+        if result.get("status") != "completed":
+            return None
+
+        content = _extract_workflow_response_content(result.get("context", {}))
+        outbound = await self.repository.append_message(
+            MessageRecord(id=new_id(), session_id=session.id, direction=MessageDirection.OUTBOUND, content=content)
+        )
+        session = replace(session, status=SessionStatus.ACTIVE, last_activity_at=now())
+        await self.repository.update_session(session)
+
+        await self.observability.emit(
+            {
+                "event_type": "conversation.turn.completed",
+                "session_id": session.id,
+                "tenant_id": session.tenant_id,
+                "trace_id": result.get("trace_id", session.trace_id),
+                "channel": session.channel.value,
+                "workflow_instance_id": instance_id,
+            }
+        )
+
+        return TurnResult(
+            outbound_message=outbound, refused=False, refusal_category=None, emotion_score=0.0, handoff_event=None,
         )
 
     async def _refuse(

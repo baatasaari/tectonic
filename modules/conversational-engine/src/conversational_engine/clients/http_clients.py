@@ -111,12 +111,22 @@ class HTTPWorkflowEngineClient(ResilientHTTPClient):
         # context -- a second real call to the same real instance fetches it,
         # rather than this module guessing at or duplicating Workflow
         # Engine's own instance-detail shape.
-        detail_resp = await self._get(f"/v1/workflow-engine/instances/{started['id']}", headers={"X-Tenant-Id": tenant_id})
-        detail = detail_resp.json()
+        detail = await self._fetch_instance_detail(started["id"], tenant_id)
         return {
             "id": started["id"], "status": detail["status"], "trace_id": started["trace_id"],
             "context": detail.get("context", {}),
         }
+
+    async def get_instance(self, *, instance_id: str, tenant_id: str) -> dict[str, Any]:
+        detail = await self._fetch_instance_detail(instance_id, tenant_id)
+        return {
+            "id": instance_id, "status": detail["status"], "trace_id": detail.get("trace_id", ""),
+            "context": detail.get("context", {}),
+        }
+
+    async def _fetch_instance_detail(self, instance_id: str, tenant_id: str) -> dict[str, Any]:
+        resp = await self._get(f"/v1/workflow-engine/instances/{instance_id}", headers={"X-Tenant-Id": tenant_id})
+        return resp.json()
 
 
 class HTTPLongTermMemoryClient(ResilientHTTPClient):

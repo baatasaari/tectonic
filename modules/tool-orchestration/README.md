@@ -156,6 +156,15 @@ src/tool_orchestration/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **Plain registration for a known, already-specified tool** (ticket #82)
+  — the only creation path before this (`/synthesise` → `/approve`)
+  always calls LLM Gateway to invent a tool proposal and always requires
+  a Sentinel Agents review, right for an LLM-invented tool but wrong for
+  an admin-known integration (this slice's own `get_order_status`, a
+  real merchant order-status backend nobody needs an LLM to guess the
+  schema of). Added `POST /tools`, registering directly as
+  `active`/`synthesised=False`.
+
 ## Running locally
 
 ```bash

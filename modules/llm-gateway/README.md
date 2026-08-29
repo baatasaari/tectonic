@@ -209,6 +209,13 @@ src/llm_gateway/
   this tier automatically for any module with a `tests/contract/`
   directory.
 
+- **Real admin provisioning for a `ProviderConfig`/`BudgetPolicy`**
+  (ticket #82's own Phase 2 support-agent slice) — there was no way at
+  all, through this module's own real API, to create either (only
+  `update_provider_config`, requiring a pre-existing row, and no create
+  route for a budget policy). Added `POST /admin/providers` and
+  `POST /admin/budget-policies`, plus `repository.create_provider_config()`.
+
 ## Running locally
 
 ```bash

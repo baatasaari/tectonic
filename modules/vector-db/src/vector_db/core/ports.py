@@ -14,9 +14,13 @@ from vector_db.core.domain import MigrationRecord
 
 
 class EmbeddingProvider(Protocol):
-    async def embed(self, text: str, *, model: str | None = None) -> list[float]:
+    async def embed(self, text: str, *, model: str | None = None, tenant_id: str = "") -> list[float]:
         """Requests a dense embedding for `text` from LLM Gateway, using
-        `model` if given, else the module's configured default."""
+        `model` if given, else the module's configured default. `tenant_id`
+        was added for ticket #82 (Phase 2 support-agent slice): LLM
+        Gateway's real embeddings endpoint requires a real X-Tenant-Id
+        header (and a real X-Virtual-Key) -- this client had never been
+        validated against a real running LLM Gateway before."""
         ...
 
 

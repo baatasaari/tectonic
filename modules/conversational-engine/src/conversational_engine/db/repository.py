@@ -127,6 +127,16 @@ class SQLAlchemyConversationRepository:
         await self.session.refresh(m)
         return _handoff_to_domain(m)
 
+    async def get_latest_handoff_event(self, session_id: str) -> HandoffEventRecord | None:
+        row = await self.session.execute(
+            select(models.HandoffEvent)
+            .where(models.HandoffEvent.session_id == session_id)
+            .order_by(models.HandoffEvent.created_at.desc())
+            .limit(1)
+        )
+        m = row.scalar_one_or_none()
+        return _handoff_to_domain(m) if m is not None else None
+
     async def get_persona_config(self, persona_config_ref: str, tenant_id: str) -> PersonaConfigRecord | None:
         m = await self.session.get(models.PersonaConfig, persona_config_ref)
         if m is None or m.tenant_id not in (tenant_id, "*"):

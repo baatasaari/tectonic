@@ -166,6 +166,16 @@ src/knowledge_base/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **`HTTPVectorDBClient.embed_and_store()` calling a real Vector DB for
+  the first time** (ticket #82's own Phase 2 support-agent slice) — it
+  posted an invented batch shape to an invented `/v1/embed-and-store`
+  path; Vector DB's real route is `/v1/vector-db/points`, one
+  `IndexPointRequest` per chunk (`tenant_id`, `source_module`,
+  `source_ref`, `content`, `payload`), with `vector` left unset so
+  Vector DB auto-embeds it. Fixed, looping per chunk against the real
+  route; `_chunk_and_propagate()`'s own payload now also includes
+  `tenant_id` (Vector DB's real request requires it).
+
 ## Running locally
 
 ```bash

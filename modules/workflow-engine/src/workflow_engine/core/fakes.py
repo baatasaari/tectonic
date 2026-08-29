@@ -35,6 +35,12 @@ class InMemoryWorkflowRepository:
         rec = self.definitions.get(definition_id)
         return copy.deepcopy(rec) if rec else None
 
+    async def get_definition_by_name(self, name: str, tenant_id: str) -> WorkflowDefinitionRecord | None:
+        matches = [d for d in self.definitions.values() if d.name == name and d.tenant_id == tenant_id]
+        if not matches:
+            return None
+        return copy.deepcopy(max(matches, key=lambda d: d.version))
+
     async def create_definition(self, record: WorkflowDefinitionRecord) -> WorkflowDefinitionRecord:
         self.definitions[record.id] = copy.deepcopy(record)
         return copy.deepcopy(record)

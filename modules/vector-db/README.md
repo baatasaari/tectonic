@@ -201,6 +201,15 @@ data plane itself.
   this module's own unit-test harness can, via `harness_factory()`)
   skips the check entirely, unchanged from before this fix.
 
+- **`HTTPEmbeddingProvider` calling a real LLM Gateway for the first
+  time** (ticket #82's own Phase 2 support-agent slice) — it posted to an
+  invented `/v1/embeddings` path with no virtual-key/tenant headers; the
+  real route is `/v1/llm-gateway/embeddings`, needing `X-Virtual-Key`/
+  `X-Tenant-Id`. Fixed, with a new `llm_gateway_virtual_key` setting and
+  `tenant_id` threaded through every `EmbeddingProvider.embed()` call
+  site (`vector_service.py`, `migration_manager.py`) — invisible before
+  because every prior test stubbed this call.
+
 ## Running locally
 
 ```bash
