@@ -939,6 +939,49 @@ sweep. Rolling this pattern out further — deeper into Multi-tenancy's
 own hierarchy, and to other modules' own event-emission needs — is
 follow-up work. Full reasoning in that module's own README.
 
+**Fixed**: the "contract testing built in one module, not rolled out"
+gap. Billing and Metering's own OpenAPI contract-test reference
+implementation (ticket #73) had no second adopter; it's now rolled out
+to four more modules with real Postgres and a live app to fuzz —
+Workflow Engine, Multi-tenancy, Vector DB, and LLM Gateway — using the
+identical `schemathesis`/Hypothesis-driven, real-middleware,
+real-database shape, opt-in to CI by `tests/contract/` directory
+presence with no workflow change needed. Two harness issues came up in
+every one of the four (documented once, fixed identically each time,
+in each module's own `tests/contract/conftest.py`): schemathesis's
+ASGI transport genuinely drives the ASGI lifespan protocol, so a
+module whose real `lifespan()` has side effects (Workflow Engine's and
+Multi-tenancy's real Kafka producer + outbox worker, Vector DB's real
+LLM Gateway/Multi-tenancy HTTP clients) needs it swapped for a no-op
+before use, or every fuzzed call would silently overwrite the
+fixture's own stubbed context and hammer an unreachable peer; and
+schemathesis's synchronous `case.call()` bridges into the app through
+a fresh event loop per call, so reusing `build_app_context`'s own
+pooled `AsyncEngine` leaks a real Postgres connection every single
+call and exhausts `max_connections` within one run — a `NullPool`
+engine (and, in Vector DB, rebuilding every dependent repository/
+service that had already captured the old pooled session factory at
+construction time) fixes it the standard way. Real, novel bugs turned
+up in every module, not just repeats of Billing and Metering's own
+four: Workflow Engine (a non-UUID path/query segment reaching
+`asyncpg` unguarded on five more repository lookups); Multi-tenancy
+(the same non-UUID class across every `get_*`/`list_*` method taking
+an externally-supplied id, a NUL byte across most free-text request
+fields, an invalid `status` filter on every list endpoint); Vector DB
+(a zero-dimensional or non-finite/overflowing `vector`, a dimension
+mismatch between a request's `vector` and its tenant's already-
+established collection — corrupting Qdrant's own embedded local test
+client's internal state, not just failing the one request — an empty
+or non-primitive `filters` value, a non-positive `top_k`); LLM Gateway
+(a non-UUID `X-Virtual-Key`/budget-policy id). The unbounded-`offset`
+class from Billing and Metering's own original findings recurred in
+three of the four (Multi-tenancy across all six of its list endpoints,
+Workflow Engine, LLM Gateway) — fixed with the identical `le=` bound
+each time. Rolling this reference implementation out to the platform's
+remaining 29 modules is follow-up work. Full reasoning in each
+module's own README and in each `tests/contract/test_openapi_contract.py`
+module docstring.
+
 ## Modules
 
 ### Module 1: Workflow Engine

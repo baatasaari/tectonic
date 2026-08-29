@@ -1,15 +1,56 @@
 """Request/response models for `/v1/multi-tenancy/*` (LLD §3)."""
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+
+def _reject_null_byte(value: str) -> str:
+    """Postgres's `text`/`varchar`/`json` columns are UTF-8 and reject the
+    NUL byte outright (`asyncpg.exceptions.UntranslatableCharacterError`)
+    -- a value `str` is happy to hold but the database is not. Schema-
+    valid per OpenAPI (`type: string` says nothing about NUL), so
+    nothing upstream of the DB call rejects it without this: caught
+    here as a clean `422` instead of the request reaching the database
+    at all (found by this module's own OpenAPI contract-test tier --
+    the same fix Billing and Metering's own `_reject_null_byte` already
+    established)."""
+    if "\x00" in value:
+        raise ValueError("must not contain a NUL byte (unsupported by Postgres's text encoding)")
+    return value
+
+
+def _reject_non_uuid(value: str) -> str:
+    """`organisation_id` is a Postgres `UUID` foreign key; a syntactically
+    invalid UUID is schema-valid per OpenAPI (`type: string` says nothing
+    about UUID shape) but crashes with an unhandled
+    `asyncpg.exceptions.DataError` deep in the driver instead of a clean
+    `422` (found by this module's own OpenAPI contract-test tier -- the
+    same class of bug Billing and Metering's own NUL-byte fix,
+    `_reject_null_byte`, already established the pattern for)."""
+    try:
+        uuid.UUID(value)
+    except ValueError as e:
+        raise ValueError("organisation_id must be a valid UUID") from e
+    return value
 
 
 class RegisterTenantRequest(BaseModel):
     name: str
     tier: str = "standard"
     organisation_id: str | None = None
+
+    @field_validator("name", "tier")
+    @classmethod
+    def _validate_no_null_byte(cls, value: str) -> str:
+        return _reject_null_byte(value)
+
+    @field_validator("organisation_id")
+    @classmethod
+    def _validate_organisation_id(cls, value: str | None) -> str | None:
+        return _reject_non_uuid(value) if value is not None else value
 
 
 class SuspendTenantRequest(BaseModel):
@@ -65,6 +106,13 @@ class TenantGateResultSchema(BaseModel):
 class SetEntitlementsRequest(BaseModel):
     module_names: list[str]
 
+    @field_validator("module_names")
+    @classmethod
+    def _validate_no_null_byte(cls, value: list[str]) -> list[str]:
+        for item in value:
+            _reject_null_byte(item)
+        return value
+
 
 class EntitlementListResponse(BaseModel):
     tenant_id: str
@@ -75,6 +123,11 @@ class EntitlementListResponse(BaseModel):
 class RunIsolationProbeRequest(BaseModel):
     tenant_id: str
     target_name: str
+
+    @field_validator("tenant_id", "target_name")
+    @classmethod
+    def _validate_no_null_byte(cls, value: str) -> str:
+        return _reject_null_byte(value)
 
 
 class IsolationProbeResultSchema(BaseModel):
@@ -102,6 +155,11 @@ class RegisterOrganisationRequest(BaseModel):
     name: str
     owner_identity_id: str | None = None
 
+    @field_validator("name", "owner_identity_id")
+    @classmethod
+    def _validate_no_null_byte(cls, value: str | None) -> str | None:
+        return _reject_null_byte(value) if value is not None else value
+
 
 class OrganisationSchema(BaseModel):
     id: str
@@ -125,6 +183,11 @@ class RegisterWorkspaceRequest(BaseModel):
     tenant_id: str
     name: str
     owner_identity_id: str | None = None
+
+    @field_validator("name", "owner_identity_id")
+    @classmethod
+    def _validate_no_null_byte(cls, value: str | None) -> str | None:
+        return _reject_null_byte(value) if value is not None else value
 
 
 class WorkspaceSchema(BaseModel):
@@ -152,6 +215,11 @@ class RegisterEnvironmentRequest(BaseModel):
     kind: str = "development"
     region: str | None = None
     owner_identity_id: str | None = None
+
+    @field_validator("name", "kind", "region", "owner_identity_id")
+    @classmethod
+    def _validate_no_null_byte(cls, value: str | None) -> str | None:
+        return _reject_null_byte(value) if value is not None else value
 
 
 class EnvironmentSchema(BaseModel):
@@ -181,6 +249,13 @@ class EnvironmentListResponse(BaseModel):
 class SetQuotaLimitsRequest(BaseModel):
     limits: dict[str, float]
 
+    @field_validator("limits")
+    @classmethod
+    def _validate_no_null_byte(cls, value: dict[str, float]) -> dict[str, float]:
+        for key in value:
+            _reject_null_byte(key)
+        return value
+
 
 class QuotaSetSchema(BaseModel):
     tenant_id: str
@@ -192,6 +267,13 @@ class QuotaSetSchema(BaseModel):
 
 class SetResidencyPolicyRequest(BaseModel):
     allowed_regions: list[str]
+
+    @field_validator("allowed_regions")
+    @classmethod
+    def _validate_no_null_byte(cls, value: list[str]) -> list[str]:
+        for item in value:
+            _reject_null_byte(item)
+        return value
 
 
 class ResidencyPolicySchema(BaseModel):
@@ -211,6 +293,11 @@ class QuotaCheckRequest(BaseModel):
     # track that usage itself.
     current_usage: float | None = None
 
+    @field_validator("resource_class")
+    @classmethod
+    def _validate_no_null_byte(cls, value: str) -> str:
+        return _reject_null_byte(value)
+
 
 class QuotaCheckResultSchema(BaseModel):
     allowed: bool
@@ -229,6 +316,18 @@ class RequestResourceAllocationRequest(BaseModel):
     resources: dict[str, float]
     reserved_capacity: bool = False
     requested_by: str | None = None
+
+    @field_validator("requested_by")
+    @classmethod
+    def _validate_requested_by(cls, value: str | None) -> str | None:
+        return _reject_null_byte(value) if value is not None else value
+
+    @field_validator("resources")
+    @classmethod
+    def _validate_resources_keys(cls, value: dict[str, float]) -> dict[str, float]:
+        for key in value:
+            _reject_null_byte(key)
+        return value
 
 
 class ResourceAllocationSchema(BaseModel):
@@ -256,7 +355,17 @@ class ApproveResourceAllocationRequest(BaseModel):
     approved_by: str
     expected_version: int
 
+    @field_validator("approved_by")
+    @classmethod
+    def _validate_no_null_byte(cls, value: str) -> str:
+        return _reject_null_byte(value)
+
 
 class RejectResourceAllocationRequest(BaseModel):
     reason: str
     expected_version: int
+
+    @field_validator("reason")
+    @classmethod
+    def _validate_no_null_byte(cls, value: str) -> str:
+        return _reject_null_byte(value)

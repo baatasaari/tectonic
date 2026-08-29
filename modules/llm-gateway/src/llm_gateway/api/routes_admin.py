@@ -41,7 +41,11 @@ async def create_virtual_key(
 async def list_virtual_keys(
     tenant_id: str,
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    # An unbounded offset is schema-valid for a bare `int` but overflows Postgres's
+    # `bigint` column deep inside asyncpg instead of a clean 422 (found by this
+    # module's own OpenAPI contract-test tier -- the same fix Billing and Metering's
+    # own `offset`/`limit` query parameters already established).
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: GatewayRepository = Depends(get_repository),
 ) -> VirtualKeyListResponse:
     records, total = await repository.list_virtual_keys(tenant_id, limit=limit, offset=offset)

@@ -98,7 +98,12 @@ async def get_instance(
 async def list_steps(
     instance_id: str,
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    # An unbounded offset is schema-valid for a bare `int` but overflows Postgres's
+    # `bigint` column deep inside asyncpg instead of a clean 422 -- the same fix
+    # Billing and Metering's/Multi-tenancy's/LLM Gateway's own `offset` query
+    # parameters already established, applied here proactively (this module's own
+    # contract-test tier hadn't happened to fuzz this exact value yet).
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: WorkflowRepository = Depends(get_repository),
 ) -> StepExecutionListResponse:
     steps, total = await repository.list_step_executions(instance_id, limit=limit, offset=offset)

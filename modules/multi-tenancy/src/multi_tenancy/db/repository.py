@@ -1,6 +1,7 @@
 """SQLAlchemy-backed implementation of MultiTenancyRepository (LLD §3)."""
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -29,6 +30,22 @@ from multi_tenancy.core.domain import (
     quota_window_start,
 )
 from multi_tenancy.db import models
+
+
+def _is_valid_uuid(value: str) -> bool:
+    """`id` columns are Postgres `UUID`; a path-param `str` that isn't a
+    syntactically valid UUID by definition names no row, but handing it
+    to `asyncpg` regardless raises an unhandled `ValueError`/`DataError`
+    deep in the driver instead of the caller's own `None`/404 path
+    (found by this module's own OpenAPI contract-test tier -- see
+    Billing and Metering's `db/repository.py` for the original instance
+    of this exact fix). Callers to a `get_*`/lookup-by-externally-
+    supplied-id method must check this first."""
+    try:
+        uuid.UUID(value)
+        return True
+    except ValueError:
+        return False
 
 
 def _as_utc(dt: datetime | None) -> datetime | None:
@@ -151,6 +168,8 @@ class SQLAlchemyMultiTenancyRepository:
         return _tenant_to_domain(m)
 
     async def get_tenant(self, tenant_id: str) -> TenantRecord | None:
+        if not _is_valid_uuid(tenant_id):
+            return None
         m = await self.session.get(models.Tenant, tenant_id)
         return _tenant_to_domain(m) if m else None
 
@@ -276,6 +295,8 @@ class SQLAlchemyMultiTenancyRepository:
         return _organisation_to_domain(m)
 
     async def get_organisation(self, organisation_id: str) -> OrganisationRecord | None:
+        if not _is_valid_uuid(organisation_id):
+            return None
         m = await self.session.get(models.Organisation, organisation_id)
         return _organisation_to_domain(m) if m else None
 
@@ -318,6 +339,8 @@ class SQLAlchemyMultiTenancyRepository:
         return _workspace_to_domain(m)
 
     async def get_workspace(self, workspace_id: str) -> WorkspaceRecord | None:
+        if not _is_valid_uuid(workspace_id):
+            return None
         m = await self.session.get(models.Workspace, workspace_id)
         return _workspace_to_domain(m) if m else None
 
@@ -336,6 +359,13 @@ class SQLAlchemyMultiTenancyRepository:
         self, *, tenant_id: str | None = None, status: HierarchyStatus | None = None,
         limit: int = 50, offset: int = 0,
     ) -> tuple[list[WorkspaceRecord], int]:
+        # A syntactically-invalid tenant_id filter (Workspace.tenant_id is a UUID
+        # column) by definition matches no workspace -- the same empty-result
+        # short-circuit list_step_executions (Workflow Engine) and this file's own
+        # get_* guards already establish, rather than handing an un-castable string
+        # to asyncpg (found by this module's own OpenAPI contract-test tier).
+        if tenant_id is not None and not _is_valid_uuid(tenant_id):
+            return [], 0
         filters = []
         if tenant_id is not None:
             filters.append(models.Workspace.tenant_id == tenant_id)
@@ -364,6 +394,8 @@ class SQLAlchemyMultiTenancyRepository:
         return _environment_to_domain(m)
 
     async def get_environment(self, environment_id: str) -> EnvironmentRecord | None:
+        if not _is_valid_uuid(environment_id):
+            return None
         m = await self.session.get(models.Environment, environment_id)
         return _environment_to_domain(m) if m else None
 
@@ -382,6 +414,8 @@ class SQLAlchemyMultiTenancyRepository:
         self, *, workspace_id: str | None = None, status: HierarchyStatus | None = None,
         limit: int = 50, offset: int = 0,
     ) -> tuple[list[EnvironmentRecord], int]:
+        if workspace_id is not None and not _is_valid_uuid(workspace_id):
+            return [], 0
         filters = []
         if workspace_id is not None:
             filters.append(models.Environment.workspace_id == workspace_id)
@@ -401,6 +435,8 @@ class SQLAlchemyMultiTenancyRepository:
     # --- Quota Set / real-time quota enforcement ---
 
     async def get_quota_set(self, tenant_id: str) -> QuotaSet | None:
+        if not _is_valid_uuid(tenant_id):
+            return None
         m = await self.session.get(models.TenantQuotaSet, tenant_id)
         return _quota_set_to_domain(m) if m else None
 
@@ -418,6 +454,8 @@ class SQLAlchemyMultiTenancyRepository:
         return _quota_set_to_domain(m)
 
     async def get_residency_policy(self, tenant_id: str) -> ResidencyPolicy | None:
+        if not _is_valid_uuid(tenant_id):
+            return None
         m = await self.session.get(models.TenantResidencyPolicy, tenant_id)
         return _residency_policy_to_domain(m) if m else None
 
@@ -475,6 +513,8 @@ class SQLAlchemyMultiTenancyRepository:
         return _resource_allocation_to_domain(m)
 
     async def get_resource_allocation(self, allocation_id: str) -> ResourceAllocation | None:
+        if not _is_valid_uuid(allocation_id):
+            return None
         m = await self.session.get(models.ResourceAllocation, allocation_id)
         return _resource_allocation_to_domain(m) if m else None
 
@@ -508,6 +548,8 @@ class SQLAlchemyMultiTenancyRepository:
         self, *, environment_id: str | None = None, status: ResourceAllocationStatus | None = None,
         limit: int = 50, offset: int = 0,
     ) -> tuple[list[ResourceAllocation], int]:
+        if environment_id is not None and not _is_valid_uuid(environment_id):
+            return [], 0
         filters = []
         if environment_id is not None:
             filters.append(models.ResourceAllocation.environment_id == environment_id)

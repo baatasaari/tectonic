@@ -189,6 +189,26 @@ src/llm_gateway/
   an optional constructor argument on `LLMGatewayService` — omitting it
   skips the check entirely, unchanged from before this fix.
 
+- **Real OpenAPI contract testing** (`tests/contract/`) — this
+  module's rollout of Billing and Metering's own Phase 1
+  CI-supply-chain-gate reference implementation (ticket #73/#80):
+  `schemathesis`/Hypothesis drive schema-conformant-but-otherwise-
+  arbitrary requests at this module's real, running app (real
+  middleware, real Postgres) for every operation its own generated
+  OpenAPI document declares, and any `5xx` is a genuine contract
+  violation. It found two real bugs on its first runs (a non-UUID
+  `X-Virtual-Key`/budget-policy id reaching `asyncpg` unguarded on
+  `get_virtual_key`/`get_budget_policy`, and an unbounded `offset` on
+  `GET /admin/virtual-keys` overflowing Postgres's `bigint` column —
+  both now fixed; see the module docstring in
+  `tests/contract/test_openapi_contract.py` and `tests/contract/
+  conftest.py` for the full account, including why this module's own
+  real LLM provider/Multi-tenancy dependencies are swapped for the
+  empty-providers default/a stub in the contract fixture, and the DB
+  engine for a `NullPool` one). CI (`.github/workflows/ci.yml`) runs
+  this tier automatically for any module with a `tests/contract/`
+  directory.
+
 ## Running locally
 
 ```bash

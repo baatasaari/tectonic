@@ -1,7 +1,11 @@
 import pytest
 
 from vector_db.config import IsolationConfig
-from vector_db.core.domain import PointNotFoundError, QuotaExceededError
+from vector_db.core.domain import (
+    EmbeddingDimensionMismatchError,
+    PointNotFoundError,
+    QuotaExceededError,
+)
 from vector_db.core.vector_service import VectorService
 
 
@@ -130,6 +134,31 @@ async def test_no_multi_tenancy_client_configured_skips_the_check(harness_factor
     )
 
     assert point_id
+
+
+async def test_index_point_with_a_mismatched_dimension_raises_a_clean_error(harness):
+    """Every physical collection fixes its dense vector size at
+    creation -- a later point of a different dimensionality is real,
+    schema-valid input this module must reject cleanly rather than let
+    the underlying client silently corrupt its own state (found by
+    this module's own OpenAPI contract-test tier)."""
+    await harness.vector_service.index_point(
+        tenant_id="t1", source_module="knowledge_base", source_ref="chunk-1", vector=[0.1] * 8,
+    )
+
+    with pytest.raises(EmbeddingDimensionMismatchError):
+        await harness.vector_service.index_point(
+            tenant_id="t1", source_module="knowledge_base", source_ref="chunk-2", vector=[0.1] * 3,
+        )
+
+
+async def test_query_with_a_mismatched_vector_dimension_raises_a_clean_error(harness):
+    await harness.vector_service.index_point(
+        tenant_id="t1", source_module="knowledge_base", source_ref="chunk-1", vector=[0.1] * 8,
+    )
+
+    with pytest.raises(EmbeddingDimensionMismatchError):
+        await harness.vector_service.query(tenant_id="t1", vector=[0.1] * 3, hybrid=False)
 
 
 async def test_index_point_with_precomputed_vector_skips_embedding_call(harness):

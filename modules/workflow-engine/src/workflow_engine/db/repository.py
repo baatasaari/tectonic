@@ -6,6 +6,7 @@ non-functional targets table.
 """
 from __future__ import annotations
 
+import uuid
 from datetime import timedelta
 from typing import Any
 
@@ -95,11 +96,29 @@ def _approval_to_domain(m: models.ApprovalRequest) -> ApprovalRequestRecord:
     )
 
 
+def _is_valid_uuid(value: str) -> bool:
+    """`id` columns are Postgres `UUID`; a path-param `str` that isn't a
+    syntactically valid UUID by definition names no row, but handing it
+    to `asyncpg` regardless raises an unhandled `ValueError`/`DataError`
+    deep in the driver instead of the caller's own `None`/404 path
+    (found by this module's own OpenAPI contract-test tier -- see
+    Billing and Metering's `db/repository.py` for the original instance
+    of this exact fix). Callers to a `get_*`/lookup-by-externally-
+    supplied-id method must check this first."""
+    try:
+        uuid.UUID(value)
+        return True
+    except ValueError:
+        return False
+
+
 class SQLAlchemyWorkflowRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
     async def get_definition(self, definition_id: str) -> WorkflowDefinitionRecord | None:
+        if not _is_valid_uuid(definition_id):
+            return None
         m = await self.session.get(models.WorkflowDefinition, definition_id)
         return _def_to_domain(m) if m else None
 
@@ -145,6 +164,8 @@ class SQLAlchemyWorkflowRepository:
         return _instance_to_domain(m)
 
     async def get_instance(self, instance_id: str) -> WorkflowInstanceRecord | None:
+        if not _is_valid_uuid(instance_id):
+            return None
         m = await self.session.get(models.WorkflowInstance, instance_id)
         return _instance_to_domain(m) if m else None
 
@@ -196,6 +217,14 @@ class SQLAlchemyWorkflowRepository:
     async def list_step_executions(
         self, instance_id: str, *, limit: int = 50, offset: int = 0,
     ) -> tuple[list[StepExecutionRecord], int]:
+        # `GET /instances/{instance_id}/steps` (routes_instances.py) calls this
+        # directly with the raw path param, with no existence check of its own first --
+        # a syntactically-invalid UUID by definition matches no instance's steps, so
+        # this returns the same empty result a real-but-unknown UUID would, rather
+        # than handing an un-castable string to asyncpg (found by this module's own
+        # OpenAPI contract-test tier).
+        if not _is_valid_uuid(instance_id):
+            return [], 0
         filters = [models.StepExecution.instance_id == instance_id]
 
         count_stmt = select(func.count(models.StepExecution.id)).where(*filters)
@@ -215,6 +244,8 @@ class SQLAlchemyWorkflowRepository:
         return [_step_to_domain(m) for m in rows.scalars().all()], total
 
     async def get_step_execution(self, step_execution_id: str) -> StepExecutionRecord | None:
+        if not _is_valid_uuid(step_execution_id):
+            return None
         m = await self.session.get(models.StepExecution, step_execution_id)
         return _step_to_domain(m) if m else None
 
@@ -231,6 +262,8 @@ class SQLAlchemyWorkflowRepository:
         return _approval_to_domain(m)
 
     async def get_approval_request(self, approval_id: str) -> ApprovalRequestRecord | None:
+        if not _is_valid_uuid(approval_id):
+            return None
         m = await self.session.get(models.ApprovalRequest, approval_id)
         return _approval_to_domain(m) if m else None
 

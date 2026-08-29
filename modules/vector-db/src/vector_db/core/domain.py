@@ -49,6 +49,27 @@ class QuotaExceededError(Exception):
         self.reason = reason
 
 
+class EmbeddingDimensionMismatchError(Exception):
+    """Raised when `index_point` is given (directly, or via
+    `embedding_model_version`) a dense vector whose dimensionality
+    doesn't match the tenant's already-established collection -- every
+    physical Qdrant collection fixes its vector size at creation, so a
+    later point of a different dimensionality is never valid, real
+    input, not a transient condition. Left unguarded, Qdrant's own real
+    API rejects the mismatched upsert but the embedded local test
+    client (`qdrant_client.local`) instead silently corrupts that
+    collection's internal state, corrupting later unrelated reads too
+    -- found by this module's own OpenAPI contract-test tier. Maps to
+    a real `422 Unprocessable Entity`."""
+
+    def __init__(self, *, expected: int, got: int) -> None:
+        super().__init__(
+            f"embedding dimension mismatch: this tenant's collection is {expected}-dimensional, got {got}"
+        )
+        self.expected = expected
+        self.got = got
+
+
 @dataclass
 class SparseVectorData:
     indices: list[int] = field(default_factory=list)

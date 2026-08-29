@@ -17,10 +17,27 @@ poll-loop worker.
 """
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from vector_db.core.domain import MigrationRecord, MigrationStatus
 from vector_db.db import models
+
+
+def _is_valid_uuid(value: str) -> bool:
+    """`id` is a Postgres `UUID`; a path-param `str` that isn't a
+    syntactically valid UUID by definition names no row, but handing it
+    to `asyncpg` regardless raises an unhandled `ValueError`/`DataError`
+    deep in the driver instead of the caller's own `None`/404 path
+    (found by this module's own OpenAPI contract-test tier -- see
+    Billing and Metering's `db/repository.py` for the original instance
+    of this exact fix)."""
+    try:
+        uuid.UUID(value)
+        return True
+    except ValueError:
+        return False
 
 
 def _to_domain(m: models.Migration) -> MigrationRecord:
@@ -50,6 +67,8 @@ class SQLAlchemyMigrationRepository:
             return _to_domain(m)
 
     async def get(self, migration_id: str) -> MigrationRecord | None:
+        if not _is_valid_uuid(migration_id):
+            return None
         async with self._session_factory() as session:
             m = await session.get(models.Migration, migration_id)
             return _to_domain(m) if m else None

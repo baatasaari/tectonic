@@ -216,3 +216,28 @@ docker compose -f deploy/docker-compose.yml up --build    # full stack incl. a r
 |---|---|---|
 | Unit | Nothing — real embedded Qdrant, in-memory migration repository fake | `pytest tests/unit` |
 | Integration | Real Postgres (`TECTONIC_TEST_POSTGRES_URL` or Docker via `testcontainers`) — migration bookkeeping only, Qdrant itself needs no real server at any tier | `pytest tests/integration` |
+| Contract | Real Postgres (same as Integration); Qdrant still runs embedded in-memory | `pytest tests/contract` |
+
+The contract tier (`tests/contract/`) is this platform's rollout of
+Billing and Metering's own Phase 1 CI-supply-chain-gate reference
+implementation (ticket #73/#80): `schemathesis`/Hypothesis drive
+schema-conformant-but-otherwise-arbitrary requests at this module's
+real, running app (real middleware, real Postgres, embedded Qdrant)
+for every operation its own generated OpenAPI document declares, and
+any `5xx` is a genuine contract violation. It found real bugs on its
+first runs, most of them genuine gaps in this module's own dimension/
+input handling rather than the familiar NUL-byte/non-UUID class alone:
+a zero-dimensional or non-finite/overflowing `vector`, a dimension
+mismatch between a request's `vector` and its tenant's already-
+established collection (on both `index_point` and `query` — Qdrant's
+own real API rejects this cleanly, but its embedded local test client
+instead corrupts that collection's internal state, corrupting later
+unrelated reads too), an empty or non-primitive `filters` value, a
+non-positive `top_k`, and a non-UUID migration id — all now fixed; see
+the module docstring in `tests/contract/test_openapi_contract.py` and
+`tests/contract/conftest.py` for the full account, including why this
+module's own real LLM Gateway/Multi-tenancy dependencies and its
+detached migration-run background task are swapped for stubs/a no-op
+and the DB engine for a `NullPool` one in the contract fixture. CI
+(`.github/workflows/ci.yml`) runs this tier automatically for any
+module with a `tests/contract/` directory.

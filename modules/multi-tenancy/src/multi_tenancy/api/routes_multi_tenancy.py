@@ -145,15 +145,14 @@ async def register_tenant(
 
 @router.get("/tenants", response_model=TenantListResponse)
 async def list_tenants(
-    status: str | None = Query(None),
+    status: TenantStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> TenantListResponse:
     service = build_tenant_registry_service(repository, ctx)
-    status_filter = TenantStatus(status) if status is not None else None
-    tenants, total = await service.list(status=status_filter, limit=limit, offset=offset)
+    tenants, total = await service.list(status=status, limit=limit, offset=offset)
     return TenantListResponse(items=[_tenant_schema(t) for t in tenants], total=total, limit=limit, offset=offset)
 
 
@@ -283,15 +282,14 @@ async def register_organisation(
 
 @router.get("/organisations", response_model=OrganisationListResponse)
 async def list_organisations(
-    status: str | None = Query(None),
+    status: HierarchyStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> OrganisationListResponse:
     service = build_organisation_service(repository, ctx)
-    status_filter = HierarchyStatus(status) if status is not None else None
-    orgs, total = await service.list(status=status_filter, limit=limit, offset=offset)
+    orgs, total = await service.list(status=status, limit=limit, offset=offset)
     return OrganisationListResponse(
         items=[_organisation_schema(o) for o in orgs], total=total, limit=limit, offset=offset,
     )
@@ -388,15 +386,14 @@ async def register_workspace(
 @router.get("/workspaces", response_model=WorkspaceListResponse)
 async def list_workspaces(
     tenant_id: str | None = Query(None),
-    status: str | None = Query(None),
+    status: HierarchyStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> WorkspaceListResponse:
     service = build_workspace_service(repository, ctx)
-    status_filter = HierarchyStatus(status) if status is not None else None
-    workspaces, total = await service.list(tenant_id=tenant_id, status=status_filter, limit=limit, offset=offset)
+    workspaces, total = await service.list(tenant_id=tenant_id, status=status, limit=limit, offset=offset)
     return WorkspaceListResponse(
         items=[_workspace_schema(w) for w in workspaces], total=total, limit=limit, offset=offset,
     )
@@ -498,16 +495,15 @@ async def register_environment(
 @router.get("/environments", response_model=EnvironmentListResponse)
 async def list_environments(
     workspace_id: str | None = Query(None),
-    status: str | None = Query(None),
+    status: HierarchyStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> EnvironmentListResponse:
     service = build_environment_service(repository, ctx)
-    status_filter = HierarchyStatus(status) if status is not None else None
     environments, total = await service.list(
-        workspace_id=workspace_id, status=status_filter, limit=limit, offset=offset,
+        workspace_id=workspace_id, status=status, limit=limit, offset=offset,
     )
     return EnvironmentListResponse(
         items=[_environment_schema(e) for e in environments], total=total, limit=limit, offset=offset,
@@ -700,16 +696,15 @@ async def request_resource_allocation(
 @router.get("/resource-allocations", response_model=ResourceAllocationListResponse)
 async def list_resource_allocations(
     environment_id: str | None = Query(None),
-    status: str | None = Query(None),
+    status: ResourceAllocationStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> ResourceAllocationListResponse:
     service = build_resource_allocation_service(repository, ctx)
-    status_filter = ResourceAllocationStatus(status) if status is not None else None
     allocations, total = await service.list(
-        environment_id=environment_id, status=status_filter, limit=limit, offset=offset,
+        environment_id=environment_id, status=status, limit=limit, offset=offset,
     )
     return ResourceAllocationListResponse(
         items=[_resource_allocation_schema(a) for a in allocations], total=total, limit=limit, offset=offset,
@@ -791,7 +786,7 @@ async def list_isolation_probes(
     tenant_id: str | None = Query(None),
     target_name: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> IsolationProbeResultListResponse:
     results, total = await repository.list_probe_results(

@@ -269,5 +269,23 @@ docker compose -f deploy/docker-compose.yml up --build   # full stack incl. Post
 |---|---|---|
 | Unit | Nothing — in-memory fakes only | `pytest tests/unit` |
 | Integration (isolated) | Docker (Postgres via testcontainers) | `pytest tests/integration` |
-| Contract | Running instance + `schemathesis` | not yet wired into CI here |
+| Contract | Real Postgres (same as Integration) | `pytest tests/contract` |
 | Load | Running instance + `locust` | not yet wired into CI here |
+
+The contract tier (`tests/contract/`) is this platform's rollout of
+Billing and Metering's own Phase 1 CI-supply-chain-gate reference
+implementation (ticket #73/#80): `schemathesis`/Hypothesis drive
+schema-conformant-but-otherwise-arbitrary requests at this module's
+real, running app (real middleware, real Postgres) for every operation
+its own generated OpenAPI document declares, and any `5xx` is a
+genuine contract violation. It found two real bugs on its first runs
+(a non-UUID path/query segment reaching `asyncpg` unguarded on
+`get_definition`/`get_instance`/`get_step_execution`/
+`get_approval_request`/`list_step_executions`, and an unbounded
+`offset` overflowing Postgres's `bigint` column — both now fixed; see
+the module docstring in `tests/contract/test_openapi_contract.py` and
+`tests/contract/conftest.py` for the full account, including why this
+module's own real Kafka producer/outbox worker are swapped for no-ops
+and the DB engine for a `NullPool` one in the contract fixture). CI
+(`.github/workflows/ci.yml`) runs this tier automatically for any
+module with a `tests/contract/` directory.

@@ -1,6 +1,8 @@
 """SQLAlchemy-backed implementation of GatewayRepository (LLD §3.1)."""
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +15,21 @@ from llm_gateway.core.domain import (
     VirtualKeyStatus,
 )
 from llm_gateway.db import models
+
+
+def _is_valid_uuid(value: str) -> bool:
+    """`id` columns are Postgres `UUID`; a caller-supplied `str` that
+    isn't a syntactically valid UUID by definition names no row, but
+    handing it to `asyncpg` regardless raises an unhandled
+    `ValueError`/`DataError` deep in the driver instead of a clean
+    `None`/404 path (found by this module's own OpenAPI contract-test
+    tier -- see Billing and Metering's `db/repository.py` for the
+    original instance of this exact fix)."""
+    try:
+        uuid.UUID(value)
+        return True
+    except ValueError:
+        return False
 
 
 def _vk_to_domain(m: models.VirtualKey) -> VirtualKeyRecord:
@@ -63,6 +80,8 @@ class SQLAlchemyGatewayRepository:
         return _vk_to_domain(m)
 
     async def get_virtual_key(self, virtual_key_id: str) -> VirtualKeyRecord | None:
+        if not _is_valid_uuid(virtual_key_id):
+            return None
         m = await self.session.get(models.VirtualKey, virtual_key_id)
         return _vk_to_domain(m) if m else None
 
@@ -83,6 +102,8 @@ class SQLAlchemyGatewayRepository:
         return [_vk_to_domain(m) for m in rows.scalars().all()], total
 
     async def get_budget_policy(self, budget_policy_id: str) -> BudgetPolicyRecord | None:
+        if not _is_valid_uuid(budget_policy_id):
+            return None
         m = await self.session.get(models.BudgetPolicy, budget_policy_id)
         return _budget_to_domain(m) if m else None
 
