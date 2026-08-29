@@ -149,8 +149,34 @@ class ProbeTargetNotFoundError(Exception):
         super().__init__(f"Unknown isolation probe target: {target_name}")
 
 
+class OptimisticConcurrencyError(Exception):
+    """Raised when a caller's `expected_version` no longer matches the
+    row's real, current version -- someone else updated it first. Maps
+    to a real `409 Conflict` at the API layer (`core/domain.py`'s own
+    `InvalidTransitionError` maps to 409 too, but for a different
+    reason: an illegal state transition versus a stale read; kept as
+    two distinct exception types so a caller/route can tell which one
+    happened and phrase the error correctly). Raised by the repository
+    layer's real `WHERE version = :expected_version` compare-and-swap,
+    never fabricated at the service layer from an in-memory guess --
+    see `db/repository.py`'s `update_organisation`/`update_workspace`/
+    `update_environment`/`update_resource_allocation`."""
+
+    def __init__(self, *, expected_version: int) -> None:
+        super().__init__(
+            f"expected_version={expected_version} is stale -- this resource was updated by someone else first",
+        )
+        self.expected_version = expected_version
+
+
 @dataclass
 class TenantRecord:
+    # Deliberately has no `version` field, unlike OrganisationRecord/WorkspaceRecord/
+    # EnvironmentRecord/ResourceAllocation -- those four are the assessment's net-new
+    # canonical hierarchy/allocation objects and carry real optimistic-concurrency
+    # enforcement (core/organisation_service.py's own docstring); TenantRecord predates
+    # that work and stays its own, backward-compatible shape, the same reasoning
+    # HierarchyStatus's own docstring gives for TenantStatus staying separate.
     id: str
     name: str
     status: TenantStatus = TenantStatus.ACTIVE

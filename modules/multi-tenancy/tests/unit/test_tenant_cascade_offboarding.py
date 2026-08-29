@@ -77,7 +77,7 @@ async def test_suspend_skips_an_already_deleted_workspace_without_raising(harnes
     cascade, not raise InvalidTransitionError and abort the whole
     suspend()."""
     tenant, workspace, _environment = await _register_tenant_with_hierarchy(harness)
-    await harness.workspace_service.delete(workspace.id)
+    await harness.workspace_service.delete(workspace.id, expected_version=1)
 
     suspended = await harness.tenant_registry_service.suspend(tenant.id, reason="non-payment")
 

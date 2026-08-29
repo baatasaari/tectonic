@@ -17,11 +17,27 @@ class SuspendTenantRequest(BaseModel):
 
 
 class SuspendRequest(BaseModel):
-    """Same shape as `SuspendTenantRequest` -- used by Organisation,
-    Workspace, and Environment's own suspend endpoints, named generically
-    since none of those three are tenant-specific."""
+    """Used by Organisation, Workspace, and Environment's own suspend
+    endpoints, named generically since none of those three are
+    tenant-specific -- unlike `SuspendTenantRequest`, this also carries
+    `expected_version`: real optimistic-concurrency control (these
+    three record types carry a real `version` field; `TenantRecord`
+    deliberately doesn't -- see `core/domain.py`). The caller's last-
+    known version is required, not optional: mutating a resource blind,
+    with no idea whether it changed since you last read it, isn't a
+    request this API accepts."""
 
     reason: str
+    expected_version: int
+
+
+class VersionedRequest(BaseModel):
+    """Body for Organisation/Workspace/Environment's reactivate/delete
+    endpoints -- no other field needed, but `expected_version` is still
+    required for the same real optimistic-concurrency reason
+    `SuspendRequest` carries it."""
+
+    expected_version: int
 
 
 class TenantSchema(BaseModel):
@@ -226,7 +242,9 @@ class ResourceAllocationListResponse(BaseModel):
 
 class ApproveResourceAllocationRequest(BaseModel):
     approved_by: str
+    expected_version: int
 
 
 class RejectResourceAllocationRequest(BaseModel):
     reason: str
+    expected_version: int

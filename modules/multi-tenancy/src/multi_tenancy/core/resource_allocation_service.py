@@ -102,30 +102,35 @@ class ResourceAllocationService:
             environment_id=environment_id, status=status, limit=limit, offset=offset,
         )
 
-    async def approve(self, allocation_id: str, *, approved_by: str) -> ResourceAllocation:
+    async def approve(self, allocation_id: str, *, approved_by: str, expected_version: int) -> ResourceAllocation:
+        # expected_version guards the exact race this endpoint exists for: two
+        # reviewers deciding on the same REQUESTED allocation nearly simultaneously,
+        # one approving and one rejecting. The in-process `status != REQUESTED` check
+        # below only catches a stale read within *this* call; the real protection is
+        # the repository's compare-and-swap against expected_version, which the second
+        # of two racing decisions always loses (a real OptimisticConcurrencyError, not
+        # a silently-overwritten decision).
         record = await self.get(allocation_id)
         if record.status != ResourceAllocationStatus.REQUESTED:
             raise InvalidTransitionError(record.status, ResourceAllocationStatus.ACTIVE)
         record.status = ResourceAllocationStatus.ACTIVE
         record.approved_by = approved_by
-        record.version += 1
         record.updated_at = now()
-        updated = await self._repository.update_resource_allocation(record)
+        updated = await self._repository.update_resource_allocation(record, expected_version=expected_version)
         await self._auditability.emit({
             "event": "resource_allocation_approved", "allocation_id": allocation_id,
             "environment_id": record.environment_id, "approved_by": approved_by,
         })
         return updated
 
-    async def reject(self, allocation_id: str, *, reason: str) -> ResourceAllocation:
+    async def reject(self, allocation_id: str, *, reason: str, expected_version: int) -> ResourceAllocation:
         record = await self.get(allocation_id)
         if record.status != ResourceAllocationStatus.REQUESTED:
             raise InvalidTransitionError(record.status, ResourceAllocationStatus.REJECTED)
         record.status = ResourceAllocationStatus.REJECTED
         record.rejection_reason = reason
-        record.version += 1
         record.updated_at = now()
-        updated = await self._repository.update_resource_allocation(record)
+        updated = await self._repository.update_resource_allocation(record, expected_version=expected_version)
         await self._auditability.emit({
             "event": "resource_allocation_rejected", "allocation_id": allocation_id,
             "environment_id": record.environment_id, "reason": reason,

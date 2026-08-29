@@ -139,10 +139,11 @@ class TenantRegistryService:
                 await self._workspaces.cascade_environments(workspace.id, to_status, reason=reason)
                 if is_legal_hierarchy_transition(workspace.status, to_status):
                     if to_status == HierarchyStatus.DELETED:
-                        await self._workspaces.delete(workspace.id)
+                        await self._workspaces.delete(workspace.id, expected_version=workspace.version)
                     else:
                         await self._workspaces.suspend(
                             workspace.id, reason=reason or "cascaded from tenant suspension",
+                            expected_version=workspace.version,
                         )
             offset += len(workspaces)
             if offset >= total:

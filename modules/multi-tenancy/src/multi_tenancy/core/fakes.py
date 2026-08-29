@@ -2,6 +2,7 @@
 contract")."""
 from __future__ import annotations
 
+import copy
 from datetime import datetime
 from typing import Any
 
@@ -9,6 +10,7 @@ from multi_tenancy.core.domain import (
     EnvironmentRecord,
     HierarchyStatus,
     IsolationProbeResult,
+    OptimisticConcurrencyError,
     OrganisationRecord,
     QuotaSet,
     ResourceAllocation,
@@ -35,6 +37,25 @@ class InMemoryMultiTenancyRepository:
         self.quota_sets: dict[str, QuotaSet] = {}
         self.quota_counters: dict[tuple[str, str, datetime], float] = {}
         self.resource_allocations: dict[str, ResourceAllocation] = {}
+
+    def _compare_and_swap(self, store: dict, record, *, expected_version: int):
+        """Mirrors `db/repository.py`'s own real compare-and-swap so unit
+        tests can prove `OptimisticConcurrencyError` behavior against
+        this fake, not just against real Postgres in the integration
+        tier -- a stale `expected_version` must raise here exactly the
+        same way it does for real. Stores and returns a deep copy, never
+        the caller's own passed-in object -- a real out-of-process
+        datastore round trip wouldn't let the caller's further in-place
+        mutation of their own reference silently corrupt what's stored,
+        and this fake must not either (see `get_organisation`'s own
+        docstring for the matching half of this isolation)."""
+        current = store.get(record.id)
+        if current is None or current.version != expected_version:
+            raise OptimisticConcurrencyError(expected_version=expected_version)
+        updated = copy.deepcopy(record)
+        updated.version = expected_version + 1
+        store[record.id] = updated
+        return copy.deepcopy(updated)
 
     async def create_tenant(self, record: TenantRecord) -> TenantRecord:
         self.tenants[record.id] = record
@@ -87,15 +108,21 @@ class InMemoryMultiTenancyRepository:
     # --- Organisation / Workspace / Environment ---
 
     async def create_organisation(self, record: OrganisationRecord) -> OrganisationRecord:
-        self.organisations[record.id] = record
-        return record
+        self.organisations[record.id] = copy.deepcopy(record)
+        return copy.deepcopy(record)
 
     async def get_organisation(self, organisation_id: str) -> OrganisationRecord | None:
-        return self.organisations.get(organisation_id)
+        # A deep copy, not the live stored reference -- callers (every _transition
+        # method in this module) mutate the record they get back in place before
+        # calling update_*; if this returned the same object the store holds, that
+        # in-place mutation would silently corrupt the "canonical" state ahead of --
+        # and regardless of the outcome of -- the real compare-and-swap in update_*.
+        # A real out-of-process datastore round trip could never alias like this.
+        record = self.organisations.get(organisation_id)
+        return copy.deepcopy(record) if record is not None else None
 
-    async def update_organisation(self, record: OrganisationRecord) -> OrganisationRecord:
-        self.organisations[record.id] = record
-        return record
+    async def update_organisation(self, record: OrganisationRecord, *, expected_version: int) -> OrganisationRecord:
+        return self._compare_and_swap(self.organisations, record, expected_version=expected_version)
 
     async def list_organisations(
         self, *, status: HierarchyStatus | None = None, limit: int = 50, offset: int = 0,
@@ -104,18 +131,19 @@ class InMemoryMultiTenancyRepository:
         if status is not None:
             results = [o for o in results if o.status == status]
         results = sorted(results, key=lambda o: o.created_at)
-        return results[offset:offset + limit], len(results)
+        return [copy.deepcopy(o) for o in results[offset:offset + limit]], len(results)
 
     async def create_workspace(self, record: WorkspaceRecord) -> WorkspaceRecord:
-        self.workspaces[record.id] = record
-        return record
+        self.workspaces[record.id] = copy.deepcopy(record)
+        return copy.deepcopy(record)
 
     async def get_workspace(self, workspace_id: str) -> WorkspaceRecord | None:
-        return self.workspaces.get(workspace_id)
+        # See get_organisation's own docstring for why this is a deep copy.
+        record = self.workspaces.get(workspace_id)
+        return copy.deepcopy(record) if record is not None else None
 
-    async def update_workspace(self, record: WorkspaceRecord) -> WorkspaceRecord:
-        self.workspaces[record.id] = record
-        return record
+    async def update_workspace(self, record: WorkspaceRecord, *, expected_version: int) -> WorkspaceRecord:
+        return self._compare_and_swap(self.workspaces, record, expected_version=expected_version)
 
     async def list_workspaces(
         self, *, tenant_id: str | None = None, status: HierarchyStatus | None = None,
@@ -127,18 +155,19 @@ class InMemoryMultiTenancyRepository:
         if status is not None:
             results = [w for w in results if w.status == status]
         results = sorted(results, key=lambda w: w.created_at)
-        return results[offset:offset + limit], len(results)
+        return [copy.deepcopy(w) for w in results[offset:offset + limit]], len(results)
 
     async def create_environment(self, record: EnvironmentRecord) -> EnvironmentRecord:
-        self.environments[record.id] = record
-        return record
+        self.environments[record.id] = copy.deepcopy(record)
+        return copy.deepcopy(record)
 
     async def get_environment(self, environment_id: str) -> EnvironmentRecord | None:
-        return self.environments.get(environment_id)
+        # See get_organisation's own docstring for why this is a deep copy.
+        record = self.environments.get(environment_id)
+        return copy.deepcopy(record) if record is not None else None
 
-    async def update_environment(self, record: EnvironmentRecord) -> EnvironmentRecord:
-        self.environments[record.id] = record
-        return record
+    async def update_environment(self, record: EnvironmentRecord, *, expected_version: int) -> EnvironmentRecord:
+        return self._compare_and_swap(self.environments, record, expected_version=expected_version)
 
     async def list_environments(
         self, *, workspace_id: str | None = None, status: HierarchyStatus | None = None,
@@ -150,7 +179,7 @@ class InMemoryMultiTenancyRepository:
         if status is not None:
             results = [e for e in results if e.status == status]
         results = sorted(results, key=lambda e: e.created_at)
-        return results[offset:offset + limit], len(results)
+        return [copy.deepcopy(e) for e in results[offset:offset + limit]], len(results)
 
     # --- Quota Set / real-time quota enforcement ---
 
@@ -175,15 +204,18 @@ class InMemoryMultiTenancyRepository:
     # --- Resource Allocation ---
 
     async def create_resource_allocation(self, record: ResourceAllocation) -> ResourceAllocation:
-        self.resource_allocations[record.id] = record
-        return record
+        self.resource_allocations[record.id] = copy.deepcopy(record)
+        return copy.deepcopy(record)
 
     async def get_resource_allocation(self, allocation_id: str) -> ResourceAllocation | None:
-        return self.resource_allocations.get(allocation_id)
+        # See get_organisation's own docstring for why this is a deep copy.
+        record = self.resource_allocations.get(allocation_id)
+        return copy.deepcopy(record) if record is not None else None
 
-    async def update_resource_allocation(self, record: ResourceAllocation) -> ResourceAllocation:
-        self.resource_allocations[record.id] = record
-        return record
+    async def update_resource_allocation(
+        self, record: ResourceAllocation, *, expected_version: int,
+    ) -> ResourceAllocation:
+        return self._compare_and_swap(self.resource_allocations, record, expected_version=expected_version)
 
     async def get_active_resource_allocation(self, environment_id: str) -> ResourceAllocation | None:
         candidates = [
@@ -192,7 +224,7 @@ class InMemoryMultiTenancyRepository:
         ]
         if not candidates:
             return None
-        return max(candidates, key=lambda r: r.updated_at)
+        return copy.deepcopy(max(candidates, key=lambda r: r.updated_at))
 
     async def list_resource_allocations(
         self, *, environment_id: str | None = None, status: ResourceAllocationStatus | None = None,
@@ -204,7 +236,7 @@ class InMemoryMultiTenancyRepository:
         if status is not None:
             results = [r for r in results if r.status == status]
         results = sorted(results, key=lambda r: r.created_at, reverse=True)
-        return results[offset:offset + limit], len(results)
+        return [copy.deepcopy(r) for r in results[offset:offset + limit]], len(results)
 
 
 class StubAuditabilityClient:

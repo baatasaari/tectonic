@@ -48,20 +48,20 @@ async def test_suspend_then_reactivate(harness):
     tenant = await harness.tenant_registry_service.register(name="Acme Corp")
     ws = await harness.workspace_service.register(tenant_id=tenant.id, name="Production workflows")
 
-    suspended = await harness.workspace_service.suspend(ws.id, reason="incident")
+    suspended = await harness.workspace_service.suspend(ws.id, reason="incident", expected_version=1)
     assert suspended.status == HierarchyStatus.SUSPENDED
 
-    reactivated = await harness.workspace_service.reactivate(ws.id)
+    reactivated = await harness.workspace_service.reactivate(ws.id, expected_version=2)
     assert reactivated.status == HierarchyStatus.ACTIVE
 
 
 async def test_delete_is_terminal(harness):
     tenant = await harness.tenant_registry_service.register(name="Acme Corp")
     ws = await harness.workspace_service.register(tenant_id=tenant.id, name="Production workflows")
-    await harness.workspace_service.delete(ws.id)
+    await harness.workspace_service.delete(ws.id, expected_version=1)
 
     with pytest.raises(InvalidTransitionError):
-        await harness.workspace_service.reactivate(ws.id)
+        await harness.workspace_service.reactivate(ws.id, expected_version=2)
 
 
 async def test_list_filters_by_tenant_and_status(harness):
@@ -85,7 +85,7 @@ async def test_suspend_cascades_to_its_own_environments(harness):
     ws = await harness.workspace_service.register(tenant_id=tenant.id, name="Production")
     env = await harness.environment_service.register(workspace_id=ws.id, name="prod-us")
 
-    await harness.workspace_service.suspend(ws.id, reason="maintenance")
+    await harness.workspace_service.suspend(ws.id, reason="maintenance", expected_version=1)
 
     reloaded = await harness.environment_service.get(env.id)
     assert reloaded.status == HierarchyStatus.SUSPENDED
@@ -96,7 +96,7 @@ async def test_delete_cascades_to_its_own_environments(harness):
     ws = await harness.workspace_service.register(tenant_id=tenant.id, name="Production")
     env = await harness.environment_service.register(workspace_id=ws.id, name="prod-us")
 
-    await harness.workspace_service.delete(ws.id)
+    await harness.workspace_service.delete(ws.id, expected_version=1)
 
     reloaded = await harness.environment_service.get(env.id)
     assert reloaded.status == HierarchyStatus.DELETED
@@ -106,9 +106,9 @@ async def test_reactivate_does_not_cascade_to_environments(harness):
     tenant = await harness.tenant_registry_service.register(name="Acme Corp")
     ws = await harness.workspace_service.register(tenant_id=tenant.id, name="Production")
     env = await harness.environment_service.register(workspace_id=ws.id, name="prod-us")
-    await harness.workspace_service.suspend(ws.id, reason="maintenance")
+    await harness.workspace_service.suspend(ws.id, reason="maintenance", expected_version=1)
 
-    await harness.workspace_service.reactivate(ws.id)
+    await harness.workspace_service.reactivate(ws.id, expected_version=2)
 
     reloaded = await harness.environment_service.get(env.id)
     assert reloaded.status == HierarchyStatus.SUSPENDED
@@ -118,7 +118,7 @@ async def test_cascade_environments_is_idempotent(harness):
     tenant = await harness.tenant_registry_service.register(name="Acme Corp")
     ws = await harness.workspace_service.register(tenant_id=tenant.id, name="Production")
     env = await harness.environment_service.register(workspace_id=ws.id, name="prod-us")
-    await harness.workspace_service.suspend(ws.id, reason="maintenance")
+    await harness.workspace_service.suspend(ws.id, reason="maintenance", expected_version=1)
 
     # A second, direct cascade call (simulating TenantRegistryService's own
     # unconditional call) must not raise even though the environment is already there.

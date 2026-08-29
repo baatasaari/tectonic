@@ -63,20 +63,20 @@ async def test_suspend_then_reactivate(harness):
     ws = await _make_workspace(harness)
     env = await harness.environment_service.register(workspace_id=ws.id, name="production")
 
-    suspended = await harness.environment_service.suspend(env.id, reason="incident")
+    suspended = await harness.environment_service.suspend(env.id, reason="incident", expected_version=1)
     assert suspended.status == HierarchyStatus.SUSPENDED
 
-    reactivated = await harness.environment_service.reactivate(env.id)
+    reactivated = await harness.environment_service.reactivate(env.id, expected_version=2)
     assert reactivated.status == HierarchyStatus.ACTIVE
 
 
 async def test_delete_is_terminal(harness):
     ws = await _make_workspace(harness)
     env = await harness.environment_service.register(workspace_id=ws.id, name="production")
-    await harness.environment_service.delete(env.id)
+    await harness.environment_service.delete(env.id, expected_version=1)
 
     with pytest.raises(InvalidTransitionError):
-        await harness.environment_service.reactivate(env.id)
+        await harness.environment_service.reactivate(env.id, expected_version=2)
 
 
 async def test_list_filters_by_workspace_and_status(harness):

@@ -70,35 +70,36 @@ class WorkspaceService:
     ) -> tuple[list[WorkspaceRecord], int]:
         return await self._repository.list_workspaces(tenant_id=tenant_id, status=status, limit=limit, offset=offset)
 
-    async def _transition(self, workspace_id: str, to_status: HierarchyStatus) -> WorkspaceRecord:
+    async def _transition(
+        self, workspace_id: str, to_status: HierarchyStatus, *, expected_version: int,
+    ) -> WorkspaceRecord:
         ws = await self.get(workspace_id)
         if not is_legal_hierarchy_transition(ws.status, to_status):
             raise InvalidTransitionError(ws.status, to_status)
         from_status = ws.status
         ws.status = to_status
-        ws.version += 1
         ws.updated_at = now()
-        updated = await self._repository.update_workspace(ws)
+        updated = await self._repository.update_workspace(ws, expected_version=expected_version)
         await self._auditability.emit({
             "event": "workspace_status_changed", "workspace_id": workspace_id, "tenant_id": ws.tenant_id,
             "from_status": from_status.value, "to_status": to_status.value,
         })
         return updated
 
-    async def suspend(self, workspace_id: str, *, reason: str) -> WorkspaceRecord:
-        updated = await self._transition(workspace_id, HierarchyStatus.SUSPENDED)
+    async def suspend(self, workspace_id: str, *, reason: str, expected_version: int) -> WorkspaceRecord:
+        updated = await self._transition(workspace_id, HierarchyStatus.SUSPENDED, expected_version=expected_version)
         await self.cascade_environments(workspace_id, HierarchyStatus.SUSPENDED, reason=reason)
         return updated
 
-    async def reactivate(self, workspace_id: str) -> WorkspaceRecord:
+    async def reactivate(self, workspace_id: str, *, expected_version: int) -> WorkspaceRecord:
         # Deliberately does not cascade -- see TenantRegistryService.reactivate's own
         # docstring for the identical reasoning one level up: an environment an
         # operator suspended independently of its workspace must not silently
         # reactivate just because the workspace did.
-        return await self._transition(workspace_id, HierarchyStatus.ACTIVE)
+        return await self._transition(workspace_id, HierarchyStatus.ACTIVE, expected_version=expected_version)
 
-    async def delete(self, workspace_id: str) -> WorkspaceRecord:
-        updated = await self._transition(workspace_id, HierarchyStatus.DELETED)
+    async def delete(self, workspace_id: str, *, expected_version: int) -> WorkspaceRecord:
+        updated = await self._transition(workspace_id, HierarchyStatus.DELETED, expected_version=expected_version)
         await self.cascade_environments(workspace_id, HierarchyStatus.DELETED, reason=None)
         return updated
 
@@ -110,7 +111,12 @@ class WorkspaceService:
         and safe to call more than once for the same workspace (e.g.
         once directly from suspend()/delete(), and once more from
         `TenantRegistryService`'s own cascade for a workspace whose own
-        transition was skipped as already-legal-elsewhere)."""
+        transition was skipped as already-legal-elsewhere). Each
+        environment's own freshly-listed `.version` is used as its
+        `expected_version` -- a real compare-and-swap against whatever
+        this cascade itself just read, not a caller-supplied value (a
+        cascade has no external caller with a stale version in hand to
+        pass through)."""
         offset = 0
         while True:
             environments, total = await self._environments.list(
@@ -121,10 +127,11 @@ class WorkspaceService:
             for environment in environments:
                 if is_legal_hierarchy_transition(environment.status, to_status):
                     if to_status == HierarchyStatus.DELETED:
-                        await self._environments.delete(environment.id)
+                        await self._environments.delete(environment.id, expected_version=environment.version)
                     else:
                         await self._environments.suspend(
                             environment.id, reason=reason or "cascaded from workspace suspension",
+                            expected_version=environment.version,
                         )
             offset += len(environments)
             if offset >= total:

@@ -57,7 +57,12 @@ class MultiTenancyRepository(Protocol):
 
     async def get_organisation(self, organisation_id: str) -> OrganisationRecord | None: ...
 
-    async def update_organisation(self, record: OrganisationRecord) -> OrganisationRecord: ...
+    async def update_organisation(self, record: OrganisationRecord, *, expected_version: int) -> OrganisationRecord:
+        """Real compare-and-swap: `UPDATE ... WHERE id = :id AND version =
+        :expected_version`. Raises `core.domain.OptimisticConcurrencyError`
+        if `expected_version` no longer matches the row's current
+        version -- someone else updated it first."""
+        ...
 
     async def list_organisations(
         self, *, status: HierarchyStatus | None = None, limit: int = 50, offset: int = 0,
@@ -67,7 +72,10 @@ class MultiTenancyRepository(Protocol):
 
     async def get_workspace(self, workspace_id: str) -> WorkspaceRecord | None: ...
 
-    async def update_workspace(self, record: WorkspaceRecord) -> WorkspaceRecord: ...
+    async def update_workspace(self, record: WorkspaceRecord, *, expected_version: int) -> WorkspaceRecord:
+        """Real compare-and-swap -- see `update_organisation`'s own
+        docstring for the shape and the error this raises."""
+        ...
 
     async def list_workspaces(
         self, *, tenant_id: str | None = None, status: HierarchyStatus | None = None,
@@ -78,7 +86,10 @@ class MultiTenancyRepository(Protocol):
 
     async def get_environment(self, environment_id: str) -> EnvironmentRecord | None: ...
 
-    async def update_environment(self, record: EnvironmentRecord) -> EnvironmentRecord: ...
+    async def update_environment(self, record: EnvironmentRecord, *, expected_version: int) -> EnvironmentRecord:
+        """Real compare-and-swap -- see `update_organisation`'s own
+        docstring for the shape and the error this raises."""
+        ...
 
     async def list_environments(
         self, *, workspace_id: str | None = None, status: HierarchyStatus | None = None,
@@ -113,7 +124,12 @@ class MultiTenancyRepository(Protocol):
 
     async def get_resource_allocation(self, allocation_id: str) -> ResourceAllocation | None: ...
 
-    async def update_resource_allocation(self, record: ResourceAllocation) -> ResourceAllocation: ...
+    async def update_resource_allocation(
+        self, record: ResourceAllocation, *, expected_version: int,
+    ) -> ResourceAllocation:
+        """Real compare-and-swap -- see `update_organisation`'s own
+        docstring for the shape and the error this raises."""
+        ...
 
     async def get_active_resource_allocation(self, environment_id: str) -> ResourceAllocation | None:
         """The most recently updated `ACTIVE` allocation for this

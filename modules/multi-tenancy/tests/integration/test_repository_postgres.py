@@ -17,6 +17,7 @@ from multi_tenancy.core.domain import (
     EnvironmentRecord,
     HierarchyStatus,
     IsolationProbeResult,
+    OptimisticConcurrencyError,
     OrganisationRecord,
     ResourceAllocation,
     ResourceAllocationStatus,
@@ -158,12 +159,15 @@ async def test_organisation_workspace_environment_hierarchy_round_trips(migrated
             assert fetched_env.workspace_id == ws.id
             assert fetched_env.region == "eu-west-1"
 
-            # optimistic-concurrency version bump on a real status transition
+            # Real compare-and-swap: WHERE version = expected_version, enforced by
+            # Postgres itself, not an in-memory guess.
             env.status = HierarchyStatus.SUSPENDED
-            env.version += 1
-            updated_env = await repo.update_environment(env)
+            updated_env = await repo.update_environment(env, expected_version=1)
             assert updated_env.status == HierarchyStatus.SUSPENDED
             assert updated_env.version == 2
+
+            with pytest.raises(OptimisticConcurrencyError):
+                await repo.update_environment(env, expected_version=1)  # stale -- real version is now 2
 
             ws_list, ws_total = await repo.list_workspaces(tenant_id=tenant.id)
             assert ws_total == 1
@@ -262,10 +266,10 @@ async def test_resource_allocation_round_trips_and_finds_the_active_one(migrated
 
             requested.status = ResourceAllocationStatus.ACTIVE
             requested.approved_by = "platform-admin"
-            requested.version += 1
             requested.updated_at = now()
-            approved = await repo.update_resource_allocation(requested)
+            approved = await repo.update_resource_allocation(requested, expected_version=1)
             assert approved.status == ResourceAllocationStatus.ACTIVE
+            assert approved.version == 2
 
             active = await repo.get_active_resource_allocation(env.id)
             assert active is not None

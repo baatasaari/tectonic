@@ -6,6 +6,11 @@ runs, Conversational Engine sessions, ...) are ultimately scoped
 under, once those modules adopt `environment_id`, which they don't
 yet; see this module's README. Every environment belongs to exactly
 one workspace, verified to exist at registration.
+
+Every transition takes the caller's `expected_version` -- real
+optimistic-concurrency control, enforced as a real compare-and-swap at
+the repository layer; see `core/organisation_service.py`'s own
+docstring for the full reasoning, identical here.
 """
 from __future__ import annotations
 
@@ -59,26 +64,27 @@ class EnvironmentService:
             workspace_id=workspace_id, status=status, limit=limit, offset=offset,
         )
 
-    async def _transition(self, environment_id: str, to_status: HierarchyStatus) -> EnvironmentRecord:
+    async def _transition(
+        self, environment_id: str, to_status: HierarchyStatus, *, expected_version: int,
+    ) -> EnvironmentRecord:
         env = await self.get(environment_id)
         if not is_legal_hierarchy_transition(env.status, to_status):
             raise InvalidTransitionError(env.status, to_status)
         from_status = env.status
         env.status = to_status
-        env.version += 1
         env.updated_at = now()
-        updated = await self._repository.update_environment(env)
+        updated = await self._repository.update_environment(env, expected_version=expected_version)
         await self._auditability.emit({
             "event": "environment_status_changed", "environment_id": environment_id,
             "workspace_id": env.workspace_id, "from_status": from_status.value, "to_status": to_status.value,
         })
         return updated
 
-    async def suspend(self, environment_id: str, *, reason: str) -> EnvironmentRecord:
-        return await self._transition(environment_id, HierarchyStatus.SUSPENDED)
+    async def suspend(self, environment_id: str, *, reason: str, expected_version: int) -> EnvironmentRecord:
+        return await self._transition(environment_id, HierarchyStatus.SUSPENDED, expected_version=expected_version)
 
-    async def reactivate(self, environment_id: str) -> EnvironmentRecord:
-        return await self._transition(environment_id, HierarchyStatus.ACTIVE)
+    async def reactivate(self, environment_id: str, *, expected_version: int) -> EnvironmentRecord:
+        return await self._transition(environment_id, HierarchyStatus.ACTIVE, expected_version=expected_version)
 
-    async def delete(self, environment_id: str) -> EnvironmentRecord:
-        return await self._transition(environment_id, HierarchyStatus.DELETED)
+    async def delete(self, environment_id: str, *, expected_version: int) -> EnvironmentRecord:
+        return await self._transition(environment_id, HierarchyStatus.DELETED, expected_version=expected_version)

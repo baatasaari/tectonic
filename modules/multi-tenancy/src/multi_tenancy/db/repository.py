@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +12,7 @@ from multi_tenancy.core.domain import (
     EnvironmentRecord,
     HierarchyStatus,
     IsolationProbeResult,
+    OptimisticConcurrencyError,
     OrganisationRecord,
     QuotaSet,
     ResourceAllocation,
@@ -94,6 +96,28 @@ def _resource_allocation_to_domain(m: models.ResourceAllocation) -> ResourceAllo
 class SQLAlchemyMultiTenancyRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def _compare_and_swap(self, model, record_id: str, *, expected_version: int, values: dict) -> None:
+        """Real optimistic-concurrency compare-and-swap: a real `UPDATE
+        ... WHERE id = :id AND version = :expected_version`, never the
+        unconditional `m.version = record.version` overwrite this used
+        to do (which silently let the last of two concurrent writers
+        win with no conflict raised at all). Zero affected rows means
+        someone else's update already moved the row's version past what
+        this caller last saw -- see `core/domain.py`'s
+        `OptimisticConcurrencyError`. Shared by every versioned record
+        type (Organisation/Workspace/Environment/ResourceAllocation)
+        rather than reimplemented per type."""
+        stmt = (
+            sa_update(model)
+            .where(model.id == record_id, model.version == expected_version)
+            .values(version=expected_version + 1, **values)
+        )
+        result = await self.session.execute(stmt)
+        if result.rowcount == 0:
+            await self.session.rollback()
+            raise OptimisticConcurrencyError(expected_version=expected_version)
+        await self.session.commit()
 
     async def create_tenant(self, record: TenantRecord) -> TenantRecord:
         m = models.Tenant(
@@ -199,14 +223,15 @@ class SQLAlchemyMultiTenancyRepository:
         m = await self.session.get(models.Organisation, organisation_id)
         return _organisation_to_domain(m) if m else None
 
-    async def update_organisation(self, record: OrganisationRecord) -> OrganisationRecord:
+    async def update_organisation(self, record: OrganisationRecord, *, expected_version: int) -> OrganisationRecord:
+        await self._compare_and_swap(
+            models.Organisation, record.id, expected_version=expected_version,
+            values={
+                "status": record.status.value, "owner_identity_id": record.owner_identity_id,
+                "labels": record.labels,
+            },
+        )
         m = await self.session.get(models.Organisation, record.id)
-        m.status = record.status.value
-        m.owner_identity_id = record.owner_identity_id
-        m.labels = record.labels
-        m.version = record.version
-        await self.session.commit()
-        await self.session.refresh(m)
         return _organisation_to_domain(m)
 
     async def list_organisations(
@@ -240,14 +265,15 @@ class SQLAlchemyMultiTenancyRepository:
         m = await self.session.get(models.Workspace, workspace_id)
         return _workspace_to_domain(m) if m else None
 
-    async def update_workspace(self, record: WorkspaceRecord) -> WorkspaceRecord:
+    async def update_workspace(self, record: WorkspaceRecord, *, expected_version: int) -> WorkspaceRecord:
+        await self._compare_and_swap(
+            models.Workspace, record.id, expected_version=expected_version,
+            values={
+                "status": record.status.value, "owner_identity_id": record.owner_identity_id,
+                "labels": record.labels,
+            },
+        )
         m = await self.session.get(models.Workspace, record.id)
-        m.status = record.status.value
-        m.owner_identity_id = record.owner_identity_id
-        m.labels = record.labels
-        m.version = record.version
-        await self.session.commit()
-        await self.session.refresh(m)
         return _workspace_to_domain(m)
 
     async def list_workspaces(
@@ -285,14 +311,15 @@ class SQLAlchemyMultiTenancyRepository:
         m = await self.session.get(models.Environment, environment_id)
         return _environment_to_domain(m) if m else None
 
-    async def update_environment(self, record: EnvironmentRecord) -> EnvironmentRecord:
+    async def update_environment(self, record: EnvironmentRecord, *, expected_version: int) -> EnvironmentRecord:
+        await self._compare_and_swap(
+            models.Environment, record.id, expected_version=expected_version,
+            values={
+                "status": record.status.value, "owner_identity_id": record.owner_identity_id,
+                "labels": record.labels,
+            },
+        )
         m = await self.session.get(models.Environment, record.id)
-        m.status = record.status.value
-        m.owner_identity_id = record.owner_identity_id
-        m.labels = record.labels
-        m.version = record.version
-        await self.session.commit()
-        await self.session.refresh(m)
         return _environment_to_domain(m)
 
     async def list_environments(
@@ -376,15 +403,17 @@ class SQLAlchemyMultiTenancyRepository:
         m = await self.session.get(models.ResourceAllocation, allocation_id)
         return _resource_allocation_to_domain(m) if m else None
 
-    async def update_resource_allocation(self, record: ResourceAllocation) -> ResourceAllocation:
+    async def update_resource_allocation(
+        self, record: ResourceAllocation, *, expected_version: int,
+    ) -> ResourceAllocation:
+        await self._compare_and_swap(
+            models.ResourceAllocation, record.id, expected_version=expected_version,
+            values={
+                "resources": record.resources, "status": record.status.value,
+                "approved_by": record.approved_by, "rejection_reason": record.rejection_reason,
+            },
+        )
         m = await self.session.get(models.ResourceAllocation, record.id)
-        m.resources = record.resources
-        m.status = record.status.value
-        m.approved_by = record.approved_by
-        m.rejection_reason = record.rejection_reason
-        m.version = record.version
-        await self.session.commit()
-        await self.session.refresh(m)
         return _resource_allocation_to_domain(m)
 
     async def get_active_resource_allocation(self, environment_id: str) -> ResourceAllocation | None:

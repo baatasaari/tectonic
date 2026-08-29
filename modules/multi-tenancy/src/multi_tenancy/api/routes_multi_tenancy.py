@@ -20,6 +20,7 @@ from multi_tenancy.core.domain import (
     EnvironmentNotFoundError,
     HierarchyStatus,
     InvalidTransitionError,
+    OptimisticConcurrencyError,
     OrganisationNotFoundError,
     ProbeTargetNotFoundError,
     ResourceAllocationNotFoundError,
@@ -57,6 +58,7 @@ from multi_tenancy.schemas.multi_tenancy import (
     TenantGateResultSchema,
     TenantListResponse,
     TenantSchema,
+    VersionedRequest,
     WorkspaceListResponse,
     WorkspaceSchema,
 )
@@ -307,10 +309,12 @@ async def suspend_organisation(
 ) -> OrganisationSchema:
     service = build_organisation_service(repository, ctx)
     try:
-        org = await service.suspend(organisation_id, reason=body.reason)
+        org = await service.suspend(organisation_id, reason=body.reason, expected_version=body.expected_version)
     except OrganisationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except OptimisticConcurrencyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _organisation_schema(org)
 
@@ -318,15 +322,18 @@ async def suspend_organisation(
 @router.post("/organisations/{organisation_id}/reactivate", response_model=OrganisationSchema)
 async def reactivate_organisation(
     organisation_id: str,
+    body: VersionedRequest,
     ctx: AppContext = Depends(get_ctx),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> OrganisationSchema:
     service = build_organisation_service(repository, ctx)
     try:
-        org = await service.reactivate(organisation_id)
+        org = await service.reactivate(organisation_id, expected_version=body.expected_version)
     except OrganisationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except OptimisticConcurrencyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _organisation_schema(org)
 
@@ -334,15 +341,18 @@ async def reactivate_organisation(
 @router.post("/organisations/{organisation_id}/delete", response_model=OrganisationSchema)
 async def delete_organisation(
     organisation_id: str,
+    body: VersionedRequest,
     ctx: AppContext = Depends(get_ctx),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> OrganisationSchema:
     service = build_organisation_service(repository, ctx)
     try:
-        org = await service.delete(organisation_id)
+        org = await service.delete(organisation_id, expected_version=body.expected_version)
     except OrganisationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except OptimisticConcurrencyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _organisation_schema(org)
 
@@ -404,10 +414,12 @@ async def suspend_workspace(
 ) -> WorkspaceSchema:
     service = build_workspace_service(repository, ctx)
     try:
-        ws = await service.suspend(workspace_id, reason=body.reason)
+        ws = await service.suspend(workspace_id, reason=body.reason, expected_version=body.expected_version)
     except WorkspaceNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except OptimisticConcurrencyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _workspace_schema(ws)
 
@@ -415,15 +427,18 @@ async def suspend_workspace(
 @router.post("/workspaces/{workspace_id}/reactivate", response_model=WorkspaceSchema)
 async def reactivate_workspace(
     workspace_id: str,
+    body: VersionedRequest,
     ctx: AppContext = Depends(get_ctx),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> WorkspaceSchema:
     service = build_workspace_service(repository, ctx)
     try:
-        ws = await service.reactivate(workspace_id)
+        ws = await service.reactivate(workspace_id, expected_version=body.expected_version)
     except WorkspaceNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except OptimisticConcurrencyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _workspace_schema(ws)
 
@@ -431,15 +446,18 @@ async def reactivate_workspace(
 @router.post("/workspaces/{workspace_id}/delete", response_model=WorkspaceSchema)
 async def delete_workspace(
     workspace_id: str,
+    body: VersionedRequest,
     ctx: AppContext = Depends(get_ctx),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> WorkspaceSchema:
     service = build_workspace_service(repository, ctx)
     try:
-        ws = await service.delete(workspace_id)
+        ws = await service.delete(workspace_id, expected_version=body.expected_version)
     except WorkspaceNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except OptimisticConcurrencyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _workspace_schema(ws)
 
@@ -506,10 +524,12 @@ async def suspend_environment(
 ) -> EnvironmentSchema:
     service = build_environment_service(repository, ctx)
     try:
-        env = await service.suspend(environment_id, reason=body.reason)
+        env = await service.suspend(environment_id, reason=body.reason, expected_version=body.expected_version)
     except EnvironmentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except OptimisticConcurrencyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _environment_schema(env)
 
@@ -517,15 +537,18 @@ async def suspend_environment(
 @router.post("/environments/{environment_id}/reactivate", response_model=EnvironmentSchema)
 async def reactivate_environment(
     environment_id: str,
+    body: VersionedRequest,
     ctx: AppContext = Depends(get_ctx),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> EnvironmentSchema:
     service = build_environment_service(repository, ctx)
     try:
-        env = await service.reactivate(environment_id)
+        env = await service.reactivate(environment_id, expected_version=body.expected_version)
     except EnvironmentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except OptimisticConcurrencyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _environment_schema(env)
 
@@ -533,15 +556,18 @@ async def reactivate_environment(
 @router.post("/environments/{environment_id}/delete", response_model=EnvironmentSchema)
 async def delete_environment(
     environment_id: str,
+    body: VersionedRequest,
     ctx: AppContext = Depends(get_ctx),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> EnvironmentSchema:
     service = build_environment_service(repository, ctx)
     try:
-        env = await service.delete(environment_id)
+        env = await service.delete(environment_id, expected_version=body.expected_version)
     except EnvironmentNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except OptimisticConcurrencyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _environment_schema(env)
 
@@ -662,10 +688,14 @@ async def approve_resource_allocation(
 ) -> ResourceAllocationSchema:
     service = build_resource_allocation_service(repository, ctx)
     try:
-        allocation = await service.approve(allocation_id, approved_by=body.approved_by)
+        allocation = await service.approve(
+            allocation_id, approved_by=body.approved_by, expected_version=body.expected_version,
+        )
     except ResourceAllocationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except OptimisticConcurrencyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _resource_allocation_schema(allocation)
 
@@ -679,10 +709,14 @@ async def reject_resource_allocation(
 ) -> ResourceAllocationSchema:
     service = build_resource_allocation_service(repository, ctx)
     try:
-        allocation = await service.reject(allocation_id, reason=body.reason)
+        allocation = await service.reject(
+            allocation_id, reason=body.reason, expected_version=body.expected_version,
+        )
     except ResourceAllocationNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except OptimisticConcurrencyError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _resource_allocation_schema(allocation)
 

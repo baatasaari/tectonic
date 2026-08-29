@@ -60,7 +60,7 @@ async def test_a_small_increase_over_an_active_baseline_is_auto_approved(harness
     first = await harness.resource_allocation_service.request_change(
         environment_id=env.id, resources={"cpu_cores": 10},
     )
-    await harness.resource_allocation_service.approve(first.id, approved_by="platform-admin")
+    await harness.resource_allocation_service.approve(first.id, approved_by="platform-admin", expected_version=1)
 
     second = await harness.resource_allocation_service.request_change(
         environment_id=env.id, resources={"cpu_cores": 11},  # a 10% increase
@@ -79,7 +79,7 @@ async def test_a_large_increase_over_an_active_baseline_needs_approval(harness):
     first = await harness.resource_allocation_service.request_change(
         environment_id=env.id, resources={"cpu_cores": 10},
     )
-    await harness.resource_allocation_service.approve(first.id, approved_by="platform-admin")
+    await harness.resource_allocation_service.approve(first.id, approved_by="platform-admin", expected_version=1)
 
     second = await harness.resource_allocation_service.request_change(
         environment_id=env.id, resources={"cpu_cores": 20},  # a 100% increase
@@ -93,7 +93,7 @@ async def test_a_new_resource_class_never_seen_before_needs_approval(harness):
     first = await harness.resource_allocation_service.request_change(
         environment_id=env.id, resources={"cpu_cores": 10},
     )
-    await harness.resource_allocation_service.approve(first.id, approved_by="platform-admin")
+    await harness.resource_allocation_service.approve(first.id, approved_by="platform-admin", expected_version=1)
 
     second = await harness.resource_allocation_service.request_change(
         environment_id=env.id, resources={"cpu_cores": 10, "gpu_count": 1},
@@ -107,7 +107,7 @@ async def test_a_decrease_is_always_auto_approved(harness):
     first = await harness.resource_allocation_service.request_change(
         environment_id=env.id, resources={"cpu_cores": 10},
     )
-    await harness.resource_allocation_service.approve(first.id, approved_by="platform-admin")
+    await harness.resource_allocation_service.approve(first.id, approved_by="platform-admin", expected_version=1)
 
     second = await harness.resource_allocation_service.request_change(
         environment_id=env.id, resources={"cpu_cores": 2},
@@ -122,7 +122,7 @@ async def test_approve_then_reactivates_the_environments_current_allocation(harn
         environment_id=env.id, resources={"cpu_cores": 4},
     )
 
-    approved = await harness.resource_allocation_service.approve(requested.id, approved_by="platform-admin")
+    approved = await harness.resource_allocation_service.approve(requested.id, approved_by="platform-admin", expected_version=1)
 
     assert approved.status == ResourceAllocationStatus.ACTIVE
     assert approved.approved_by == "platform-admin"
@@ -134,7 +134,7 @@ async def test_approve_then_reactivates_the_environments_current_allocation(harn
 
 async def test_approve_raises_for_an_unknown_allocation(harness):
     with pytest.raises(ResourceAllocationNotFoundError):
-        await harness.resource_allocation_service.approve("does-not-exist", approved_by="platform-admin")
+        await harness.resource_allocation_service.approve("does-not-exist", approved_by="platform-admin", expected_version=1)
 
 
 async def test_approve_is_not_legal_on_an_already_active_allocation(harness):
@@ -142,10 +142,10 @@ async def test_approve_is_not_legal_on_an_already_active_allocation(harness):
     requested = await harness.resource_allocation_service.request_change(
         environment_id=env.id, resources={"cpu_cores": 4},
     )
-    await harness.resource_allocation_service.approve(requested.id, approved_by="platform-admin")
+    await harness.resource_allocation_service.approve(requested.id, approved_by="platform-admin", expected_version=1)
 
     with pytest.raises(InvalidTransitionError):
-        await harness.resource_allocation_service.approve(requested.id, approved_by="platform-admin")
+        await harness.resource_allocation_service.approve(requested.id, approved_by="platform-admin", expected_version=2)
 
 
 async def test_reject_stores_the_reason(harness):
@@ -154,7 +154,7 @@ async def test_reject_stores_the_reason(harness):
         environment_id=env.id, resources={"cpu_cores": 4},
     )
 
-    rejected = await harness.resource_allocation_service.reject(requested.id, reason="over regional capacity")
+    rejected = await harness.resource_allocation_service.reject(requested.id, reason="over regional capacity", expected_version=1)
 
     assert rejected.status == ResourceAllocationStatus.REJECTED
     assert rejected.rejection_reason == "over regional capacity"
@@ -168,10 +168,10 @@ async def test_reject_is_not_legal_on_an_already_rejected_allocation(harness):
     requested = await harness.resource_allocation_service.request_change(
         environment_id=env.id, resources={"cpu_cores": 4},
     )
-    await harness.resource_allocation_service.reject(requested.id, reason="no")
+    await harness.resource_allocation_service.reject(requested.id, reason="no", expected_version=1)
 
     with pytest.raises(InvalidTransitionError):
-        await harness.resource_allocation_service.reject(requested.id, reason="still no")
+        await harness.resource_allocation_service.reject(requested.id, reason="still no", expected_version=2)
 
 
 async def test_get_raises_for_an_unknown_allocation(harness):
@@ -191,3 +191,39 @@ async def test_list_filters_by_environment_and_status(harness):
 
     assert total == 1
     assert results[0].id == allocation_a.id
+
+
+async def test_a_stale_expected_version_is_rejected_at_the_repository_layer(harness):
+    """Real race this ticket's optimistic-concurrency enforcement exists
+    to catch: two reviewers both looking at the same REQUESTED
+    allocation (both read version=1), one approving and one rejecting
+    nearly simultaneously -- whichever commits first wins for real, the
+    second's decision must be rejected rather than silently overwriting
+    the first. Exercised directly against the repository, bypassing
+    `ResourceAllocationService`'s own `status != REQUESTED` guard --
+    in this single-threaded test harness, two sequential *service*-level
+    calls always serialize (the second call's own fresh `get()` sees
+    the first call's already-committed status, so the legality guard
+    catches it before ever reaching the compare-and-swap). The real
+    *concurrent*-caller proof runs against real Postgres in the
+    integration tier."""
+    from multi_tenancy.core.domain import OptimisticConcurrencyError
+
+    env = await _make_environment(harness)
+    requested = await harness.resource_allocation_service.request_change(
+        environment_id=env.id, resources={"cpu_cores": 4},
+    )
+    approved = await harness.resource_allocation_service.approve(
+        requested.id, approved_by="reviewer-a", expected_version=1,
+    )
+    assert approved.status == ResourceAllocationStatus.ACTIVE
+
+    stale = await harness.repository.get_resource_allocation(requested.id)
+    stale.status = ResourceAllocationStatus.REJECTED
+    stale.rejection_reason = "reviewer-b's stale decision"
+    with pytest.raises(OptimisticConcurrencyError):
+        await harness.repository.update_resource_allocation(stale, expected_version=1)  # real version is now 2
+
+    final = await harness.resource_allocation_service.get(requested.id)
+    assert final.status == ResourceAllocationStatus.ACTIVE
+    assert final.approved_by == "reviewer-a"

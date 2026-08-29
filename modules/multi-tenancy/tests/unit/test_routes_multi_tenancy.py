@@ -231,19 +231,27 @@ def test_organisation_lifecycle():
         assert fetched["id"] == org["id"]
 
         suspended = client.post(
-            f"/v1/multi-tenancy/organisations/{org['id']}/suspend", json={"reason": "review"}, headers=headers,
+            f"/v1/multi-tenancy/organisations/{org['id']}/suspend",
+            json={"reason": "review", "expected_version": org["version"]}, headers=headers,
         ).json()
         assert suspended["status"] == "suspended"
 
         reactivated = client.post(
-            f"/v1/multi-tenancy/organisations/{org['id']}/reactivate", headers=headers,
+            f"/v1/multi-tenancy/organisations/{org['id']}/reactivate",
+            json={"expected_version": suspended["version"]}, headers=headers,
         ).json()
         assert reactivated["status"] == "active"
 
-        deleted = client.post(f"/v1/multi-tenancy/organisations/{org['id']}/delete", headers=headers).json()
+        deleted = client.post(
+            f"/v1/multi-tenancy/organisations/{org['id']}/delete",
+            json={"expected_version": reactivated["version"]}, headers=headers,
+        ).json()
         assert deleted["status"] == "deleted"
 
-        resp = client.post(f"/v1/multi-tenancy/organisations/{org['id']}/reactivate", headers=headers)
+        resp = client.post(
+            f"/v1/multi-tenancy/organisations/{org['id']}/reactivate",
+            json={"expected_version": deleted["version"]}, headers=headers,
+        )
 
     assert resp.status_code == 409
 
@@ -268,7 +276,10 @@ def test_list_organisations_filters_by_status():
         suspended = client.post(
             "/v1/multi-tenancy/organisations", json={"name": "Suspended Holdings"}, headers=headers,
         ).json()
-        client.post(f"/v1/multi-tenancy/organisations/{suspended['id']}/suspend", json={"reason": "r"}, headers=headers)
+        client.post(
+            f"/v1/multi-tenancy/organisations/{suspended['id']}/suspend",
+            json={"reason": "r", "expected_version": suspended["version"]}, headers=headers,
+        )
 
         resp = client.get("/v1/multi-tenancy/organisations", params={"status": "active"}, headers=headers)
 
@@ -310,14 +321,21 @@ def test_workspace_lifecycle():
         assert fetched["id"] == ws["id"]
 
         suspended = client.post(
-            f"/v1/multi-tenancy/workspaces/{ws['id']}/suspend", json={"reason": "incident"}, headers=headers,
+            f"/v1/multi-tenancy/workspaces/{ws['id']}/suspend",
+            json={"reason": "incident", "expected_version": ws["version"]}, headers=headers,
         ).json()
         assert suspended["status"] == "suspended"
 
-        reactivated = client.post(f"/v1/multi-tenancy/workspaces/{ws['id']}/reactivate", headers=headers).json()
+        reactivated = client.post(
+            f"/v1/multi-tenancy/workspaces/{ws['id']}/reactivate",
+            json={"expected_version": suspended["version"]}, headers=headers,
+        ).json()
         assert reactivated["status"] == "active"
 
-        deleted = client.post(f"/v1/multi-tenancy/workspaces/{ws['id']}/delete", headers=headers).json()
+        deleted = client.post(
+            f"/v1/multi-tenancy/workspaces/{ws['id']}/delete",
+            json={"expected_version": reactivated["version"]}, headers=headers,
+        ).json()
         assert deleted["status"] == "deleted"
 
 
@@ -379,14 +397,21 @@ def test_environment_lifecycle():
         assert fetched["id"] == env["id"]
 
         suspended = client.post(
-            f"/v1/multi-tenancy/environments/{env['id']}/suspend", json={"reason": "incident"}, headers=headers,
+            f"/v1/multi-tenancy/environments/{env['id']}/suspend",
+            json={"reason": "incident", "expected_version": env["version"]}, headers=headers,
         ).json()
         assert suspended["status"] == "suspended"
 
-        reactivated = client.post(f"/v1/multi-tenancy/environments/{env['id']}/reactivate", headers=headers).json()
+        reactivated = client.post(
+            f"/v1/multi-tenancy/environments/{env['id']}/reactivate",
+            json={"expected_version": suspended["version"]}, headers=headers,
+        ).json()
         assert reactivated["status"] == "active"
 
-        deleted = client.post(f"/v1/multi-tenancy/environments/{env['id']}/delete", headers=headers).json()
+        deleted = client.post(
+            f"/v1/multi-tenancy/environments/{env['id']}/delete",
+            json={"expected_version": reactivated["version"]}, headers=headers,
+        ).json()
         assert deleted["status"] == "deleted"
 
 
@@ -568,7 +593,7 @@ def test_first_request_is_requested_then_approve_makes_it_active():
 
         approved = client.post(
             f"/v1/multi-tenancy/resource-allocations/{requested['id']}/approve",
-            json={"approved_by": "platform-admin"}, headers=headers,
+            json={"approved_by": "platform-admin", "expected_version": requested["version"]}, headers=headers,
         )
 
     assert approved.status_code == 200
@@ -589,11 +614,11 @@ def test_reject_stores_the_reason_and_is_terminal():
 
         rejected = client.post(
             f"/v1/multi-tenancy/resource-allocations/{requested['id']}/reject",
-            json={"reason": "over regional capacity"}, headers=headers,
+            json={"reason": "over regional capacity", "expected_version": requested["version"]}, headers=headers,
         )
         reapprove = client.post(
             f"/v1/multi-tenancy/resource-allocations/{requested['id']}/approve",
-            json={"approved_by": "platform-admin"}, headers=headers,
+            json={"approved_by": "platform-admin", "expected_version": rejected.json()["version"]}, headers=headers,
         )
 
     assert rejected.status_code == 200

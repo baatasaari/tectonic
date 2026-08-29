@@ -111,13 +111,27 @@ src/multi_tenancy/
   of a child resource must survive its parent reactivating. Organisation
   → Tenant cascading remains separate, unbuilt work (see
   `OrganisationService.delete`'s own docstring).
-  **What this still deliberately does not do yet**: `version`'s
-  optimistic-concurrency field is present and incremented on every
-  update but not yet enforced as a real compare-and-swap at the
-  repository layer; `region` is a plain, unvalidated string, not real
-  data-residency policy enforcement; and no other module has adopted
-  `environment_id` scoping yet (Agent Applications — Workflow Engine
-  runs, Conversational Engine sessions — are still tenant-scoped only).
+  **Optimistic-concurrency enforcement is real too** (Phase 2 also
+  closed this): every mutating Organisation/Workspace/Environment/
+  ResourceAllocation endpoint now requires the caller's
+  `expected_version`, checked by a real `UPDATE ... WHERE id = :id AND
+  version = :expected_version` at the repository layer
+  (`SQLAlchemyMultiTenancyRepository._compare_and_swap`) — a stale
+  version raises a real `OptimisticConcurrencyError` (409), not a
+  silent overwrite. `TenantRecord` deliberately has no `version` field
+  and stays out of scope here (see `core/domain.py`'s own note on why
+  it's kept separate from the other four). Proven under real
+  concurrent callers against real Postgres
+  (`tests/integration/test_optimistic_concurrency_postgres.py`): ten
+  simultaneous callers racing to suspend the same Organisation
+  converge to exactly one winner and nine real conflicts, and two
+  reviewers racing to approve/reject the same ResourceAllocation land
+  exactly one decision.
+  **What this still deliberately does not do yet**: `region` is a
+  plain, unvalidated string, not real data-residency policy
+  enforcement; and no other module has adopted `environment_id`
+  scoping yet (Agent Applications — Workflow Engine runs,
+  Conversational Engine sessions — are still tenant-scoped only).
 - **Quota Set and Resource Allocation** (independent architecture
   assessment §5.2 "Resource allocation and quota change"): the
   remaining two legs of the assessment's own canonical resource chain

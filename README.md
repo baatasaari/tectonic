@@ -829,6 +829,36 @@ its parent reactivating. Organisation → Tenant cascading remains
 separate, unbuilt work (`OrganisationService.delete`'s own docstring
 still flags it, unchanged). Full reasoning in that module's own README.
 
+**Fixed**: Multi-tenancy's optimistic-concurrency gap. The canonical
+hierarchy's own `version` field (ticket #62) was present and
+incremented on every update but never actually enforced — two
+concurrent updates to the same Organisation/Workspace/Environment/
+ResourceAllocation silently let the last writer win, with no conflict
+raised at all. Every mutating endpoint on those four record types now
+requires the caller's `expected_version`, checked by a real `UPDATE
+... WHERE id = :id AND version = :expected_version` at the repository
+layer (`SQLAlchemyMultiTenancyRepository._compare_and_swap`, shared
+across all four rather than reimplemented per type) — zero affected
+rows raises a real `OptimisticConcurrencyError`, mapped to `409` at
+every route. `TenantRecord` deliberately has no `version` field and
+stays out of scope, the same backward-compatible-shape reasoning
+`HierarchyStatus`'s own docstring already gives for `TenantStatus`
+staying separate from it. Building the real Postgres proof for this
+surfaced a genuine, separate bug along the way: the in-memory test
+fake's `get_*` methods returned the *same live object reference* the
+store held, so a caller mutating a fetched record in place (the exact
+pattern every `_transition` method in this module already used) could
+silently corrupt the fake's canonical state ahead of, and regardless
+of, the new compare-and-swap check — fixed by having every fake
+`get_*`/`list_*`/`create_*` return real deep copies, the same
+isolation a genuine out-of-process datastore round trip already gives
+for free. Verified under real concurrent callers against real
+Postgres: ten simultaneous callers racing to suspend the same
+Organisation converge to exactly one winner and nine real conflicts;
+two reviewers racing to approve/reject the same ResourceAllocation
+land exactly one decision, never both. Full reasoning in that module's
+own README.
+
 ## Modules
 
 ### Module 1: Workflow Engine
