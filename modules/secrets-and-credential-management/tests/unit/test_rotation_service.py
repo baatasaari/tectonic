@@ -25,7 +25,9 @@ async def test_rotate_creates_a_new_version_and_advances_the_schedule(harness):
     assert rotated.next_rotation_due_at > old_due
 
     latest = await harness.repository.get_latest_version(secret.id)
-    assert harness.cipher.decrypt(latest.ciphertext) == "new-password"
+    assert await harness.cipher.decrypt(
+        ciphertext=latest.ciphertext, wrapped_data_key=latest.wrapped_data_key,
+    ) == "new-password"
 
 
 async def test_rotate_a_missing_secret_raises_not_found(harness):

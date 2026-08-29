@@ -663,10 +663,31 @@ by path prefix rather than the exact-match-only exclusion
 second, distinct security scheme rather than folding it into the
 "unauthenticated" set. Full reasoning in that module's own README.
 
+**Also fixed**: Secrets and Credential Management's envelope encryption
+now has a real managed-KMS backing instead of one static config key.
+Previously the whole cipher was keyed by a single `secrets_master_key`
+living in this module's own config — compromising that config
+compromised every secret it had ever stored, with no external
+root-of-trust and no rotation story. Now every encrypt call generates
+a fresh, random data key, uses it once, and returns it wrapped by a
+`KeyManagementProvider`; each `SecretVersionRecord` carries its own
+wrapped key, so one compromised ciphertext never exposes any other
+version's key. Two implementations: `LocalStaticKeyManagementProvider`
+(the previous design, demoted to an explicitly-flagged, zero-config
+dev/test fallback with a loud startup warning) and
+`VaultTransitKeyManagementProvider`, a real HashiCorp Vault Transit
+integration (plain `httpx` through this module's own
+`ResilientHTTPClient`, not the `hvac` SDK) whose `datakey`/`decrypt`
+calls are verified against a respx-mocked transport using Vault's real
+documented request/response shapes — the same "real client, mocked
+transport" answer Identity and Access's OIDC verifier gave to the same
+"no live external server reachable from this sandbox" constraint. Full
+reasoning in that module's own README.
+
 **In progress**, tracked against the assessment's own Phase 1 (platform
-kernel) scope: Secrets' managed-KMS integration, an idempotent
-metering ledger, Observability's trace-query/SLO surfaces, and CI
-supply-chain gates (SBOM, signing, contract tests).
+kernel) scope: an idempotent metering ledger, Observability's
+trace-query/SLO surfaces, and CI supply-chain gates (SBOM, signing,
+contract tests).
 
 ## Modules
 

@@ -19,7 +19,7 @@ src/secrets_and_credential_management/
   config.py                  Pydantic Settings — LLD config schema
   core/
     domain.py                 SecretRecord/SecretVersionRecord/SecretAccessRecord, the secret lifecycle state machine
-    ports.py                    Repository, the two real platform-peer client ports
+    ports.py                    Repository, the two real platform-peer client ports, KeyManagementProvider
     fakes.py                     In-memory implementations of every port, for unit tests
     secret_registry_service.py    Secret Registry — create/get/list/revoke
     secret_access_service.py        Secret Access Service — the zero-trust-gated retrieval path
@@ -29,7 +29,8 @@ src/secrets_and_credential_management/
   security/
     jwt_auth.py               Service-to-service JWT (platform-wide shared secret, this module's own inbound protection)
     openapi_security.py       Real OpenAPI security scheme declaration
-    envelope_encryption.py      This module's own distinct encryption-at-rest key (Fernet)
+    envelope_encryption.py      Real envelope encryption (Fernet) -- a fresh data key per encrypt call
+    key_management.py            KeyManagementProvider implementations: LocalStaticKeyManagementProvider (dev/test) + VaultTransitKeyManagementProvider (real HashiCorp Vault Transit)
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — secrets, retrieve, rotate, revoke, compliance
   schemas/                    Pydantic request/response models
@@ -37,17 +38,60 @@ src/secrets_and_credential_management/
 
 ## Design notes vs. the LLD
 
-- **Encryption at rest is real, not a TODO.** Every value this module
-  ever stores passes through `EnvelopeCipher.encrypt` (`Fernet` —
-  AES-128-CBC + HMAC) first; `decrypt` only ever runs after a real
-  `authorize` check has already passed. `security/envelope_encryption.py`
-  is pure, deterministic cryptography — no I/O, so unlike this module's
-  real HTTP peer clients it needs no fake for unit tests.
+- **Encryption at rest is real, not a TODO — and now real *envelope*
+  encryption backed by a managed KMS, not one static key.** Every
+  value this module ever stores passes through `EnvelopeCipher.encrypt`
+  (`Fernet` — AES-128-CBC + HMAC); `decrypt` only ever runs after a
+  real `authorize` check has already passed. Previously the whole
+  cipher was keyed by one static `secrets_master_key` living in this
+  module's own config — meaning compromising this module's config
+  compromised every secret it had ever stored, with no external
+  root-of-trust, no independent audit trail on the key itself, and no
+  rotation story. Now every `encrypt` call generates a fresh, random
+  32-byte data key, encrypts the value with it once, and returns that
+  data key *wrapped* by a `KeyManagementProvider` (`security/
+  key_management.py`); `decrypt` unwraps the version's own wrapped key
+  first, then decrypts. Each `SecretVersionRecord` carries its own
+  wrapped data key, so one compromised ciphertext never exposes any
+  other version's key, and the provider's actual root key never
+  leaves the provider. Two implementations behind that one interface:
+  - `LocalStaticKeyManagementProvider` (`SECRETS_KMS_PROVIDER=local`,
+    the default): wraps each data key with the same static local
+    Fernet key the old design used directly -- structurally the
+    *previous* design, demoted to an explicitly-flagged, zero-config
+    dev/test fallback. `main.py` logs a loud startup warning whenever
+    this is what's actually wired, the same posture
+    `jwt_shared_secret_is_insecure_default` already takes elsewhere in
+    this platform.
+  - `VaultTransitKeyManagementProvider` (`SECRETS_KMS_PROVIDER=vault`):
+    a real HashiCorp Vault Transit secrets engine integration — Vault's
+    own `datakey`/`decrypt` endpoints generate and unwrap every data
+    key, so the true root key lives in Vault and inherits its access
+    control, audit logging, and rotation machinery. Plain `httpx`
+    through `ResilientHTTPClient` (retry + circuit breaker), not the
+    `hvac` SDK, consistent with this platform's small-hand-written-
+    adapter convention elsewhere. No live Vault server is reachable
+    from this sandbox — `tests/unit/test_vault_key_management.py`
+    verifies this class against a respx-mocked transport using Vault's
+    real documented request/response shapes (the same "real client,
+    mocked transport" constraint and answer Identity and Access's OIDC
+    verifier hit); a genuine `vault server -dev` instance is the
+    honest verification path a real deployment takes next, not
+    something fabricated here. AWS KMS/GCP KMS are the same shape
+    behind the same port, unbuilt.
 - **Two distinct secrets for two distinct trust boundaries.** This
   module's own inbound API is still protected by the platform-wide
-  `TECTONIC_JWT_SHARED_SECRET` every module shares; encryption at rest is
-  keyed by this module's own dedicated `secrets_master_key`. Compromising
-  one never compromises the other.
+  `TECTONIC_JWT_SHARED_SECRET` every module shares; encryption at rest's
+  outer wrapping layer is keyed by a completely separate secret
+  (`secrets_master_key` for the local provider, Vault's own root key for
+  the Vault provider). Compromising one never compromises the other.
+- **A KMS/Vault outage denies access, it doesn't crash the request.**
+  `SecretAccessService.retrieve` catches `KeyManagementError`
+  specifically (an unreachable Vault, a revoked key version) and
+  records/returns a clean denial (`"key management provider
+  unavailable"`) rather than letting it bubble into a 500 — the same
+  "record and deny, never silently succeed or hard-crash" posture a
+  failed `authorize` call already gets.
 - **Retrieval is gated by a real zero-trust check, not a local
   permission table.** `SecretAccessService.retrieve` calls Identity and
   Access's own real `POST /v1/identity-access/authorize` with scope

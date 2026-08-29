@@ -50,6 +50,7 @@ class SecretVersion(Base):
     secret_id: Mapped[str] = mapped_column(String(255))
     version: Mapped[int] = mapped_column(Integer())
     ciphertext: Mapped[str] = mapped_column(Text())
+    wrapped_data_key: Mapped[str] = mapped_column(Text(), server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

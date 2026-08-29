@@ -11,6 +11,9 @@ from secrets_and_credential_management.core.rotation_service import RotationServ
 from secrets_and_credential_management.core.secret_access_service import SecretAccessService
 from secrets_and_credential_management.core.secret_registry_service import SecretRegistryService
 from secrets_and_credential_management.security.envelope_encryption import EnvelopeCipher
+from secrets_and_credential_management.security.key_management import (
+    LocalStaticKeyManagementProvider,
+)
 
 TEST_MASTER_KEY = "TjDlTNIHnInVxA0zsGHYi6iTjBRtCSnWVcGxrYLXaYc="
 
@@ -18,7 +21,10 @@ TEST_MASTER_KEY = "TjDlTNIHnInVxA0zsGHYi6iTjBRtCSnWVcGxrYLXaYc="
 class Harness:
     def __init__(self, **kwargs):
         self.repository = InMemorySecretsRepository()
-        self.cipher = EnvelopeCipher(master_key=kwargs.get("master_key", TEST_MASTER_KEY))
+        self.key_provider = kwargs.get("key_provider") or LocalStaticKeyManagementProvider(
+            master_key=kwargs.get("master_key", TEST_MASTER_KEY),
+        )
+        self.cipher = EnvelopeCipher(key_provider=self.key_provider)
         self.identity_access = kwargs.get("identity_access") or StubIdentityAccessClient()
         self.auditability = kwargs.get("auditability") or StubAuditabilityClient()
 

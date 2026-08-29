@@ -22,11 +22,16 @@ from secrets_and_credential_management.config import (
     SecretsAndCredentialManagementSettings,
     load_settings,
 )
+from secrets_and_credential_management.core.ports import KeyManagementProvider
 from secrets_and_credential_management.db.session import make_engine, make_session_factory
 from secrets_and_credential_management.security.envelope_encryption import EnvelopeCipher
 from secrets_and_credential_management.security.jwt_auth import (
     INSECURE_DEFAULT_SECRET,
     ServiceAuthMiddleware,
+)
+from secrets_and_credential_management.security.key_management import (
+    LocalStaticKeyManagementProvider,
+    VaultTransitKeyManagementProvider,
 )
 from secrets_and_credential_management.security.openapi_security import configure_openapi_security
 from secrets_and_credential_management.telemetry.logging import configure_logging, get_logger
@@ -35,6 +40,14 @@ from secrets_and_credential_management.telemetry.tracing import configure_tracin
 logger = get_logger(component="main")
 
 INSECURE_DEFAULT_MASTER_KEY = "TjDlTNIHnInVxA0zsGHYi6iTjBRtCSnWVcGxrYLXaYc="
+
+
+def build_key_management_provider(settings: SecretsAndCredentialManagementSettings) -> KeyManagementProvider:
+    if settings.kms_provider == "vault":
+        return VaultTransitKeyManagementProvider(
+            settings.vault_addr, vault_token=settings.vault_token, key_name=settings.vault_transit_key_name,
+        )
+    return LocalStaticKeyManagementProvider(master_key=settings.secrets_master_key)
 
 
 def build_app_context(settings: SecretsAndCredentialManagementSettings) -> AppContext:
@@ -50,7 +63,7 @@ def build_app_context(settings: SecretsAndCredentialManagementSettings) -> AppCo
         auditability=HTTPAuditabilityClient(
             settings.auditability_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
         ),
-        cipher=EnvelopeCipher(master_key=settings.secrets_master_key),
+        cipher=EnvelopeCipher(key_provider=build_key_management_provider(settings)),
     )
 
 
@@ -65,11 +78,17 @@ async def lifespan(app: FastAPI):
             "jwt_shared_secret_is_insecure_default",
             hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
         )
-    if settings.secrets_master_key == INSECURE_DEFAULT_MASTER_KEY:
+    if settings.kms_provider == "local":
         logger.warning(
-            "secrets_master_key_is_insecure_default",
-            hint="set SECRETS_MASTER_KEY before storing real secret values in production",
+            "kms_provider_is_local_not_a_managed_kms",
+            hint="set SECRETS_KMS_PROVIDER=vault (and VAULT_TOKEN/SECRETS_VAULT_ADDR) for a real "
+            "managed-KMS-backed root key in production -- see security/key_management.py",
         )
+        if settings.secrets_master_key == INSECURE_DEFAULT_MASTER_KEY:
+            logger.warning(
+                "secrets_master_key_is_insecure_default",
+                hint="set SECRETS_MASTER_KEY before storing real secret values with the local provider",
+            )
 
     ctx = build_app_context(settings)
     app.state.ctx = ctx

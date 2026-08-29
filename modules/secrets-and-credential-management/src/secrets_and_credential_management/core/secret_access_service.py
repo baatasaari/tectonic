@@ -28,6 +28,7 @@ from secrets_and_credential_management.security.envelope_encryption import (
     DecryptionError,
     EnvelopeCipher,
 )
+from secrets_and_credential_management.security.key_management import KeyManagementError
 from secrets_and_credential_management.telemetry.logging import get_logger
 from secrets_and_credential_management.telemetry.metrics import secrets_access_total
 
@@ -87,11 +88,21 @@ class SecretAccessService:
             )
 
         try:
-            value = self._cipher.decrypt(version.ciphertext)
+            value = await self._cipher.decrypt(ciphertext=version.ciphertext, wrapped_data_key=version.wrapped_data_key)
         except DecryptionError:
             logger.warning("decryption_failed", secret_id=secret.id)
             return await self._record(
                 secret_id=secret.id, tenant_id=secret.tenant_id, allowed=False, reason="decryption failed",
+            )
+        except KeyManagementError as exc:
+            # The identity+scope check already passed -- this is the KMS/Vault round trip
+            # itself failing (unreachable, revoked key), a real-world-recoverable outage,
+            # not a policy denial. Recorded and denied the same way, never surfaced as a
+            # value.
+            logger.warning("key_management_provider_unavailable", secret_id=secret.id, error=str(exc))
+            return await self._record(
+                secret_id=secret.id, tenant_id=secret.tenant_id, allowed=False,
+                reason="key management provider unavailable",
             )
 
         await self._record(secret_id=secret.id, tenant_id=secret.tenant_id, allowed=True, reason="ok")

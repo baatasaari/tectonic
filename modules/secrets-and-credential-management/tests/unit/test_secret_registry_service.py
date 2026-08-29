@@ -17,7 +17,10 @@ async def test_create_secret_stores_ciphertext_not_plaintext(harness):
 
     version = await harness.repository.get_latest_version(secret.id)
     assert version.ciphertext != "hunter2"
-    assert harness.cipher.decrypt(version.ciphertext) == "hunter2"
+    assert version.wrapped_data_key
+    assert await harness.cipher.decrypt(
+        ciphertext=version.ciphertext, wrapped_data_key=version.wrapped_data_key,
+    ) == "hunter2"
 
 
 async def test_get_secret_returns_the_created_record(harness):

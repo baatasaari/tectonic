@@ -45,8 +45,10 @@ class RotationService:
             raise SecretRevokedError(secret_id)
 
         next_version = secret.current_version + 1
+        ciphertext, wrapped_data_key = await self._cipher.encrypt(new_value)
         await self._repository.create_version(SecretVersionRecord(
-            id=new_id(), secret_id=secret.id, version=next_version, ciphertext=self._cipher.encrypt(new_value),
+            id=new_id(), secret_id=secret.id, version=next_version, ciphertext=ciphertext,
+            wrapped_data_key=wrapped_data_key,
         ))
 
         rotated_at = now()

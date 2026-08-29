@@ -41,8 +41,9 @@ class SecretRegistryService:
             created_at=created_at, updated_at=created_at,
         )
         secret = await self._repository.create_secret(secret)
+        ciphertext, wrapped_data_key = await self._cipher.encrypt(value)
         await self._repository.create_version(SecretVersionRecord(
-            id=new_id(), secret_id=secret.id, version=1, ciphertext=self._cipher.encrypt(value),
+            id=new_id(), secret_id=secret.id, version=1, ciphertext=ciphertext, wrapped_data_key=wrapped_data_key,
         ))
         return secret
 

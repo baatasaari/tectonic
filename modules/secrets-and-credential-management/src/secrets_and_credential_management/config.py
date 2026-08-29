@@ -52,14 +52,30 @@ class SecretsAndCredentialManagementSettings(BaseSettings):
     )
     jwt_ttl_seconds: int = 300
 
-    # security/envelope_encryption.py's own key -- encrypts every secret value at rest.
-    # A real, valid Fernet key (32 random bytes, url-safe base64), but an obviously
-    # insecure, publicly-known default so local dev/tests work with zero config; main.py
-    # logs a startup warning if it's still active. NEVER the same secret as
-    # jwt_shared_secret -- a completely different trust boundary.
+    # Which security/key_management.py KeyManagementProvider actually backs
+    # envelope encryption's outer layer -- "local" (zero-config, NOT a real managed
+    # KMS; see that module's own docstring) or "vault" (real HashiCorp Vault Transit
+    # engine). main.py logs a loud startup warning whenever this is "local".
+    kms_provider: str = "local"
+
+    # security/key_management.py's LocalStaticKeyManagementProvider's own wrapping
+    # key -- used only when kms_provider="local". A real, valid Fernet key (32 random
+    # bytes, url-safe base64), but an obviously insecure, publicly-known default so
+    # local dev/tests work with zero config; main.py logs a startup warning if it's
+    # still active. NEVER the same secret as jwt_shared_secret -- a completely
+    # different trust boundary.
     secrets_master_key: str = Field(
         default="TjDlTNIHnInVxA0zsGHYi6iTjBRtCSnWVcGxrYLXaYc=", validation_alias="SECRETS_MASTER_KEY",
     )
+
+    # security/key_management.py's VaultTransitKeyManagementProvider config -- used
+    # only when kms_provider="vault". vault_token uses Vault's own ecosystem-standard
+    # env var name (VAULT_TOKEN, unprefixed) rather than this class's usual
+    # SECRETS_-prefixed convention, the same "match the real-world tool's own
+    # convention" call jwt_shared_secret already makes for TECTONIC_JWT_SHARED_SECRET.
+    vault_addr: str = "http://localhost:8200"
+    vault_token: str = Field(default="", validation_alias="VAULT_TOKEN")
+    vault_transit_key_name: str = "tectonic-secrets"
 
 
 def load_settings() -> SecretsAndCredentialManagementSettings:

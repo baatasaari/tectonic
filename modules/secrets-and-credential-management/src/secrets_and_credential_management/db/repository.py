@@ -33,7 +33,7 @@ def _secret_to_domain(m: models.Secret) -> SecretRecord:
 def _version_to_domain(m: models.SecretVersion) -> SecretVersionRecord:
     return SecretVersionRecord(
         id=str(m.id), secret_id=m.secret_id, version=m.version, ciphertext=m.ciphertext,
-        created_at=_as_utc(m.created_at),
+        wrapped_data_key=m.wrapped_data_key, created_at=_as_utc(m.created_at),
     )
 
 
@@ -117,6 +117,7 @@ class SQLAlchemySecretsRepository:
     async def create_version(self, record: SecretVersionRecord) -> SecretVersionRecord:
         m = models.SecretVersion(
             id=record.id, secret_id=record.secret_id, version=record.version, ciphertext=record.ciphertext,
+            wrapped_data_key=record.wrapped_data_key,
         )
         self.session.add(m)
         await self.session.commit()

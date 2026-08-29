@@ -78,6 +78,14 @@ class SecretVersionRecord:
     secret_id: str
     version: int
     ciphertext: str
+    # The data key that encrypted `ciphertext`, wrapped (encrypted) by whatever
+    # KeyManagementProvider was configured at the moment this version was written --
+    # opaque outside that provider, and useless without a live call back to it (real
+    # envelope encryption: see security/envelope_encryption.py and
+    # security/key_management.py). Every version keeps its own wrapped key rather than
+    # sharing one across the whole secret, so a compromised single ciphertext never
+    # exposes the key any other version used.
+    wrapped_data_key: str
     created_at: datetime = field(default_factory=now)
 
 

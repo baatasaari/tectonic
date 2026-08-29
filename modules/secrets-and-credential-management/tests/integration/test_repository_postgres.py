@@ -63,15 +63,20 @@ async def test_version_history_and_get_latest_version(migrated_url):
                 SecretRecord(id=new_id(), tenant_id="acme", namespace="db", key_name="password")
             )
             await repo.create_version(
-                SecretVersionRecord(id=new_id(), secret_id=secret.id, version=1, ciphertext="ct-v1")
+                SecretVersionRecord(
+                    id=new_id(), secret_id=secret.id, version=1, ciphertext="ct-v1", wrapped_data_key="wdk-v1",
+                )
             )
             await repo.create_version(
-                SecretVersionRecord(id=new_id(), secret_id=secret.id, version=2, ciphertext="ct-v2")
+                SecretVersionRecord(
+                    id=new_id(), secret_id=secret.id, version=2, ciphertext="ct-v2", wrapped_data_key="wdk-v2",
+                )
             )
 
             latest = await repo.get_latest_version(secret.id)
             assert latest.version == 2
             assert latest.ciphertext == "ct-v2"
+            assert latest.wrapped_data_key == "wdk-v2"
     finally:
         await engine.dispose()
 

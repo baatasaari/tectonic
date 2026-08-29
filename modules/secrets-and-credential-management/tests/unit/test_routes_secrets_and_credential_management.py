@@ -22,6 +22,9 @@ from secrets_and_credential_management.security.jwt_auth import (
     ServiceAuthMiddleware,
     mint_service_token,
 )
+from secrets_and_credential_management.security.key_management import (
+    LocalStaticKeyManagementProvider,
+)
 
 SECRET = INSECURE_DEFAULT_SECRET
 MASTER_KEY = "TjDlTNIHnInVxA0zsGHYi6iTjBRtCSnWVcGxrYLXaYc="
@@ -37,7 +40,7 @@ def _app(repository, *, identity_access=None, auditability=None):
         settings=SecretsAndCredentialManagementSettings(), engine=None, session_factory=None,
         identity_access=identity_access or StubIdentityAccessClient(),
         auditability=auditability or StubAuditabilityClient(),
-        cipher=EnvelopeCipher(master_key=MASTER_KEY),
+        cipher=EnvelopeCipher(key_provider=LocalStaticKeyManagementProvider(master_key=MASTER_KEY)),
     )
     app.dependency_overrides[get_ctx] = lambda: ctx
     app.dependency_overrides[get_repository] = lambda: repository

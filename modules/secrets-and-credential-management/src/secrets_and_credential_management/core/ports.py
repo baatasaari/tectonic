@@ -61,3 +61,24 @@ class AuditabilityClient(Protocol):
         emission, it must never block the access or rotation decision
         itself."""
         ...
+
+
+class KeyManagementProvider(Protocol):
+    """Real envelope encryption's outer layer: generates and unwraps the
+    per-version data keys `EnvelopeCipher` uses to encrypt/decrypt a
+    secret's actual value. The provider's own root key never leaves it
+    -- this module only ever holds a data key in plaintext transiently,
+    for the single encrypt/decrypt call it was minted for."""
+
+    async def generate_data_key(self) -> tuple[bytes, str]:
+        """Returns `(plaintext_data_key, wrapped_data_key)` -- 32 raw
+        bytes and an opaque, provider-specific ciphertext of that key,
+        safe to persist alongside the value it encrypts."""
+        ...
+
+    async def decrypt_data_key(self, wrapped_data_key: str) -> bytes:
+        """Unwraps a previously-generated data key back to its 32 raw
+        plaintext bytes. Raises `security.key_management.KeyManagementError`
+        (or a subclass) on any failure -- wrong root key, revoked key
+        version, or the provider being unreachable."""
+        ...
