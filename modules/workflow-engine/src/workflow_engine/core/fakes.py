@@ -233,7 +233,7 @@ class StubAgenticRAGClient:
 
 class StubToolOrchestrationClient:
     async def invoke(
-        self, *, tool_ref: str, arguments: dict[str, Any], tenant_id: str, trace_id: str
+        self, *, tool_ref: str, arguments: dict[str, Any], agent_ref: str, tenant_id: str, trace_id: str
     ) -> dict[str, Any]:
         return {"tool_ref": tool_ref, "result": "stub-ok", "arguments": arguments}
 

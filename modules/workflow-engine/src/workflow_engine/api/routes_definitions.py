@@ -8,6 +8,7 @@ from workflow_engine.app_context import AppContext
 from workflow_engine.core.domain import DefinitionStatus, WorkflowDefinitionRecord, new_id
 from workflow_engine.core.parser import GraphValidationError, parse_and_validate
 from workflow_engine.core.ports import WorkflowRepository
+from workflow_engine.core.symbolic import SymbolicRule
 from workflow_engine.schemas.definitions import (
     CreateDefinitionRequest,
     DefinitionDetail,
@@ -49,6 +50,17 @@ async def create_definition(
         created_by=_created_by(request),
     )
     record = await repository.create_definition(record)
+
+    # Ticket #82: register this definition's own symbolic rulesets (if any)
+    # into the process-wide SymbolicRuleExecutor -- see CreateDefinitionRequest's
+    # own docstring for why this is real, additive configuration rather than
+    # new evaluation logic (SymbolicRuleExecutor.evaluate/register_ruleset are
+    # both pre-existing, already-tested code).
+    for rule_ref, rules in body.symbolic_rulesets.items():
+        ctx.symbolic_executor.register_ruleset(
+            rule_ref, [SymbolicRule(id=r.id, when=r.when, then=r.then, priority=r.priority) for r in rules],
+        )
+
     return DefinitionSummary(id=record.id, version=record.version, status=record.status.value)
 
 

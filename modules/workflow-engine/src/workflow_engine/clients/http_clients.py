@@ -94,12 +94,23 @@ class HTTPToolOrchestrationClient(ResilientHTTPClient):
         super().__init__(base_url, client=client, breaker_name="tool-orchestration", auth=auth)
 
     async def invoke(
-        self, *, tool_ref: str, arguments: dict[str, Any], tenant_id: str, trace_id: str
+        self, *, tool_ref: str, arguments: dict[str, Any], agent_ref: str, tenant_id: str, trace_id: str
     ) -> dict[str, Any]:
+        # Another real wire-shape mismatch ticket #82 surfaced (same class as
+        # LLM Gateway's and Human Oversight's own clients above): this posted
+        # an invented `/v1/tools/invoke {tool_ref, arguments, tenant_id}`
+        # shape. Tool Orchestration's real route is
+        # `/v1/tool-orchestration/invoke`, needing `InvokeToolRequest`'s real
+        # fields (`tool_id`, `parameters`, `agent_ref`, `workflow_instance_id`)
+        # and an `X-Tenant-Id` header, not a tenant_id body field.
+        # `tool_ref` here is expected to already be Tool Orchestration's own
+        # real `tool_id` (a workflow definition's own `config.tool_refs`
+        # embeds the concrete id after registering the tool -- see
+        # docs/phase2-product-slice-01-support-agent.md).
         resp = await self._post(
-            "/v1/tools/invoke",
-            json={"tool_ref": tool_ref, "arguments": arguments, "tenant_id": tenant_id},
-            headers={"X-Trace-Id": trace_id},
+            "/v1/tool-orchestration/invoke",
+            json={"tool_id": tool_ref, "parameters": arguments, "agent_ref": agent_ref},
+            headers={"X-Trace-Id": trace_id, "X-Tenant-Id": tenant_id},
         )
         return resp.json()
 
@@ -117,12 +128,31 @@ class HTTPGuardrailsClient(ResilientHTTPClient):
     async def check(
         self, *, content: dict[str, Any], policy_profile: str, tenant_id: str
     ) -> tuple[bool, dict[str, Any]]:
+        # Another real wire-shape mismatch ticket #82 surfaced (same class as
+        # LLM Gateway's/Human Oversight's/Tool Orchestration's own clients
+        # above): this posted an invented `{content, policy_profile,
+        # tenant_id}` body and read an invented `{allowed, detail}` response.
+        # Guardrails' real CheckRequest needs `text` (a string) + `stage`
+        # ("input"/"output") + an X-Tenant-Id header (not a body field); its
+        # real CheckResponse carries `decision` ("allow"/"block"/"redact"),
+        # not `allowed`. `policy_profile` (this port's own generic string) is
+        # deliberately not translated to `policy_profile_id` -- Guardrails
+        # already falls back to a real auto-created default profile per
+        # tenant when none is given (see its own `_default_profile`), which is
+        # the common case every existing caller of this port actually wants.
+        stage = "output" if "output" in content else "input"
+        text = content.get("output") or content.get("input") or content
+        if not isinstance(text, str):
+            text = json.dumps(text, default=str)
         resp = await self._post(
             "/v1/guardrails/check",
-            json={"content": content, "policy_profile": policy_profile, "tenant_id": tenant_id},
+            json={"text": text, "stage": stage},
+            headers={"X-Tenant-Id": tenant_id},
         )
         data = resp.json()
-        return bool(data["allowed"]), data.get("detail", {})
+        allowed = data["decision"] != "block"
+        detail = {"violation_category": data.get("violation_category"), "checks_run": data.get("checks_run", [])}
+        return allowed, detail
 
 
 class HTTPAgenticRAGClient(ResilientHTTPClient):

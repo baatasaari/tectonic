@@ -69,7 +69,8 @@ class NeuralStepExecutor:
 
         for tool_ref in node.config.get("tool_refs", []):
             tool_result = await self.tool_orchestration.invoke(
-                tool_ref=tool_ref, arguments=response.get("tool_arguments", {}), tenant_id=tenant_id, trace_id=trace_id
+                tool_ref=tool_ref, arguments=response.get("tool_arguments", {}), agent_ref=agent_ref,
+                tenant_id=tenant_id, trace_id=trace_id,
             )
             response.setdefault("tool_results", {})[tool_ref] = tool_result
 
