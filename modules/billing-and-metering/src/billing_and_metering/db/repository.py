@@ -3,7 +3,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from billing_and_metering.core.domain import (
@@ -111,6 +113,34 @@ class SQLAlchemyBillingRepository:
         await self.session.refresh(m)
         return _usage_to_domain(m)
 
+    async def upsert_usage_record(self, record: MeteredUsageRecord) -> MeteredUsageRecord:
+        # A real atomic upsert -- INSERT ... ON CONFLICT (tenant_id, period, resource) DO
+        # UPDATE ... RETURNING, the same shape Multi-tenancy's own increment_quota_counter
+        # uses -- so a retried metering run for the same period always converges to one
+        # authoritative row per resource, never a duplicate to double-count later.
+        stmt = (
+            pg_insert(models.UsageRecord)
+            .values(
+                id=record.id, tenant_id=record.tenant_id, period=record.period, resource=record.resource,
+                quantity=record.quantity, source=record.source,
+            )
+            .on_conflict_do_update(
+                index_elements=[models.UsageRecord.tenant_id, models.UsageRecord.period, models.UsageRecord.resource],
+                set_={"quantity": record.quantity, "source": record.source, "computed_at": func.now()},
+            )
+            .returning(
+                models.UsageRecord.id, models.UsageRecord.tenant_id, models.UsageRecord.period,
+                models.UsageRecord.resource, models.UsageRecord.quantity, models.UsageRecord.source,
+                models.UsageRecord.computed_at,
+            )
+        )
+        row = (await self.session.execute(stmt)).one()
+        await self.session.commit()
+        return MeteredUsageRecord(
+            id=str(row.id), tenant_id=row.tenant_id, period=row.period, resource=row.resource,
+            quantity=row.quantity, source=row.source, computed_at=_as_utc(row.computed_at),
+        )
+
     async def list_usage_records(
         self, *, tenant_id: str | None = None, period: str | None = None, limit: int = 50, offset: int = 0,
     ) -> tuple[list[MeteredUsageRecord], int]:
@@ -136,12 +166,28 @@ class SQLAlchemyBillingRepository:
             total_amount=record.total_amount, complete=record.complete, finalized_at=record.finalized_at,
         )
         self.session.add(m)
-        await self.session.commit()
+        try:
+            await self.session.commit()
+        except IntegrityError:
+            # A concurrent caller won the race to create this (tenant_id, period)'s
+            # invoice first (the real uq_invoices_tenant_period constraint) -- return
+            # their row rather than raising, the same idempotent-under-concurrency
+            # guarantee upsert_usage_record gives the metering ledger.
+            await self.session.rollback()
+            existing = await self.get_invoice_for_tenant_period(tenant_id=record.tenant_id, period=record.period)
+            if existing is not None:
+                return existing
+            raise
         await self.session.refresh(m)
         return _invoice_to_domain(m)
 
     async def get_invoice(self, invoice_id: str) -> InvoiceRecord | None:
         m = await self.session.get(models.Invoice, invoice_id)
+        return _invoice_to_domain(m) if m else None
+
+    async def get_invoice_for_tenant_period(self, *, tenant_id: str, period: str) -> InvoiceRecord | None:
+        stmt = select(models.Invoice).where(models.Invoice.tenant_id == tenant_id, models.Invoice.period == period)
+        m = (await self.session.execute(stmt)).scalar_one_or_none()
         return _invoice_to_domain(m) if m else None
 
     async def update_invoice(self, record: InvoiceRecord) -> InvoiceRecord:
@@ -182,6 +228,18 @@ class SQLAlchemyBillingRepository:
         await self.session.commit()
         await self.session.refresh(m)
         return _line_to_domain(m)
+
+    async def replace_invoice_lines(
+        self, *, invoice_id: str, records: list[InvoiceLineRecord],
+    ) -> list[InvoiceLineRecord]:
+        await self.session.execute(delete(models.InvoiceLine).where(models.InvoiceLine.invoice_id == invoice_id))
+        for record in records:
+            self.session.add(models.InvoiceLine(
+                id=record.id, invoice_id=record.invoice_id, resource=record.resource, quantity=record.quantity,
+                unit_price=record.unit_price, amount=record.amount,
+            ))
+        await self.session.commit()
+        return await self.list_invoice_lines(invoice_id=invoice_id)
 
     async def list_invoice_lines(self, *, invoice_id: str) -> list[InvoiceLineRecord]:
         stmt = select(models.InvoiceLine).where(models.InvoiceLine.invoice_id == invoice_id)

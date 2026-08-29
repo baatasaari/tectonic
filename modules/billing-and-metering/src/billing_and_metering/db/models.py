@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CHAR, JSON, Boolean, DateTime, Float, String, func
+from sqlalchemy import CHAR, JSON, Boolean, DateTime, Float, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -32,6 +32,9 @@ class PricingPlan(Base):
 
 class UsageRecord(Base):
     __tablename__ = "usage_records"
+    # The metering ledger's own idempotency key -- see BillingRepository.upsert_usage_record's
+    # docstring (core/ports.py). Real Postgres ON CONFLICT target, not just documentation.
+    __table_args__ = (UniqueConstraint("tenant_id", "period", "resource", name="uq_usage_records_tenant_period_resource"),)
 
     id: Mapped[str] = mapped_column(UUIDType, primary_key=True, default=_new_id)
     tenant_id: Mapped[str] = mapped_column(String(255))
@@ -44,6 +47,10 @@ class UsageRecord(Base):
 
 class Invoice(Base):
     __tablename__ = "invoices"
+    # One invoice per (tenant, period), ever -- idempotent generation
+    # (InvoiceService.generate_invoice) relies on this real constraint, not just
+    # application-level check-then-act, to stay correct under a concurrent retry.
+    __table_args__ = (UniqueConstraint("tenant_id", "period", name="uq_invoices_tenant_period"),)
 
     id: Mapped[str] = mapped_column(UUIDType, primary_key=True, default=_new_id)
     tenant_id: Mapped[str] = mapped_column(String(255))

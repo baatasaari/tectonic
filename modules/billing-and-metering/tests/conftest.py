@@ -21,7 +21,7 @@ class Harness:
         self.multi_tenancy = kwargs.get("multi_tenancy") or StubMultiTenancyClient()
 
         self.pricing_plan_service = PricingPlanService(self.repository, self.multi_tenancy)
-        self.metering_service = MeteringService(self.repository, self.finops, self.auditability)
+        self.metering_service = MeteringService(self.repository, self.finops, self.auditability, self.multi_tenancy)
         self.invoice_service = InvoiceService(self.repository, self.pricing_plan_service, self.metering_service)
 
 

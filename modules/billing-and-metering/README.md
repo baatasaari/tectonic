@@ -54,18 +54,46 @@ src/billing_and_metering/
   only — the same one-way `_LEGAL_TRANSITIONS` shape Secrets and
   Credential Management (Module 32) established for its own
   revocation lifecycle.
-- **Pricing is entitlement, not just a billing record.** Creating a
-  tenant-specific plan (`tenant_id` set, not the global default)
-  wholesale-syncs its `unit_prices` keys — minus `"llm.cost_usd"`,
-  which is a metered resource, not a module — to Multi-tenancy's
-  `POST /tenants/{id}/entitlements`, so every other module's
-  `gate(tenant_id, module=...)` check reflects the plan the instant it's
-  created. The sync is best-effort and never blocks or fails plan
-  creation: `HTTPMultiTenancyClient.sync_entitlements` swallows its own
-  errors and logs a warning if Multi-tenancy is unreachable — the same
-  fail-open posture the entitlement gate itself takes, since a
-  commercial/entitlement path must never become an availability
-  dependency for the billing record of truth.
+- **Pricing is entitlement, not just a billing record — in both
+  directions.** Creating a tenant-specific plan (`tenant_id` set, not
+  the global default) wholesale-syncs its `unit_prices` keys — minus
+  `"llm.cost_usd"`, which is a metered resource, not a module — to
+  Multi-tenancy's `POST /tenants/{id}/entitlements`, so every other
+  module's `gate(tenant_id, module=...)` check reflects the plan the
+  instant it's created. And the other direction now holds too:
+  `MeteringService` calls that same real
+  `GET /tenants/{id}/gate?module=...` before metering each resource,
+  so a tenant downgraded away from a module (entitlements revoked,
+  edited elsewhere, or just out of sync with the plan) stops being
+  billed for it on the very next metering run, not just blocked from
+  calling it. `"llm.cost_usd"` is gated against the real `llm-gateway`
+  module name, since it isn't itself a module. A denied entitlement
+  skips that resource without marking the invoice `complete: false` --
+  it's a deliberate, known exclusion, not missing data. Both directions
+  fail OPEN when Multi-tenancy is unreachable (meter/bill as if
+  entitled, sync silently degraded) -- the same posture
+  `EntitlementGateMiddleware` takes platform-wide: a commercial gate
+  must never turn an outage into missed revenue on top of itself.
+- **The metering ledger is now genuinely idempotent, tied to a real
+  unique key.** Previously, re-running metering for a period already
+  metered (a retried scheduler job, a re-triggered
+  `POST /invoices/generate`) created a second, duplicate
+  `MeteredUsageRecord` per resource -- summed together on the next
+  invoice, silently double-billing the tenant. Every usage number now
+  goes through `BillingRepository.upsert_usage_record`, a real
+  Postgres `INSERT ... ON CONFLICT (tenant_id, period, resource) DO
+  UPDATE ... RETURNING` (the same atomic-upsert shape Multi-tenancy's
+  own `increment_quota_counter` already uses for a different table) --
+  re-metering a period converges to one authoritative row per resource
+  instead of accumulating duplicates. `InvoiceService.generate_invoice`
+  is idempotent the same way: a real `UNIQUE (tenant_id, period)`
+  constraint on `invoices` backs a check-then-update-or-create flow (a
+  concurrent race falls back to the winner's own row via a caught
+  `IntegrityError`, verified under 5 real concurrent callers in
+  `tests/integration`), a `draft` invoice for an already-metered period
+  gets its lines wholesale-replaced rather than duplicated, and a
+  `finalized` one is returned completely unchanged -- never re-metered,
+  let alone re-totaled, no matter what usage arrives afterward.
 
 - **Its generated OpenAPI document declares the real auth it enforces**
   (`security/openapi_security.py`) — see Workflow Engine's README and the

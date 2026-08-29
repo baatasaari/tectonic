@@ -1,6 +1,17 @@
 """Invoice Service (LLD §2 sub-components): aggregates metered usage
 into invoice lines and a total, and owns the invoice's one-way
 `draft -> finalized` lifecycle.
+
+`generate_invoice` is idempotent, the invoice-level half of this
+module's idempotent metering ledger (see `core/metering_service.py`'s
+own docstring for the usage-record half): calling it twice for the
+same `(tenant_id, period)` never creates a second invoice. A `draft`
+invoice for that period is re-metered and its lines wholesale-replaced
+in place (a pricing plan edit or a newly-revoked entitlement must never
+leave a stale line behind); a `finalized` one is returned completely
+unchanged, without even re-metering -- invoicing is one-way, and a
+finalized invoice is the truth for that period from then on, whatever
+new usage arrives afterward.
 """
 from __future__ import annotations
 
@@ -33,6 +44,13 @@ class InvoiceService:
         self._metering_service = metering_service
 
     async def generate_invoice(self, *, tenant_id: str, period: str) -> GeneratedInvoice:
+        existing = await self._repository.get_invoice_for_tenant_period(tenant_id=tenant_id, period=period)
+        if existing is not None and existing.status == InvoiceStatus.FINALIZED:
+            # Invoicing is one-way -- never re-meter, let alone re-total, a period
+            # that's already been finalized, no matter what new usage has arrived since.
+            lines = await self._repository.list_invoice_lines(invoice_id=existing.id)
+            return GeneratedInvoice(invoice=existing, lines=lines)
+
         plan = await self._pricing_plan_service.resolve_active_plan(tenant_id)
         usage_records, complete = await self._metering_service.meter_tenant(
             tenant_id=tenant_id, period=period, plan=plan,
@@ -49,14 +67,22 @@ class InvoiceService:
                 unit_price=unit_price, amount=amount,
             ))
 
-        invoice = await self._repository.create_invoice(InvoiceRecord(
-            id=new_id(), tenant_id=tenant_id, period=period, total_amount=total_amount, complete=complete,
-        ))
+        if existing is not None:
+            # A draft invoice for this period already exists (a retried call, a
+            # re-triggered generation after usage changed) -- update it and
+            # wholesale-replace its lines rather than creating a second invoice.
+            existing.total_amount = total_amount
+            existing.complete = complete
+            existing.generated_at = now()
+            invoice = await self._repository.update_invoice(existing)
+        else:
+            invoice = await self._repository.create_invoice(InvoiceRecord(
+                id=new_id(), tenant_id=tenant_id, period=period, total_amount=total_amount, complete=complete,
+            ))
 
-        lines = []
         for line in pending_lines:
             line.invoice_id = invoice.id
-            lines.append(await self._repository.create_invoice_line(line))
+        lines = await self._repository.replace_invoice_lines(invoice_id=invoice.id, records=pending_lines)
 
         billing_invoices_generated_total.labels(complete=str(complete)).inc()
         billing_period_revenue_usd.labels(tenant_id=tenant_id).set(total_amount)

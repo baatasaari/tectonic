@@ -30,7 +30,7 @@ def build_pricing_plan_service(repository: BillingRepository, ctx: AppContext | 
 
 
 def build_metering_service(repository: BillingRepository, ctx: AppContext) -> MeteringService:
-    return MeteringService(repository, ctx.finops, ctx.auditability)
+    return MeteringService(repository, ctx.finops, ctx.auditability, ctx.multi_tenancy)
 
 
 def build_invoice_service(repository: BillingRepository, ctx: AppContext) -> InvoiceService:

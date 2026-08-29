@@ -14,3 +14,10 @@ billing_period_revenue_usd = Gauge(
     "Total invoiced amount for the most recently generated invoice, per tenant",
     labelnames=("tenant_id",),
 )
+
+billing_metering_skipped_not_entitled_total = Counter(
+    "billing_metering_skipped_not_entitled_total",
+    "Count of resources skipped during metering because the tenant's real Multi-tenancy "
+    "entitlement gate currently denies that module -- a deliberate exclusion, not missing data",
+    labelnames=("resource",),
+)

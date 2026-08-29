@@ -35,13 +35,38 @@ class BillingRepository(Protocol):
 
     async def create_usage_record(self, record: MeteredUsageRecord) -> MeteredUsageRecord: ...
 
+    async def upsert_usage_record(self, record: MeteredUsageRecord) -> MeteredUsageRecord:
+        """The metering ledger's own idempotency: `(tenant_id, period,
+        resource)` is a real unique key, so re-metering the same period
+        (a retried scheduler run, a re-triggered `generate_invoice`)
+        converges to one authoritative row per resource instead of
+        accumulating duplicates that would double-count on the next
+        invoice. A real atomic `INSERT ... ON CONFLICT DO UPDATE` at the
+        SQL layer (`db/repository.py`) -- see Multi-tenancy's own
+        `increment_quota_counter` for the same shape applied to a
+        different table."""
+        ...
+
     async def list_usage_records(
         self, *, tenant_id: str | None = None, period: str | None = None, limit: int = 50, offset: int = 0,
     ) -> tuple[list[MeteredUsageRecord], int]: ...
 
-    async def create_invoice(self, record: InvoiceRecord) -> InvoiceRecord: ...
+    async def create_invoice(self, record: InvoiceRecord) -> InvoiceRecord:
+        """Real `(tenant_id, period)` uniqueness backs this too (see
+        `MeteredUsageRecord`'s note above) -- a concurrent second caller
+        racing to create the same period's invoice gets the first
+        caller's own row back rather than a duplicate."""
+        ...
 
     async def get_invoice(self, invoice_id: str) -> InvoiceRecord | None: ...
+
+    async def get_invoice_for_tenant_period(self, *, tenant_id: str, period: str) -> InvoiceRecord | None:
+        """The other half of idempotent invoice generation:
+        `InvoiceService.generate_invoice` checks this first so a retried
+        or re-triggered call for a period that already has an invoice
+        updates that same row (if still `draft`) or returns it unchanged
+        (if `finalized`) instead of creating a duplicate."""
+        ...
 
     async def update_invoice(self, record: InvoiceRecord) -> InvoiceRecord: ...
 
@@ -51,6 +76,17 @@ class BillingRepository(Protocol):
     ) -> tuple[list[InvoiceRecord], int]: ...
 
     async def create_invoice_line(self, record: InvoiceLineRecord) -> InvoiceLineRecord: ...
+
+    async def replace_invoice_lines(
+        self, *, invoice_id: str, records: list[InvoiceLineRecord],
+    ) -> list[InvoiceLineRecord]:
+        """Wholesale-replaces a draft invoice's line items -- never a
+        field-by-field patch, the same "a plan change fully re-derives
+        the set" posture Multi-tenancy's entitlements/quota-set replace
+        endpoints already take. Re-metering a period whose resource set
+        changed (a pricing plan edit, a resource that's no longer
+        entitled) must never leave a stale line behind."""
+        ...
 
     async def list_invoice_lines(self, *, invoice_id: str) -> list[InvoiceLineRecord]: ...
 
@@ -80,4 +116,17 @@ class MultiTenancyClient(Protocol):
         pricing plan is a committed billing record the moment it's
         created, and Multi-tenancy being unreachable must never block or
         fail that."""
+        ...
+
+    async def gate(self, *, tenant_id: str, module: str) -> tuple[bool, str]:
+        """Calls Multi-tenancy's real `GET /tenants/{id}/gate?module=X` --
+        the same real entitlement check `EntitlementGateMiddleware` uses
+        platform-wide, reused here so `MeteringService` never meters (and
+        therefore never bills) a resource for a module the tenant isn't
+        currently entitled to. Implementations must fail OPEN
+        (`(True, "")`, with a logged warning) if Multi-tenancy is
+        unreachable -- the same deliberate contrast with zero-trust auth
+        every other use of this endpoint in this platform already takes:
+        a commercial gate must never turn a billing outage into missed
+        revenue on top of the outage itself."""
         ...

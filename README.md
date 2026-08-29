@@ -684,10 +684,31 @@ transport" answer Identity and Access's OIDC verifier gave to the same
 "no live external server reachable from this sandbox" constraint. Full
 reasoning in that module's own README.
 
+**Also fixed**: Billing and Metering's metering ledger is now genuinely
+idempotent and tied to real entitlements. Previously, re-running
+metering for an already-metered period (a retried scheduler job, a
+re-triggered `POST /invoices/generate`) created a second, duplicate
+usage record per resource — summed together on the next invoice,
+silently double-billing the tenant — and metering never checked
+whether the tenant was still entitled to a resource's module before
+billing for it. Every usage number now goes through a real Postgres
+`INSERT ... ON CONFLICT (tenant_id, period, resource) DO UPDATE ...
+RETURNING` (the same atomic-upsert shape Multi-tenancy's own
+`increment_quota_counter` already uses), so re-metering a period
+converges to one authoritative row per resource; invoice generation
+is idempotent the same way, backed by a real `UNIQUE (tenant_id,
+period)` constraint, verified under 5 concurrent callers against real
+Postgres. `MeteringService` now also calls Multi-tenancy's real `GET
+/tenants/{id}/gate?module=...` before metering each resource — the
+same check `EntitlementGateMiddleware` uses platform-wide — so a
+tenant downgraded away from a module stops being billed for it on the
+very next metering run, failing open (meter as if entitled) if
+Multi-tenancy is unreachable, the same posture every other use of that
+gate already takes. Full reasoning in that module's own README.
+
 **In progress**, tracked against the assessment's own Phase 1 (platform
-kernel) scope: an idempotent metering ledger, Observability's
-trace-query/SLO surfaces, and CI supply-chain gates (SBOM, signing,
-contract tests).
+kernel) scope: Observability's trace-query/SLO surfaces and CI
+supply-chain gates (SBOM, signing, contract tests).
 
 ## Modules
 
