@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from billing_and_metering.api.deps import (
     build_invoice_service,
+    build_metering_service,
     build_pricing_plan_service,
     get_ctx,
     get_repository,
@@ -24,6 +25,7 @@ from billing_and_metering.schemas.billing_and_metering import (
     InvoiceLineSchema,
     InvoiceListResponse,
     InvoiceSchema,
+    MeterTenantResponse,
     PricingPlanListResponse,
     PricingPlanSchema,
     UsageRecordListResponse,
@@ -162,6 +164,29 @@ async def finalize_invoice(
     except InvalidTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _invoice_schema(invoice)
+
+
+@router.post("/tenants/{tenant_id}/meter", response_model=MeterTenantResponse)
+async def meter_tenant(
+    tenant_id: str,
+    period: str = Query(..., description="'daily' or 'monthly', matching the tenant's pricing plan's own period"),
+    ctx: AppContext = Depends(get_ctx),
+    repository: BillingRepository = Depends(get_repository),
+) -> MeterTenantResponse:
+    """Real HTTP trigger for `MeteringService.meter_tenant()` -- see
+    MeterTenantResponse's own docstring (ticket #82) for why this didn't
+    already exist. A real deployment's scheduler calls this periodically;
+    this endpoint is that real, tested computation exposed in the meantime."""
+    plan = await repository.get_pricing_plan_for_tenant(tenant_id)
+    if plan is None:
+        raise HTTPException(status_code=404, detail=f"no pricing plan for tenant '{tenant_id}'")
+
+    service = build_metering_service(repository, ctx)
+    records, complete = await service.meter_tenant(tenant_id=tenant_id, period=period, plan=plan)
+    return MeterTenantResponse(
+        tenant_id=tenant_id, period=period, complete=complete,
+        records=[_usage_schema(r) for r in records],
+    )
 
 
 @router.get("/usage-records", response_model=UsageRecordListResponse)

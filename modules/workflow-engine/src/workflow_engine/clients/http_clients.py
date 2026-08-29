@@ -80,6 +80,19 @@ class HTTPLLMGatewayClient(ResilientHTTPClient):
         )
         data = resp.json()
         content = data["choices"][0]["message"]["content"]
+        # A step that needs to act on structured fields (`tool_arguments` for
+        # a tool-calling step, e.g.) needs them as real top-level keys of the
+        # returned response dict, not buried inside a JSON-encoded string --
+        # a provider/mock behind LLM Gateway that wants to communicate more
+        # than plain prose back can return a JSON object (with its own
+        # "content" key) as its message content; this unwraps it losslessly.
+        # Plain prose (the common, final-answer case) falls through as-is.
+        try:
+            parsed = json.loads(content)
+        except (json.JSONDecodeError, TypeError):
+            parsed = None
+        if isinstance(parsed, dict) and "content" in parsed:
+            return parsed, 0.95
         return {"content": content}, 0.95
 
 

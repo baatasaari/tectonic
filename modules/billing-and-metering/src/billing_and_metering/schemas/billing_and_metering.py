@@ -111,3 +111,18 @@ class UsageRecordListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class MeterTenantResponse(BaseModel):
+    """Ticket #82 (Phase 2 support-agent slice): before this, MeteringService
+    .meter_tenant() -- real, tested, idempotent code -- had no real HTTP
+    trigger at all, the same "who calls this periodically" gap this
+    platform already documents for other modules' own background
+    computations (e.g. Multi-tenancy's isolation probe, Observability's own
+    SLO/alert evaluate endpoints), except those at least exposed the
+    computation as a callable endpoint -- this module never had."""
+
+    tenant_id: str
+    period: str
+    records: list[UsageRecordSchema]
+    complete: bool
