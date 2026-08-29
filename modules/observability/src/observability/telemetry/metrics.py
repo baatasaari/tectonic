@@ -31,3 +31,9 @@ observability_storage_cost_per_million_spans = Gauge(
     "observability_storage_cost_per_million_spans",
     "Informational, feeds FinOps",
 )
+
+observability_alert_events_total = Counter(
+    "observability_alert_events_total",
+    "Count of real alert rule evaluations that produced a firing or resolved event",
+    labelnames=("tenant_id", "status"),
+)

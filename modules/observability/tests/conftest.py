@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import pytest
 
+from observability.core.alerting_service import AlertingService
 from observability.core.completeness import TraceCompletenessCalculator
 from observability.core.cost_attribution import CostAttributionJoiner
 from observability.core.domain import SpanRecord, now
 from observability.core.fakes import InMemoryObservabilityRepository, StubLLMGatewayClient
 from observability.core.ingestion import IngestionService
 from observability.core.reasoning_reconstructor import ReasoningTraceReconstructor
+from observability.core.slo_service import SLOService
 
 
 class Harness:
@@ -20,9 +22,11 @@ class Harness:
         self.reconstructor = ReasoningTraceReconstructor(self.llm_gateway, enabled=kwargs.get("narrative_enabled", True))
         self.cost_joiner = CostAttributionJoiner()
         self.completeness_calculator = TraceCompletenessCalculator(self.repository, self.expected_spans)
+        self.slo_service = SLOService(self.repository)
+        self.alerting_service = AlertingService(self.repository)
 
     async def add_span(self, tenant_id: str, trace_id: str, span_id: str, name: str, **overrides) -> SpanRecord:
-        base = now()
+        base = overrides.pop("start_time", now())
         record = SpanRecord(
             id=f"{trace_id}:{span_id}", tenant_id=tenant_id, trace_id=trace_id, span_id=span_id,
             parent_span_id=overrides.pop("parent_span_id", None), name=name,

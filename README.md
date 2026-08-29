@@ -706,9 +706,29 @@ very next metering run, failing open (meter as if entitled) if
 Multi-tenancy is unreachable, the same posture every other use of that
 gate already takes. Full reasoning in that module's own README.
 
+**Also fixed**: Observability's trace query, SLO, and alerting surfaces
+(the LLD's own purpose statement: "Owns ingestion, storage, querying,
+dashboarding and alerting infrastructure" — ingestion existed;
+querying, SLOs, and alerting did not). `GET /traces` now lists one row
+per trace via a real Postgres `GROUP BY`/`bool_or` aggregate query
+(span count, time range, whether any span errored), not every span
+pulled client-side; `GET /traces/{trace_id}` returns the full span
+list. A new `SLOService` defines error-rate/p95-latency objectives
+over a trailing window and evaluates them for real — a genuine
+linear-interpolation percentile (the same method NumPy's default uses)
+or error fraction against the target, plus a standard error-budget-
+remaining fraction for error-rate SLOs — reporting `compliant: null`
+rather than a fabricated pass when a window has zero samples. A new
+`AlertingService` watches the same two metrics with a real threshold
+and reconciles a firing/resolved event state machine from each
+evaluation, idempotently. Neither runs on a real scheduler (no cron
+infra in this sandbox, the same gap every other module's own
+background-computation endpoint already has) — both are exposed as
+real, tested endpoints a scheduler is meant to call. Full reasoning in
+that module's own README.
+
 **In progress**, tracked against the assessment's own Phase 1 (platform
-kernel) scope: Observability's trace-query/SLO surfaces and CI
-supply-chain gates (SBOM, signing, contract tests).
+kernel) scope: CI supply-chain gates (SBOM, signing, contract tests).
 
 ## Modules
 

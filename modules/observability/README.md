@@ -16,18 +16,21 @@ src/observability/
   app_context.py           Process-wide dependency container
   config.py                 Pydantic Settings — LLD config schema
   core/
-    domain.py                SpanRecord/CostAttributionEntry/TraceCompletenessResult dataclasses
+    domain.py                SpanRecord/CostAttributionEntry/TraceCompletenessResult/TraceSummary/SLODefinition/AlertRule/AlertEvent dataclasses
     ports.py                    Repository, LLM Gateway
     fakes.py                      In-memory implementations of every port, for unit tests
     ingestion.py                    Ingestion Service — the OTLP-endpoint substitute (see its docstring)
     reasoning_reconstructor.py        Reasoning-Trace Reconstructor — LLM Gateway call + deterministic fallback
     cost_attribution.py                 Cost Attribution Joiner — reads LLM Gateway's real `gen_ai.usage.*`/`llm_gateway.cost` span attributes
     completeness.py                       Trace completeness vs configured expected workflow shapes
+    metrics_query.py                        Real error-rate/p95-latency computation shared by SLOs and alerting
+    slo_service.py                            SLO Service — define + evaluate error-rate/latency objectives
+    alerting_service.py                         Alerting Service — real threshold rules, a firing/resolved event state machine
   db/                      SQLAlchemy 2.0 async model + repository
   clients/                 HTTP client for LLM Gateway (narrative generation)
   security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate, real OpenAPI security scheme declarations
   telemetry/                OTel tracing, Prometheus meta-metrics, structlog logging
-  api/                       FastAPI router — ingest, reasoning-narrative, cost-attribution, trace-completeness
+  api/                       FastAPI router — ingest, reasoning-narrative, cost-attribution, trace-completeness, trace query, SLOs, alerting
   schemas/                    Pydantic request/response models
 ```
 
@@ -109,6 +112,51 @@ src/observability/
   domain's own tz-aware `now()` default) both assume a timestamptz
   column — invisible under SQLite, but asyncpg rejected every write
   using an aware datetime against real Postgres. Fixed in `db/models.py`.
+
+- **Trace query, SLO, and alerting surfaces (Phase 1 kernel; the LLD's
+  own §22 purpose statement: "Owns ingestion, storage, querying,
+  dashboarding and alerting infrastructure").** Ingesting spans into
+  Postgres was never itself a *query* surface -- `list_spans_for_trace`/
+  `list_traces_for_tenant` existed only as internal helpers the
+  Reasoning-Trace Reconstructor and Cost Attribution Joiner called,
+  with no way for a dashboard or a support engineer to actually browse
+  traces, and this module had no concept of an SLO or an alert at all.
+  All three are now real:
+  - **Trace query**: `GET /traces?tenant_id=&workflow_type=` lists
+    one row per trace -- span count, time range, whether any span
+    errored -- computed by a real Postgres `GROUP BY`/`bool_or`
+    aggregate query (`ObservabilityRepository.list_trace_summaries`),
+    never every span pulled client-side just to summarize it.
+    `GET /traces/{trace_id}` returns the full span list for one trace.
+  - **SLOs**: `SLOService` defines a target (`error_rate` or
+    `latency_p95`, the two metrics genuinely computable from ingested
+    span data alone) over a trailing window, optionally scoped to one
+    `service_name`. `POST /slos/{id}/evaluate` computes the real
+    current value -- a real linear-interpolation p95
+    (`core/metrics_query.py`, the same method NumPy's default
+    `percentile` uses) or a real error fraction -- against the
+    target, and a standard SRE error-budget-remaining fraction for
+    error-rate SLOs (latency SLOs never get a fabricated one; a
+    per-window ceiling check doesn't map to a consumable budget).
+    Zero samples in the window reports `compliant: null`, never a
+    fabricated pass -- the same insufficient-data-over-fabrication
+    call Billing and Metering's own rotation `ComplianceReport`
+    already makes with zero active secrets.
+  - **Alerting**: `AlertingService` watches the same two metrics with
+    a real comparison/threshold, and `POST /alert-rules/{id}/evaluate`
+    reconciles a real firing/resolved `AlertEvent` state machine from
+    it -- breached and nothing firing creates a new firing event;
+    still breached and already firing returns the same event, never a
+    duplicate; no longer breached resolves the standing one. A
+    disabled rule or a window with zero samples evaluates to `None`
+    rather than fabricating a verdict either way.
+  - There's no real cron/scheduler infrastructure in this sandbox (the
+    same "who calls this periodically" gap every other module's own
+    background-computation endpoint already documents, e.g. Multi-
+    tenancy's isolation probe, Billing's metering) -- `evaluate`/
+    `evaluate_rule` are the real, tested, idempotent computations a
+    real scheduler is meant to call, exposed as endpoints in the
+    meantime.
 
 - **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
   the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
