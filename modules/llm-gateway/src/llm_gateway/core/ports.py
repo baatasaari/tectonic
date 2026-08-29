@@ -67,6 +67,21 @@ class SecretsClient(Protocol):
     async def get_provider_api_key(self, provider: str, tenant_id: str) -> str: ...
 
 
+class MultiTenancyQuotaClient(Protocol):
+    """Port to Multi-tenancy's real `POST /tenants/{id}/quota/check`
+    (independent architecture assessment §5.2 / §3.4 point 5) -- the
+    quota analogue of `EntitlementGateMiddleware`'s own gate check.
+    Fails OPEN on any Multi-tenancy error, the same posture that
+    middleware and `HTTPMultiTenancyClient.gate` (Billing and
+    Metering's own reference implementation) already take: a real
+    implementation never raises, always returning `allowed=True` when
+    the check itself couldn't be answered."""
+
+    async def check_quota(
+        self, *, tenant_id: str, resource_class: str, amount: float = 1.0,
+    ) -> tuple[bool, str]: ...
+
+
 class ProviderClient(Protocol):
     """The LiteLLM Provider Adapter Layer, behind a port — same pattern as
     Module 1 keeping ADK behind ExecutionScheduler: swapping in real LiteLLM

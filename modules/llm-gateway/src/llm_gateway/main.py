@@ -19,6 +19,7 @@ from llm_gateway.api.routes_completions import router as completions_router
 from llm_gateway.app_context import AppContext
 from llm_gateway.clients.http_clients import HTTPSecretsClient
 from llm_gateway.clients.http_provider_client import HTTPProviderClient
+from llm_gateway.clients.multi_tenancy_client import HTTPMultiTenancyClient
 from llm_gateway.clients.redis_quality_scores import RedisQualityScoreProvider
 from llm_gateway.config import LLMGatewaySettings, load_settings
 from llm_gateway.core.semantic_cache import RedisSemanticCache
@@ -47,6 +48,10 @@ def build_app_context(settings: LLMGatewaySettings) -> AppContext:
             shared_secret=settings.jwt_shared_secret, ttl_seconds=settings.jwt_ttl_seconds,
         ),
         provider_client=HTTPProviderClient(providers={}),
+        multi_tenancy=HTTPMultiTenancyClient(
+            settings.multi_tenancy_base_url, issuer=settings.service_name,
+            shared_secret=settings.jwt_shared_secret, ttl_seconds=settings.jwt_ttl_seconds,
+        ),
     )
 
 

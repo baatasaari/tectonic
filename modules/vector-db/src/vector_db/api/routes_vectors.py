@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from vector_db.api.deps import get_ctx
 from vector_db.app_context import AppContext
-from vector_db.core.domain import MigrationNotFoundError, PointNotFoundError
+from vector_db.core.domain import MigrationNotFoundError, PointNotFoundError, QuotaExceededError
 from vector_db.schemas.vectors import (
     DeleteResponse,
     IndexPointRequest,
@@ -48,11 +48,14 @@ async def index_point(
     body: IndexPointRequest,
     ctx: AppContext = Depends(get_ctx),
 ) -> IndexPointResponse:
-    point_id = await ctx.vector_service.index_point(
-        tenant_id=body.tenant_id, source_module=body.source_module, source_ref=body.source_ref,
-        content=body.content, vector=body.vector, payload_extra=body.payload,
-        embedding_model_version=body.embedding_model_version,
-    )
+    try:
+        point_id = await ctx.vector_service.index_point(
+            tenant_id=body.tenant_id, source_module=body.source_module, source_ref=body.source_ref,
+            content=body.content, vector=body.vector, payload_extra=body.payload,
+            embedding_model_version=body.embedding_model_version,
+        )
+    except QuotaExceededError as e:
+        raise HTTPException(status_code=429, detail=str(e)) from e
     return IndexPointResponse(id=point_id)
 
 

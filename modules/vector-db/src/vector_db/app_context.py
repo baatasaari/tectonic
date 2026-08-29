@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from vector_db.config import VectorDbSettings
 from vector_db.core.migration_manager import MigrationManager
-from vector_db.core.ports import EmbeddingProvider, MigrationRepository
+from vector_db.core.ports import EmbeddingProvider, MigrationRepository, MultiTenancyQuotaClient
 from vector_db.core.vector_service import VectorService
 
 
@@ -22,3 +22,4 @@ class AppContext:
     migration_repository: MigrationRepository
     vector_service: VectorService
     migration_manager: MigrationManager
+    multi_tenancy: MultiTenancyQuotaClient

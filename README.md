@@ -879,6 +879,34 @@ inheritance) remain out of scope — `ResidencyPolicy` is scoped to
 Tenant, the same level `QuotaSet` already uses. Full reasoning in that
 module's own README.
 
+**Fixed**: the "quota enforcement with nothing calling it yet" gap.
+Multi-tenancy's `QuotaEnforcementService` (ticket #64) has served real
+`POST /tenants/{id}/quota/check` requests since Phase 1, but no other
+module actually called it — a real check with zero real callers.
+`QuotaEnforcementService` itself defines two enforcement shapes by
+resource-class name convention, and this ticket builds one reference
+implementation of each: LLM Gateway for the **rate-shaped** case
+(`requests_per_minute` — Multi-tenancy owns the counter, this module
+only asks) and Vector DB for the **capacity-shaped** case
+(`vector_count` — Multi-tenancy tracks no live usage for it, so the
+calling module supplies `current_usage` itself, here a real
+`client.count(...)` against the tenant's own Qdrant collection/filter).
+Both follow the identical `HTTPMultiTenancyClient`
+(`ResilientHTTPClient`, fails open on any error — a Multi-tenancy
+outage must never itself block the resource-consuming operation) and
+`QuotaExceededError` → `429` shape Billing and Metering's own
+entitlement-sync client (ticket #57) and `EntitlementGateMiddleware`
+already established for this platform's "ask the real peer, don't
+guess" posture. LLM Gateway's `tokens_per_minute` is deliberately not
+wired — also rate-shaped, but the actual token count is unknown until
+after the provider responds, a genuinely different accounting design
+out of scope for this reference pass. Rolling this out to the
+remaining modules that genuinely consume rate/capacity-shaped
+resources is follow-up work, the same "reference implementation first,
+mechanical rollout second" shape the entitlement-gate and OpenAPI-
+security rollouts already used. Full reasoning in each module's own
+README.
+
 ## Modules
 
 ### Module 1: Workflow Engine

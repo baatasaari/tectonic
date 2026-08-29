@@ -164,6 +164,31 @@ src/llm_gateway/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **Real pre-flight quota check against Multi-tenancy's `POST
+  /tenants/{id}/quota/check`, on every `complete()` call** (independent
+  architecture assessment §5.2 / §3.4 point 5: "quota, budget,
+  residency, and risk policies permit execution") — this is the
+  rate-shaped reference implementation for the platform-wide
+  quota-wiring gap; see Vector DB's README for the capacity-shaped
+  counterpart (`vector_count`). `requests_per_minute` is a rate-shaped
+  resource class in `QuotaEnforcementService`'s own terms (Module 30):
+  Multi-tenancy owns the counter itself, so this module only needs to
+  ask, before virtual-key budget reservation and before the semantic
+  cache lookup — a denial there is still a denial from the requesting
+  tenant's own quota perspective, not conditional on a cache miss. A
+  denial raises `QuotaExceededError` → `429 Too Many Requests`, before
+  any provider is called. `tokens_per_minute` is deliberately **not**
+  wired here: it's also rate-shaped, but the actual token count for a
+  request is unknown pre-flight (only after the provider responds),
+  a genuinely different accounting design out of scope for this
+  reference pass. `HTTPMultiTenancyClient`
+  (`clients/multi_tenancy_client.py`) is a `ResilientHTTPClient` and
+  **fails open** on any error — same posture as
+  `EntitlementGateMiddleware` above: a Multi-tenancy outage must never
+  itself block every completion this module serves. `multi_tenancy` is
+  an optional constructor argument on `LLMGatewayService` — omitting it
+  skips the check entirely, unchanged from before this fix.
+
 ## Running locally
 
 ```bash

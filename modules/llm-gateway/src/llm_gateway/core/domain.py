@@ -133,3 +133,16 @@ class AllProvidersExhaustedError(Exception):
 
 class VirtualKeyInvalidError(Exception):
     pass
+
+
+class QuotaExceededError(Exception):
+    """Raised when Multi-tenancy's real `requests_per_minute` quota check
+    denies this request (independent architecture assessment §5.2 /
+    §3.4 point 5) -- a genuine, tenant-configured rate limit, not this
+    module's own budget policy (`BudgetExceededError` is a separate,
+    pre-existing concept: cost governance, not request-rate quota).
+    Maps to a real `429 Too Many Requests`."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason

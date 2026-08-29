@@ -16,6 +16,7 @@ from llm_gateway.core.domain import (
     ChatMessage,
     CompletionRequest,
     ProviderError,
+    QuotaExceededError,
     VirtualKeyInvalidError,
 )
 from llm_gateway.core.ports import GatewayRepository
@@ -55,6 +56,8 @@ async def chat_completions(
     except VirtualKeyInvalidError as e:
         raise HTTPException(status_code=401, detail=str(e)) from e
     except BudgetExceededError as e:
+        raise HTTPException(status_code=429, detail=str(e)) from e
+    except QuotaExceededError as e:
         raise HTTPException(status_code=429, detail=str(e)) from e
     except AllProvidersExhaustedError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e

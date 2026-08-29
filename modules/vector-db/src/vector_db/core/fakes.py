@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+from typing import Any
 
 from vector_db.core.domain import MigrationRecord
 
@@ -42,3 +43,22 @@ class InMemoryMigrationRepository:
     async def update(self, record: MigrationRecord) -> MigrationRecord:
         self.migrations[record.id] = copy.deepcopy(record)
         return copy.deepcopy(record)
+
+
+class StubMultiTenancyQuotaClient:
+    """Deterministic quota-check outcome for `VectorService` tests --
+    `HTTPMultiTenancyClient` (clients/multi_tenancy_client.py) is the
+    real thing, exercised separately with a respx-mocked transport."""
+
+    def __init__(self, *, allowed: bool = True, reason: str = "") -> None:
+        self.allowed = allowed
+        self.reason = reason
+        self.calls: list[dict[str, Any]] = []
+
+    async def check_quota(
+        self, *, tenant_id: str, resource_class: str, amount: float = 1.0, current_usage: float | None = None,
+    ) -> tuple[bool, str]:
+        self.calls.append(
+            {"tenant_id": tenant_id, "resource_class": resource_class, "amount": amount, "current_usage": current_usage}
+        )
+        return self.allowed, self.reason

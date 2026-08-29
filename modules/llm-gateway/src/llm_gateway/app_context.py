@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from llm_gateway.clients.http_provider_client import HTTPProviderClient
 from llm_gateway.config import LLMGatewaySettings
-from llm_gateway.core.ports import QualityScoreProvider, SecretsClient, SemanticCache
+from llm_gateway.core.ports import (
+    MultiTenancyQuotaClient,
+    QualityScoreProvider,
+    SecretsClient,
+    SemanticCache,
+)
 
 
 @dataclass
@@ -21,3 +26,4 @@ class AppContext:
     quality_scores: QualityScoreProvider
     secrets: SecretsClient
     provider_client: HTTPProviderClient
+    multi_tenancy: MultiTenancyQuotaClient

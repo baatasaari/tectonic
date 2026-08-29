@@ -70,6 +70,21 @@ class InMemoryGatewayRepository:
         self.provider_configs[provider.id] = provider
 
 
+class StubMultiTenancyQuotaClient:
+    """Deterministic quota-check outcome for LLMGatewayService tests --
+    `HTTPMultiTenancyClient` (clients/multi_tenancy_client.py) is the
+    real thing, exercised separately with a respx-mocked transport."""
+
+    def __init__(self, *, allowed: bool = True, reason: str = "") -> None:
+        self.allowed = allowed
+        self.reason = reason
+        self.calls: list[dict[str, Any]] = []
+
+    async def check_quota(self, *, tenant_id: str, resource_class: str, amount: float = 1.0) -> tuple[bool, str]:
+        self.calls.append({"tenant_id": tenant_id, "resource_class": resource_class, "amount": amount})
+        return self.allowed, self.reason
+
+
 class FakeQualityScoreProvider:
     def __init__(self, default: float = 0.5, scores: dict[tuple[str, str, str], float] | None = None) -> None:
         self.default = default

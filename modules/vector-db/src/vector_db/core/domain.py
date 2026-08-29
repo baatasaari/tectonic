@@ -37,6 +37,18 @@ class MigrationNotFoundError(Exception):
         super().__init__(f"migration not found: {migration_id}")
 
 
+class QuotaExceededError(Exception):
+    """Raised when Multi-tenancy's real `vector_count` quota check denies
+    an `index_point` call (independent architecture assessment §5.2 /
+    §3.4 point 5) -- a genuine, tenant-configured capacity limit on how
+    many vectors this tenant may have indexed. Maps to a real
+    `429 Too Many Requests`."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
 @dataclass
 class SparseVectorData:
     indices: list[int] = field(default_factory=list)

@@ -176,6 +176,31 @@ data plane itself.
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **Real pre-flight quota check against Multi-tenancy's `POST
+  /tenants/{id}/quota/check`, on every `index_point` call** (independent
+  architecture assessment §5.2 / §3.4 point 5: "quota, budget,
+  residency, and risk policies permit execution") — this is the
+  capacity-shaped reference implementation for the platform-wide
+  quota-wiring gap; see LLM Gateway's README for the rate-shaped
+  counterpart (`requests_per_minute`). `vector_count` is a
+  capacity-shaped resource class in `QuotaEnforcementService`'s own
+  terms (Module 30): Multi-tenancy tracks no live usage for it, so this
+  module — the real source of truth for how many points a tenant
+  currently has indexed — supplies `current_usage` itself
+  (`VectorService._current_vector_count`, a real `client.count(...)`
+  against the tenant's own physical collection/filter, scoped the same
+  way `query()` already scopes reads: by alias under
+  `dedicated_collection` tenancy, by a `tenant_id` payload filter under
+  `shared_collection_with_filter`). A denial raises `QuotaExceededError`
+  → `429 Too Many Requests`, before any point is embedded or written.
+  `HTTPMultiTenancyClient` (`clients/multi_tenancy_client.py`) is a
+  `ResilientHTTPClient` and **fails open** on any error — same posture
+  as `EntitlementGateMiddleware` above: a Multi-tenancy outage must
+  never itself block every write this module makes. `multi_tenancy` is
+  an optional constructor argument on `VectorService` — omitting it (as
+  this module's own unit-test harness can, via `harness_factory()`)
+  skips the check entirely, unchanged from before this fix.
+
 ## Running locally
 
 ```bash

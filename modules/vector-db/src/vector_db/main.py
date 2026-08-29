@@ -16,6 +16,7 @@ from sqlalchemy import text
 from vector_db.api.routes_vectors import router as vectors_router
 from vector_db.app_context import AppContext
 from vector_db.clients.http_clients import HTTPEmbeddingProvider
+from vector_db.clients.multi_tenancy_client import HTTPMultiTenancyClient
 from vector_db.config import VectorDbSettings, load_settings
 from vector_db.core.migration_manager import MigrationManager
 from vector_db.core.vector_service import VectorService
@@ -62,9 +63,14 @@ def build_app_context(settings: VectorDbSettings, *, qdrant_client: AsyncQdrantC
     # starts, so it must be safe under concurrent, unrelated callers.
     migration_repository = SQLAlchemyMigrationRepository(session_factory)
 
+    multi_tenancy = HTTPMultiTenancyClient(
+        settings.multi_tenancy_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+        ttl_seconds=settings.jwt_ttl_seconds,
+    )
+
     vector_service = VectorService(
         client, embeddings, settings.qdrant.collection_alias, settings.isolation, settings.query,
-        settings.qdrant.default_embedding_model,
+        settings.qdrant.default_embedding_model, multi_tenancy=multi_tenancy,
     )
     migration_manager = MigrationManager(
         client, embeddings, migration_repository, settings.qdrant.collection_alias,
@@ -74,6 +80,7 @@ def build_app_context(settings: VectorDbSettings, *, qdrant_client: AsyncQdrantC
     return AppContext(
         settings=settings, qdrant=client, engine=engine, session_factory=session_factory, embeddings=embeddings,
         migration_repository=migration_repository, vector_service=vector_service, migration_manager=migration_manager,
+        multi_tenancy=multi_tenancy,
     )
 
 

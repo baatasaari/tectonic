@@ -30,4 +30,6 @@ async def build_gateway_service(ctx: AppContext, repository: GatewayRepository) 
     router = QualityAwareRouter(ctx.quality_scores, ctx.settings.routing)
     cost_governance = CostGovernanceEngine(repository, ctx.settings.budget)
     failover = FailoverManager(ctx.provider_client, ctx.settings.failover.max_provider_attempts)
-    return LLMGatewayService(repository, ctx.cache, router, cost_governance, failover, ctx.settings)
+    return LLMGatewayService(
+        repository, ctx.cache, router, cost_governance, failover, ctx.settings, multi_tenancy=ctx.multi_tenancy,
+    )
