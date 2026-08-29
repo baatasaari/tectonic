@@ -805,6 +805,30 @@ tampered-assertion case (digest mismatch caught) and a signature from
 an untrusted-but-internally-valid key (correctly rejected). Full
 reasoning in that module's own README.
 
+**Fixed**: Multi-tenancy's cascading offboarding gap. A Tenant's
+`suspend()`/`delete()` previously transitioned only the tenant row
+itself, leaving every descendant Workspace and Environment — and,
+transitively, their own QuotaSets/ResourceAllocations/entitlements —
+orphaned in whatever status they were already in. `TenantRegistryService.
+_cascade` now walks that tenant's own workspaces (paginated, not one
+unbounded list call) and cascades each to the same target status;
+`WorkspaceService.suspend()`/`.delete()` themselves cascade one level
+further down to their own Environments via a new `cascade_environments`
+method, so a workspace suspended or deleted *directly* — not only
+through a tenant-level cascade — also correctly carries its
+environments with it, closing the identical gap `WorkspaceService.
+delete`'s own docstring used to flag at that level too. Idempotent
+throughout: a child already at (or past) the target status is skipped
+rather than raising `InvalidTransitionError`, so re-running a cascade
+after a partial failure (a crash mid-cascade, a retried request)
+converges instead of erroring on work already done; a real audit event
+fires for every cascaded transition, not just the root tenant's own.
+`reactivate()` deliberately does not cascade at either level — an
+operator's own independent suspension of a child resource must survive
+its parent reactivating. Organisation → Tenant cascading remains
+separate, unbuilt work (`OrganisationService.delete`'s own docstring
+still flags it, unchanged). Full reasoning in that module's own README.
+
 ## Modules
 
 ### Module 1: Workflow Engine

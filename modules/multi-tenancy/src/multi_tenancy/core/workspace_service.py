@@ -5,6 +5,17 @@ Environment`. Every workspace belongs to exactly one tenant, verified
 to exist at registration -- the same "raises *NotFoundError for an
 unknown parent" posture `TenantRegistryService.set_entitlements`
 already established for entitlements.
+
+suspend()/delete() cascade to every descendant Environment -- real
+offboarding, not the "deliberately does not cascade" gap this
+docstring used to flag. `cascade_environments` is exposed as its own
+public method (not just an internal step of suspend()/delete()) so
+`TenantRegistryService`'s own tenant-level cascade can invoke it
+directly for a workspace that's already at (or past) the target status
+independently of the tenant -- such a workspace is correctly skipped
+for its *own* transition, but its environments still need to cascade,
+which calling suspend()/delete() (guarded by `is_legal_hierarchy_
+transition`) alone would silently skip.
 """
 from __future__ import annotations
 
@@ -18,13 +29,23 @@ from multi_tenancy.core.domain import (
     new_id,
     now,
 )
+from multi_tenancy.core.environment_service import EnvironmentService
 from multi_tenancy.core.ports import AuditabilityClient, MultiTenancyRepository
+
+# One page at a time, rather than one unbounded list_environments call -- consistent
+# with every other list endpoint in this module capping at 200.
+_CASCADE_PAGE_SIZE = 200
 
 
 class WorkspaceService:
     def __init__(self, repository: MultiTenancyRepository, auditability: AuditabilityClient) -> None:
         self._repository = repository
         self._auditability = auditability
+        # Composed, not injected: EnvironmentService's own suspend()/delete() already
+        # do exactly what a correct cascade needs -- a legality-checked transition plus
+        # a real audit-emit -- so the cascade reuses that logic rather than hand-editing
+        # child records and duplicating it.
+        self._environments = EnvironmentService(repository, auditability)
 
     async def register(self, *, tenant_id: str, name: str, owner_identity_id: str | None = None) -> WorkspaceRecord:
         tenant = await self._repository.get_tenant(tenant_id)
@@ -65,12 +86,46 @@ class WorkspaceService:
         return updated
 
     async def suspend(self, workspace_id: str, *, reason: str) -> WorkspaceRecord:
-        return await self._transition(workspace_id, HierarchyStatus.SUSPENDED)
+        updated = await self._transition(workspace_id, HierarchyStatus.SUSPENDED)
+        await self.cascade_environments(workspace_id, HierarchyStatus.SUSPENDED, reason=reason)
+        return updated
 
     async def reactivate(self, workspace_id: str) -> WorkspaceRecord:
+        # Deliberately does not cascade -- see TenantRegistryService.reactivate's own
+        # docstring for the identical reasoning one level up: an environment an
+        # operator suspended independently of its workspace must not silently
+        # reactivate just because the workspace did.
         return await self._transition(workspace_id, HierarchyStatus.ACTIVE)
 
     async def delete(self, workspace_id: str) -> WorkspaceRecord:
-        # Deliberately does not cascade to member environments -- see
-        # OrganisationService.delete's docstring for why.
-        return await self._transition(workspace_id, HierarchyStatus.DELETED)
+        updated = await self._transition(workspace_id, HierarchyStatus.DELETED)
+        await self.cascade_environments(workspace_id, HierarchyStatus.DELETED, reason=None)
+        return updated
+
+    async def cascade_environments(
+        self, workspace_id: str, to_status: HierarchyStatus, *, reason: str | None,
+    ) -> None:
+        """Transitions every Environment under `workspace_id` to
+        `to_status`, skipping one already at (or past) it -- idempotent
+        and safe to call more than once for the same workspace (e.g.
+        once directly from suspend()/delete(), and once more from
+        `TenantRegistryService`'s own cascade for a workspace whose own
+        transition was skipped as already-legal-elsewhere)."""
+        offset = 0
+        while True:
+            environments, total = await self._environments.list(
+                workspace_id=workspace_id, status=None, limit=_CASCADE_PAGE_SIZE, offset=offset,
+            )
+            if not environments:
+                break
+            for environment in environments:
+                if is_legal_hierarchy_transition(environment.status, to_status):
+                    if to_status == HierarchyStatus.DELETED:
+                        await self._environments.delete(environment.id)
+                    else:
+                        await self._environments.suspend(
+                            environment.id, reason=reason or "cascaded from workspace suspension",
+                        )
+            offset += len(environments)
+            if offset >= total:
+                break

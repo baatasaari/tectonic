@@ -93,16 +93,31 @@ src/multi_tenancy/
   Environment to exactly one workspace; both validate their parent
   exists at registration (`TenantNotFoundError`/`WorkspaceNotFoundError`)
   the same way `set_entitlements` already validates its own tenant.
-  **What this deliberately does not do yet** (see the assessment's own
-  Phase 1 backlog): cascading offboarding (`delete` on any of the four
-  levels never cascades to its children — a real deletion saga is
-  separate, unbuilt work); `version`'s optimistic-concurrency field is
-  present and incremented on every update but not yet enforced as a
-  real compare-and-swap at the repository layer; `region` is a plain,
-  unvalidated string, not real data-residency policy enforcement; and
-  no other module has adopted `environment_id` scoping yet (Agent
-  Applications — Workflow Engine runs, Conversational Engine sessions —
-  are still tenant-scoped only).
+  **Cascading offboarding is real** (Phase 2 closed this): a Tenant's
+  `suspend()`/`delete()` cascade to every descendant Workspace and,
+  transitively, every descendant Environment —
+  `TenantRegistryService._cascade` walks that tenant's own workspaces
+  (paginated, not one unbounded list call), and `WorkspaceService.
+  suspend()`/`.delete()` themselves cascade one level further down to
+  their own Environments via `cascade_environments`, so a workspace
+  suspended/deleted directly (not only via a tenant-level cascade) also
+  correctly carries its environments with it. Idempotent throughout:
+  `is_legal_hierarchy_transition` skips a child already at (or past)
+  the target status rather than raising, so re-running a cascade after
+  a partial failure converges instead of erroring on work already
+  done, and a real audit event is emitted for every cascaded
+  transition, not just the root. `reactivate()` deliberately does not
+  cascade at either level — an operator's own independent suspension
+  of a child resource must survive its parent reactivating. Organisation
+  → Tenant cascading remains separate, unbuilt work (see
+  `OrganisationService.delete`'s own docstring).
+  **What this still deliberately does not do yet**: `version`'s
+  optimistic-concurrency field is present and incremented on every
+  update but not yet enforced as a real compare-and-swap at the
+  repository layer; `region` is a plain, unvalidated string, not real
+  data-residency policy enforcement; and no other module has adopted
+  `environment_id` scoping yet (Agent Applications — Workflow Engine
+  runs, Conversational Engine sessions — are still tenant-scoped only).
 - **Quota Set and Resource Allocation** (independent architecture
   assessment §5.2 "Resource allocation and quota change"): the
   remaining two legs of the assessment's own canonical resource chain

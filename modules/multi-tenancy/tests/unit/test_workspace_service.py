@@ -74,3 +74,55 @@ async def test_list_filters_by_tenant_and_status(harness):
 
     assert total == 1
     assert results[0].id == ws_a.id
+
+
+async def test_suspend_cascades_to_its_own_environments(harness):
+    """A workspace suspended directly (not via a tenant-level cascade --
+    e.g. through the API's own /workspaces/{id}/suspend) still carries
+    its Environments with it -- the same gap this ticket also closed at
+    the tenant level."""
+    tenant = await harness.tenant_registry_service.register(name="Acme Corp")
+    ws = await harness.workspace_service.register(tenant_id=tenant.id, name="Production")
+    env = await harness.environment_service.register(workspace_id=ws.id, name="prod-us")
+
+    await harness.workspace_service.suspend(ws.id, reason="maintenance")
+
+    reloaded = await harness.environment_service.get(env.id)
+    assert reloaded.status == HierarchyStatus.SUSPENDED
+
+
+async def test_delete_cascades_to_its_own_environments(harness):
+    tenant = await harness.tenant_registry_service.register(name="Acme Corp")
+    ws = await harness.workspace_service.register(tenant_id=tenant.id, name="Production")
+    env = await harness.environment_service.register(workspace_id=ws.id, name="prod-us")
+
+    await harness.workspace_service.delete(ws.id)
+
+    reloaded = await harness.environment_service.get(env.id)
+    assert reloaded.status == HierarchyStatus.DELETED
+
+
+async def test_reactivate_does_not_cascade_to_environments(harness):
+    tenant = await harness.tenant_registry_service.register(name="Acme Corp")
+    ws = await harness.workspace_service.register(tenant_id=tenant.id, name="Production")
+    env = await harness.environment_service.register(workspace_id=ws.id, name="prod-us")
+    await harness.workspace_service.suspend(ws.id, reason="maintenance")
+
+    await harness.workspace_service.reactivate(ws.id)
+
+    reloaded = await harness.environment_service.get(env.id)
+    assert reloaded.status == HierarchyStatus.SUSPENDED
+
+
+async def test_cascade_environments_is_idempotent(harness):
+    tenant = await harness.tenant_registry_service.register(name="Acme Corp")
+    ws = await harness.workspace_service.register(tenant_id=tenant.id, name="Production")
+    env = await harness.environment_service.register(workspace_id=ws.id, name="prod-us")
+    await harness.workspace_service.suspend(ws.id, reason="maintenance")
+
+    # A second, direct cascade call (simulating TenantRegistryService's own
+    # unconditional call) must not raise even though the environment is already there.
+    await harness.workspace_service.cascade_environments(ws.id, HierarchyStatus.SUSPENDED, reason="retry")
+
+    reloaded = await harness.environment_service.get(env.id)
+    assert reloaded.status == HierarchyStatus.SUSPENDED
