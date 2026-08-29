@@ -23,9 +23,10 @@ src/multi_tenancy/
     workspace_service.py            Workspace Service — always scoped to one tenant
     environment_service.py           Environment Service — always scoped to one workspace
     quota_service.py                  Quota Set management + real-time QuotaEnforcementService
-    resource_allocation_service.py     Resource Allocation Service — request/approve/reject
-    isolation_probe_service.py          Isolation Probe Service — the real, executable isolation check
-  db/                      SQLAlchemy 2.0 async models + repository (Tenant/Organisation/Workspace/Environment/QuotaSet/ResourceAllocation/IsolationProbeResult)
+    residency_policy_service.py        Residency Policy CRUD — enforcement lives in EnvironmentService.register
+    resource_allocation_service.py      Resource Allocation Service — request/approve/reject
+    isolation_probe_service.py           Isolation Probe Service — the real, executable isolation check
+  db/                      SQLAlchemy 2.0 async models + repository (Tenant/Organisation/Workspace/Environment/QuotaSet/ResidencyPolicy/ResourceAllocation/IsolationProbeResult)
   clients/                 Resilient HTTP clients: Auditability, and the one reused against every registered probe target
   security/                 Service-to-service JWT bearer auth (shared signing key), real OpenAPI security scheme declarations
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
@@ -127,11 +128,23 @@ src/multi_tenancy/
   converge to exactly one winner and nine real conflicts, and two
   reviewers racing to approve/reject the same ResourceAllocation land
   exactly one decision.
-  **What this still deliberately does not do yet**: `region` is a
-  plain, unvalidated string, not real data-residency policy
-  enforcement; and no other module has adopted `environment_id`
-  scoping yet (Agent Applications — Workflow Engine runs,
-  Conversational Engine sessions — are still tenant-scoped only).
+  **Residency-policy enforcement is real too** (Phase 2 also closed
+  this): a per-tenant `ResidencyPolicy` (`allowed_regions`, wholesale-
+  replaced the same way `QuotaSet`/entitlements already are) is now
+  enforced for real at `EnvironmentService.register` — a `region`
+  outside the policy raises `ResidencyPolicyViolationError` (a real
+  `422`), not a silently-accepted label. An unconfigured tenant is
+  unrestricted (the same rollout-safety default `QuotaSet`/
+  entitlements already establish), and an explicit empty
+  `allowed_regions` is a real, meaningful "no region permitted" policy,
+  distinct from never having configured one. Exposed for other modules
+  to query before provisioning a region-specific resource via `GET/POST
+  /tenants/{id}/residency-policy`, the same shape `quota-set` already
+  uses. **What this still deliberately does not do yet**: no other
+  module has adopted `environment_id` scoping yet (Agent Applications —
+  Workflow Engine runs, Conversational Engine sessions — are still
+  tenant-scoped only), so nothing downstream of Environment
+  registration re-checks residency before actually placing data.
 - **Quota Set and Resource Allocation** (independent architecture
   assessment §5.2 "Resource allocation and quota change"): the
   remaining two legs of the assessment's own canonical resource chain

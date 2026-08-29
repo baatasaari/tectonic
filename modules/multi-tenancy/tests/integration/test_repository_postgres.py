@@ -19,6 +19,7 @@ from multi_tenancy.core.domain import (
     IsolationProbeResult,
     OptimisticConcurrencyError,
     OrganisationRecord,
+    ResidencyPolicyViolationError,
     ResourceAllocation,
     ResourceAllocationStatus,
     TenantRecord,
@@ -27,6 +28,8 @@ from multi_tenancy.core.domain import (
     new_id,
     now,
 )
+from multi_tenancy.core.environment_service import EnvironmentService
+from multi_tenancy.core.fakes import StubAuditabilityClient
 from multi_tenancy.db.repository import SQLAlchemyMultiTenancyRepository
 
 pytestmark = pytest.mark.asyncio
@@ -201,6 +204,54 @@ async def test_quota_set_upsert_round_trips_and_is_a_wholesale_replace(migrated_
 
             fetched = await repo.get_quota_set(tenant.id)
             assert fetched.limits == {"requests_per_minute": 1200}
+    finally:
+        await engine.dispose()
+
+
+async def test_residency_policy_upsert_round_trips_and_is_a_wholesale_replace(migrated_url):
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyMultiTenancyRepository(session)
+            tenant = await repo.create_tenant(TenantRecord(id=new_id(), name="Acme Corp residency-test"))
+
+            assert await repo.get_residency_policy(tenant.id) is None
+
+            first = await repo.upsert_residency_policy(
+                tenant_id=tenant.id, allowed_regions=["eu-west-1", "us-east-1"],
+            )
+            assert first.version == 1
+            assert first.configured_at is not None
+
+            second = await repo.upsert_residency_policy(tenant_id=tenant.id, allowed_regions=["eu-west-1"])
+            assert second.version == 2
+            assert second.allowed_regions == ["eu-west-1"]  # us-east-1 dropped -- a real replace
+
+            fetched = await repo.get_residency_policy(tenant.id)
+            assert fetched.allowed_regions == ["eu-west-1"]
+    finally:
+        await engine.dispose()
+
+
+async def test_environment_registration_enforces_residency_policy_against_real_postgres(migrated_url):
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyMultiTenancyRepository(session)
+            org = await repo.create_organisation(OrganisationRecord(id=new_id(), name="Acme Holdings res-env-test"))
+            tenant = await repo.create_tenant(
+                TenantRecord(id=new_id(), name="Acme Corp res-env-test", organisation_id=org.id),
+            )
+            ws = await repo.create_workspace(WorkspaceRecord(id=new_id(), tenant_id=tenant.id, name="Production"))
+            await repo.upsert_residency_policy(tenant_id=tenant.id, allowed_regions=["eu-west-1"])
+
+            service = EnvironmentService(repo, StubAuditabilityClient())
+
+            allowed = await service.register(workspace_id=ws.id, name="prod-eu", region="eu-west-1")
+            assert allowed.region == "eu-west-1"
+
+            with pytest.raises(ResidencyPolicyViolationError):
+                await service.register(workspace_id=ws.id, name="prod-us", region="us-east-1")
     finally:
         await engine.dispose()
 

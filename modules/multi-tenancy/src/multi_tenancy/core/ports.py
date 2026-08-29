@@ -13,6 +13,7 @@ from multi_tenancy.core.domain import (
     IsolationProbeResult,
     OrganisationRecord,
     QuotaSet,
+    ResidencyPolicy,
     ResourceAllocation,
     ResourceAllocationStatus,
     TenantEntitlementRecord,
@@ -104,6 +105,16 @@ class MultiTenancyRepository(Protocol):
         """Wholesale replace, the same pattern `replace_entitlements`
         already established: one row per tenant, the whole `limits`
         dict is always replaced together, never patched key by key."""
+        ...
+
+    # --- Residency Policy ---
+
+    async def get_residency_policy(self, tenant_id: str) -> ResidencyPolicy | None: ...
+
+    async def upsert_residency_policy(self, *, tenant_id: str, allowed_regions: list[str]) -> ResidencyPolicy:
+        """Wholesale replace, the same pattern `upsert_quota_set`/
+        `replace_entitlements` already established: one row per tenant,
+        the whole `allowed_regions` list is always replaced together."""
         ...
 
     async def increment_quota_counter(

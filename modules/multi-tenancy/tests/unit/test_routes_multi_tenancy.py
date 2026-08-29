@@ -497,6 +497,74 @@ def test_set_and_get_quota_set_round_trips():
     assert get_resp.json()["limits"] == {"requests_per_minute": 600, "storage_gb": 500}
 
 
+def test_get_residency_policy_before_any_regions_are_set_is_unconfigured():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        tenant = client.post("/v1/multi-tenancy/tenants", json={"name": "Acme Corp"}, headers=headers).json()
+        resp = client.get(f"/v1/multi-tenancy/tenants/{tenant['id']}/residency-policy", headers=headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["configured"] is False
+    assert body["allowed_regions"] == []
+
+
+def test_get_residency_policy_returns_404_for_an_unknown_tenant():
+    app = _app(InMemoryMultiTenancyRepository())
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/multi-tenancy/tenants/does-not-exist/residency-policy", headers=_headers())
+
+    assert resp.status_code == 404
+
+
+def test_set_and_get_residency_policy_round_trips():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        tenant = client.post("/v1/multi-tenancy/tenants", json={"name": "Acme Corp"}, headers=headers).json()
+        set_resp = client.post(
+            f"/v1/multi-tenancy/tenants/{tenant['id']}/residency-policy",
+            json={"allowed_regions": ["eu-west-1", "us-east-1"]}, headers=headers,
+        )
+        get_resp = client.get(f"/v1/multi-tenancy/tenants/{tenant['id']}/residency-policy", headers=headers)
+
+    assert set_resp.status_code == 200
+    assert set_resp.json()["configured"] is True
+    assert get_resp.json()["allowed_regions"] == ["eu-west-1", "us-east-1"]
+
+
+def test_registering_an_environment_outside_the_residency_policy_is_rejected():
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        tenant = client.post("/v1/multi-tenancy/tenants", json={"name": "Acme Corp"}, headers=headers).json()
+        ws = client.post(
+            "/v1/multi-tenancy/workspaces",
+            json={"tenant_id": tenant["id"], "name": "Production"}, headers=headers,
+        ).json()
+        client.post(
+            f"/v1/multi-tenancy/tenants/{tenant['id']}/residency-policy",
+            json={"allowed_regions": ["eu-west-1"]}, headers=headers,
+        )
+
+        allowed = client.post(
+            "/v1/multi-tenancy/environments",
+            json={"workspace_id": ws["id"], "name": "prod-eu", "region": "eu-west-1"}, headers=headers,
+        )
+        rejected = client.post(
+            "/v1/multi-tenancy/environments",
+            json={"workspace_id": ws["id"], "name": "prod-us", "region": "us-east-1"}, headers=headers,
+        )
+
+    assert allowed.status_code == 201
+    assert rejected.status_code == 422
+
+
 def test_check_quota_allows_an_unconfigured_tenant():
     app = _app(InMemoryMultiTenancyRepository())
 

@@ -9,6 +9,7 @@ from multi_tenancy.api.deps import (
     build_organisation_service,
     build_quota_enforcement_service,
     build_quota_set_service,
+    build_residency_policy_service,
     build_resource_allocation_service,
     build_tenant_registry_service,
     build_workspace_service,
@@ -23,6 +24,7 @@ from multi_tenancy.core.domain import (
     OptimisticConcurrencyError,
     OrganisationNotFoundError,
     ProbeTargetNotFoundError,
+    ResidencyPolicyViolationError,
     ResourceAllocationNotFoundError,
     ResourceAllocationStatus,
     TenantNotFoundError,
@@ -48,11 +50,13 @@ from multi_tenancy.schemas.multi_tenancy import (
     RegisterWorkspaceRequest,
     RejectResourceAllocationRequest,
     RequestResourceAllocationRequest,
+    ResidencyPolicySchema,
     ResourceAllocationListResponse,
     ResourceAllocationSchema,
     RunIsolationProbeRequest,
     SetEntitlementsRequest,
     SetQuotaLimitsRequest,
+    SetResidencyPolicyRequest,
     SuspendRequest,
     SuspendTenantRequest,
     TenantGateResultSchema,
@@ -100,6 +104,13 @@ def _quota_set_schema(quota_set) -> QuotaSetSchema:
     return QuotaSetSchema(
         tenant_id=quota_set.tenant_id, limits=quota_set.limits, configured=quota_set.configured_at is not None,
         version=quota_set.version, updated_at=quota_set.updated_at,
+    )
+
+
+def _residency_policy_schema(policy) -> ResidencyPolicySchema:
+    return ResidencyPolicySchema(
+        tenant_id=policy.tenant_id, allowed_regions=policy.allowed_regions,
+        configured=policy.configured_at is not None, version=policy.version, updated_at=policy.updated_at,
     )
 
 
@@ -479,6 +490,8 @@ async def register_environment(
         )
     except WorkspaceNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ResidencyPolicyViolationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _environment_schema(env)
 
 
@@ -604,6 +617,44 @@ async def set_quota_set(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     quota_set = await build_quota_set_service(repository, ctx).set_limits(tenant_id, limits=body.limits)
     return _quota_set_schema(quota_set)
+
+
+@router.get("/tenants/{tenant_id}/residency-policy", response_model=ResidencyPolicySchema)
+async def get_residency_policy(
+    tenant_id: str,
+    ctx: AppContext = Depends(get_ctx),
+    repository: MultiTenancyRepository = Depends(get_repository),
+) -> ResidencyPolicySchema:
+    """Real, other-module-queryable exposure of a tenant's residency
+    policy (independent architecture assessment §3.4 point 5) -- a
+    module about to provision a region-specific resource can check this
+    before doing so, the same "ask the real peer, don't guess" posture
+    `EntitlementGateMiddleware` already established platform-wide."""
+    try:
+        await build_tenant_registry_service(repository, ctx).get(tenant_id)  # 404s for an unknown tenant
+    except TenantNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    policy = await build_residency_policy_service(repository, ctx).get(tenant_id)
+    if policy is None:
+        return ResidencyPolicySchema(tenant_id=tenant_id, allowed_regions=[], configured=False, version=0)
+    return _residency_policy_schema(policy)
+
+
+@router.post("/tenants/{tenant_id}/residency-policy", response_model=ResidencyPolicySchema)
+async def set_residency_policy(
+    tenant_id: str,
+    body: SetResidencyPolicyRequest,
+    ctx: AppContext = Depends(get_ctx),
+    repository: MultiTenancyRepository = Depends(get_repository),
+) -> ResidencyPolicySchema:
+    try:
+        await build_tenant_registry_service(repository, ctx).get(tenant_id)
+    except TenantNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    policy = await build_residency_policy_service(repository, ctx).set_allowed_regions(
+        tenant_id, allowed_regions=body.allowed_regions,
+    )
+    return _residency_policy_schema(policy)
 
 
 @router.post("/tenants/{tenant_id}/quota/check", response_model=QuotaCheckResultSchema)

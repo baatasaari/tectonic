@@ -859,6 +859,26 @@ two reviewers racing to approve/reject the same ResourceAllocation
 land exactly one decision, never both. Full reasoning in that module's
 own README.
 
+**Fixed**: Multi-tenancy's residency-policy gap. `EnvironmentRecord.
+region` was a plain, unvalidated string — the assessment's own §3.4
+point 5 ("quota, budget, residency, and risk policies permit
+execution") named residency alongside quota as something this module
+should actually enforce, and only quota was real. A new per-tenant
+`ResidencyPolicy` (`allowed_regions`, wholesale-replaced the same way
+`QuotaSet`/entitlements already are, exposed at `GET/POST /tenants/
+{id}/residency-policy` for other modules to query before provisioning
+a region-specific resource) is now enforced for real at
+`EnvironmentService.register` — a `region` outside the policy raises
+`ResidencyPolicyViolationError`, a real `422`, not a silently-accepted
+label. The same rollout-safety default this platform's other
+tenant-scoped checks already use: an unconfigured tenant is
+unrestricted, and an explicit empty `allowed_regions` is a real,
+meaningful "no region permitted" policy distinct from never having
+configured one. `TenantRecord`-level policies (Organisation-wide
+inheritance) remain out of scope — `ResidencyPolicy` is scoped to
+Tenant, the same level `QuotaSet` already uses. Full reasoning in that
+module's own README.
+
 ## Modules
 
 ### Module 1: Workflow Engine

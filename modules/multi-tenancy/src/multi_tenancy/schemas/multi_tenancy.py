@@ -190,6 +190,18 @@ class QuotaSetSchema(BaseModel):
     updated_at: datetime | None = None
 
 
+class SetResidencyPolicyRequest(BaseModel):
+    allowed_regions: list[str]
+
+
+class ResidencyPolicySchema(BaseModel):
+    tenant_id: str
+    allowed_regions: list[str]
+    configured: bool
+    version: int
+    updated_at: datetime | None = None
+
+
 class QuotaCheckRequest(BaseModel):
     resource_class: str
     amount: float = 1.0

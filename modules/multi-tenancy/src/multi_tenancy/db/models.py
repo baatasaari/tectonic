@@ -129,6 +129,22 @@ class TenantQuotaSet(Base):
     )
 
 
+class TenantResidencyPolicy(Base):
+    """One row per tenant: the whole `allowed_regions` list, always
+    replaced wholesale. See `core/domain.py`'s `ResidencyPolicy`
+    docstring."""
+
+    __tablename__ = "tenant_residency_policies"
+
+    tenant_id: Mapped[str] = mapped_column(UUIDType, ForeignKey("tenants.id"), primary_key=True)
+    allowed_regions: Mapped[list] = mapped_column(JSONType, default=list)
+    configured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    version: Mapped[int] = mapped_column(Integer(), default=1)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    )
+
+
 class QuotaCounter(Base):
     """A real fixed-window rate counter: one row per (tenant,
     resource_class, window_start), atomically upserted by

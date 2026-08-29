@@ -15,6 +15,7 @@ from multi_tenancy.core.domain import (
     OptimisticConcurrencyError,
     OrganisationRecord,
     QuotaSet,
+    ResidencyPolicy,
     ResourceAllocation,
     ResourceAllocationStatus,
     TenantEntitlementRecord,
@@ -81,6 +82,13 @@ def _quota_set_to_domain(m: models.TenantQuotaSet) -> QuotaSet:
     return QuotaSet(
         tenant_id=str(m.tenant_id), limits=dict(m.limits or {}), configured_at=_as_utc(m.configured_at),
         version=m.version, updated_at=_as_utc(m.updated_at),
+    )
+
+
+def _residency_policy_to_domain(m: models.TenantResidencyPolicy) -> ResidencyPolicy:
+    return ResidencyPolicy(
+        tenant_id=str(m.tenant_id), allowed_regions=list(m.allowed_regions or []),
+        configured_at=_as_utc(m.configured_at), version=m.version, updated_at=_as_utc(m.updated_at),
     )
 
 
@@ -360,6 +368,25 @@ class SQLAlchemyMultiTenancyRepository:
         await self.session.commit()
         await self.session.refresh(m)
         return _quota_set_to_domain(m)
+
+    async def get_residency_policy(self, tenant_id: str) -> ResidencyPolicy | None:
+        m = await self.session.get(models.TenantResidencyPolicy, tenant_id)
+        return _residency_policy_to_domain(m) if m else None
+
+    async def upsert_residency_policy(self, *, tenant_id: str, allowed_regions: list[str]) -> ResidencyPolicy:
+        m = await self.session.get(models.TenantResidencyPolicy, tenant_id)
+        if m is None:
+            m = models.TenantResidencyPolicy(
+                tenant_id=tenant_id, allowed_regions=allowed_regions, configured_at=func.now(), version=1,
+            )
+            self.session.add(m)
+        else:
+            m.allowed_regions = allowed_regions
+            m.configured_at = func.now()
+            m.version += 1
+        await self.session.commit()
+        await self.session.refresh(m)
+        return _residency_policy_to_domain(m)
 
     async def increment_quota_counter(
         self, *, tenant_id: str, resource_class: str, amount: float, window_seconds: int, now: datetime,

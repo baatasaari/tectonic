@@ -11,6 +11,10 @@ Every transition takes the caller's `expected_version` -- real
 optimistic-concurrency control, enforced as a real compare-and-swap at
 the repository layer; see `core/organisation_service.py`'s own
 docstring for the full reasoning, identical here.
+
+register() also enforces the owning tenant's ResidencyPolicy (real
+data-residency, not just a `region` label) -- see `_check_residency`'s
+own docstring.
 """
 from __future__ import annotations
 
@@ -19,6 +23,7 @@ from multi_tenancy.core.domain import (
     EnvironmentRecord,
     HierarchyStatus,
     InvalidTransitionError,
+    ResidencyPolicyViolationError,
     WorkspaceNotFoundError,
     is_legal_hierarchy_transition,
     new_id,
@@ -39,6 +44,8 @@ class EnvironmentService:
         workspace = await self._repository.get_workspace(workspace_id)
         if workspace is None:
             raise WorkspaceNotFoundError(workspace_id)
+        if region is not None:
+            await self._check_residency(tenant_id=workspace.tenant_id, region=region)
         record = EnvironmentRecord(
             id=new_id(), workspace_id=workspace_id, name=name, kind=kind, region=region,
             owner_identity_id=owner_identity_id,
@@ -49,6 +56,25 @@ class EnvironmentService:
             "name": created.name, "kind": created.kind,
         })
         return created
+
+    async def _check_residency(self, *, tenant_id: str, region: str) -> None:
+        """Real data-residency enforcement (independent architecture
+        assessment §3.4 point 5), not just a plain, unvalidated `region`
+        string. An unconfigured tenant (`ResidencyPolicy.configured_at`
+        is `None` -- never explicitly set) has no restriction at all --
+        the same rollout-safety default `TenantRegistryService.gate`/
+        `QuotaEnforcementService` already established: shipping this
+        check must never silently start rejecting every tenant that
+        predates it. The instant a tenant HAS a configured policy --
+        even an explicit empty `allowed_regions`, meaning "no region is
+        permitted" -- the check becomes real."""
+        policy = await self._repository.get_residency_policy(tenant_id)
+        if policy is None or policy.configured_at is None:
+            return
+        if region not in policy.allowed_regions:
+            raise ResidencyPolicyViolationError(
+                tenant_id=tenant_id, region=region, allowed_regions=policy.allowed_regions,
+            )
 
     async def get(self, environment_id: str) -> EnvironmentRecord:
         record = await self._repository.get_environment(environment_id)

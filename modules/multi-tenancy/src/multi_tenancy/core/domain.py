@@ -169,6 +169,23 @@ class OptimisticConcurrencyError(Exception):
         self.expected_version = expected_version
 
 
+class ResidencyPolicyViolationError(Exception):
+    """A new Environment's `region` is not in its tenant's configured
+    `ResidencyPolicy.allowed_regions` -- raised by
+    `EnvironmentService.register`, maps to a real `422 Unprocessable
+    Entity` at the API layer (the request is well-formed, but this
+    tenant's own residency policy forbids it)."""
+
+    def __init__(self, *, tenant_id: str, region: str, allowed_regions: list[str]) -> None:
+        super().__init__(
+            f"region {region!r} is not permitted by tenant {tenant_id}'s residency policy "
+            f"(allowed: {allowed_regions!r})",
+        )
+        self.tenant_id = tenant_id
+        self.region = region
+        self.allowed_regions = allowed_regions
+
+
 @dataclass
 class TenantRecord:
     # Deliberately has no `version` field, unlike OrganisationRecord/WorkspaceRecord/
@@ -315,6 +332,32 @@ class QuotaSet:
 
     tenant_id: str
     limits: dict[str, float] = field(default_factory=dict)
+    configured_at: datetime | None = None
+    version: int = 1
+    updated_at: datetime = field(default_factory=now)
+
+
+@dataclass
+class ResidencyPolicy:
+    """Per-tenant data-residency policy (independent architecture
+    assessment §3.4 point 5: "quota, budget, residency, and risk
+    policies permit execution") -- `allowed_regions` is the set of
+    `EnvironmentRecord.region` values a new Environment under this
+    tenant may register into, enforced for real by
+    `EnvironmentService.register` (`core/environment_service.py`).
+    Scoped to Tenant, not Organisation -- the same level `QuotaSet`
+    already uses, and the level `region` itself actually lives one
+    step below (Workspace -> Environment); an Organisation-wide
+    default/inheritance story is real, separate, unbuilt work.
+    `configured_at` is `None` until a tenant's policy is first set --
+    the same rollout-safety default `QuotaSet.configured_at`/
+    `TenantRecord.entitlements_configured_at` already establish: an
+    unconfigured tenant has no residency restriction at all, not
+    silently locked out of every region, so shipping this check never
+    breaks a tenant that predates it."""
+
+    tenant_id: str
+    allowed_regions: list[str] = field(default_factory=list)
     configured_at: datetime | None = None
     version: int = 1
     updated_at: datetime = field(default_factory=now)

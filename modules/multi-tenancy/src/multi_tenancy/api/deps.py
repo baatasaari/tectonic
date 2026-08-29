@@ -10,6 +10,7 @@ from multi_tenancy.core.isolation_probe_service import IsolationProbeService
 from multi_tenancy.core.organisation_service import OrganisationService
 from multi_tenancy.core.ports import MultiTenancyRepository
 from multi_tenancy.core.quota_service import QuotaEnforcementService, QuotaSetService
+from multi_tenancy.core.residency_policy_service import ResidencyPolicyService
 from multi_tenancy.core.resource_allocation_service import ResourceAllocationService
 from multi_tenancy.core.tenant_registry_service import TenantRegistryService
 from multi_tenancy.core.workspace_service import WorkspaceService
@@ -55,3 +56,7 @@ def build_quota_enforcement_service(repository: MultiTenancyRepository, ctx: App
 
 def build_resource_allocation_service(repository: MultiTenancyRepository, ctx: AppContext) -> ResourceAllocationService:
     return ResourceAllocationService(repository, ctx.auditability)
+
+
+def build_residency_policy_service(repository: MultiTenancyRepository, ctx: AppContext) -> ResidencyPolicyService:
+    return ResidencyPolicyService(repository)

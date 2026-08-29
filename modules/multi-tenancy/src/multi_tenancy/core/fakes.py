@@ -13,6 +13,7 @@ from multi_tenancy.core.domain import (
     OptimisticConcurrencyError,
     OrganisationRecord,
     QuotaSet,
+    ResidencyPolicy,
     ResourceAllocation,
     ResourceAllocationStatus,
     TenantEntitlementRecord,
@@ -35,6 +36,7 @@ class InMemoryMultiTenancyRepository:
         self.workspaces: dict[str, WorkspaceRecord] = {}
         self.environments: dict[str, EnvironmentRecord] = {}
         self.quota_sets: dict[str, QuotaSet] = {}
+        self.residency_policies: dict[str, ResidencyPolicy] = {}
         self.quota_counters: dict[tuple[str, str, datetime], float] = {}
         self.resource_allocations: dict[str, ResourceAllocation] = {}
 
@@ -191,6 +193,18 @@ class InMemoryMultiTenancyRepository:
         version = existing.version + 1 if existing else 1
         record = QuotaSet(tenant_id=tenant_id, limits=dict(limits), configured_at=now(), version=version)
         self.quota_sets[tenant_id] = record
+        return record
+
+    async def get_residency_policy(self, tenant_id: str) -> ResidencyPolicy | None:
+        return self.residency_policies.get(tenant_id)
+
+    async def upsert_residency_policy(self, *, tenant_id: str, allowed_regions: list[str]) -> ResidencyPolicy:
+        existing = self.residency_policies.get(tenant_id)
+        version = existing.version + 1 if existing else 1
+        record = ResidencyPolicy(
+            tenant_id=tenant_id, allowed_regions=list(allowed_regions), configured_at=now(), version=version,
+        )
+        self.residency_policies[tenant_id] = record
         return record
 
     async def increment_quota_counter(

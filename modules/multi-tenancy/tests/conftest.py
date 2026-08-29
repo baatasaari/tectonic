@@ -11,6 +11,7 @@ from multi_tenancy.core.fakes import (
 from multi_tenancy.core.isolation_probe_service import IsolationProbeService
 from multi_tenancy.core.organisation_service import OrganisationService
 from multi_tenancy.core.quota_service import QuotaEnforcementService, QuotaSetService
+from multi_tenancy.core.residency_policy_service import ResidencyPolicyService
 from multi_tenancy.core.resource_allocation_service import ResourceAllocationService
 from multi_tenancy.core.tenant_registry_service import TenantRegistryService
 from multi_tenancy.core.workspace_service import WorkspaceService
@@ -29,6 +30,7 @@ class Harness:
         self.environment_service = EnvironmentService(self.repository, self.auditability)
         self.quota_set_service = QuotaSetService(self.repository)
         self.quota_enforcement_service = QuotaEnforcementService(self.repository)
+        self.residency_policy_service = ResidencyPolicyService(self.repository)
         self.resource_allocation_service = ResourceAllocationService(
             self.repository, self.auditability,
             auto_approve_increase_ratio=kwargs.get("auto_approve_increase_ratio", 0.20),
