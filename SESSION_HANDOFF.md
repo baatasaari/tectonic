@@ -10,11 +10,11 @@ Tectonic is a 34-module "Agentic AI Platform" being built module-by-module
 against low-level design specs in `docs/module-NN-*.md`, tracked against
 `docs/agentic-platform-final-module-table.md`. Work proceeds in tickets: a
 "Phase 1 kernel" pass closed cross-cutting platform gaps (auth, entitlements,
-observability, supply chain, etc. — see `git log --oneline` for the full
-list, each commit subject is a ticket). The current phase ("Phase 2") is
-building real product slices on top of the now-complete kernel; the first
-slice is a tenant support agent, designed in
-`docs/phase2-product-slice-01-support-agent.md`.
+observability, supply chain, etc.). Phase 2 moved into real product slices;
+the first is a tenant support agent, designed in
+`docs/phase2-product-slice-01-support-agent.md` and — as of this session —
+**built and verified end-to-end against real running module instances**
+(ticket #82).
 
 ## 2. Current Architecture
 
@@ -24,20 +24,12 @@ service: async SQLAlchemy + its own Postgres schema (Alembic migrations),
 on every non-Platform-Base module, OpenTelemetry tracing, Prometheus
 `/metrics`, its own Helm chart under `deploy/helm/`. Modules call each other
 over real HTTP with resilient clients (`ResilientHTTPClient` — circuit
-breaker via `aiobreaker`), never in-process imports of a peer's code. Two
-cross-cutting patterns introduced this session, now used by more than one
-module:
-- **CloudEvents + transactional outbox** event backbone (`core/events.py`,
-  `event_outbox` table, `OutboxRelayWorker` claim/lease/poison-pill via
-  `SELECT ... FOR UPDATE SKIP LOCKED`, relayed to Kafka via
-  `KafkaEventPublisher`) — Workflow Engine (pre-existing) and now
-  Multi-tenancy's Tenant lifecycle only.
-- **Quota pre-flight enforcement** — real modules calling Multi-tenancy's
-  `POST /tenants/{id}/quota/check` before doing work, via
-  `HTTPMultiTenancyClient` (fails open on any Multi-tenancy-side error).
-  Two shapes: rate-shaped (Multi-tenancy owns the counter — LLM Gateway,
-  `requests_per_minute`) and capacity-shaped (caller supplies
-  `current_usage` — Vector DB, `vector_count`).
+breaker via `aiobreaker`), never in-process imports of a peer's code.
+
+New this session: **`tests/product-slices/`**, a deliberate, narrow
+exception to every module's own single-module test tiers — it stands up an
+entire live multi-process stack (15 modules + a small mock external-systems
+stub) and drives real conversations across all of them. See its own README.
 
 Full architectural detail is in each module's own README and LLD doc — this
 section is deliberately not a re-derivation of those.
@@ -45,136 +37,176 @@ section is deliberately not a re-derivation of those.
 ## 3. Repository Structure
 
 ```
-docs/            Low-level design specs (module-01..34), module table,
-                 entitlement-gate rollout notes, Phase 2 slice design
-modules/<name>/  34 independently-deployable services (src/, tests/, deploy/,
-                 pyproject.toml, README.md — see CLAUDE.md for the workflow)
-scripts/         generate_openapi_specs.sh, seed_subscription_tiers.py
-test-data/       subscription-tiers/ fixture JSON used by seeding scripts
-.github/workflows/ci.yml   Per-module lint+test matrix, SBOM+sign, gate job
-README.md        Long running narrative of every ticket's design decisions —
-                 the primary source of truth for "why", not this file
-CLAUDE.md        Durable, every-session instructions (NEW this session)
-SESSION_HANDOFF.md   This file (NEW this session)
+docs/                       Low-level design specs, module table, Phase 2 slice design
+modules/<name>/             34 independently-deployable services (src/, tests/, deploy/,
+                            pyproject.toml, README.md — see CLAUDE.md for the workflow)
+scripts/                    seed_subscription_tiers.py, seed_support_agent_demo.py,
+                            post_support_agent_definition.py, product-slice-stubs/
+                            (stack.py orchestrator, external_mocks.py, smoke_test.py)
+tests/product-slices/       NEW this session: cross-module e2e test tier (its own
+                            pyproject.toml/README, not a modules/<name>/ package)
+test-data/                  subscription-tiers/ fixture JSON used by seeding scripts
+.github/workflows/ci.yml    Per-module lint+test matrix, SBOM+sign, gate job
+                            (tests/product-slices/ is NOT wired into CI yet — real,
+                            tracked follow-up, see §7)
+README.md                   Long running narrative of every ticket's design decisions
+CLAUDE.md                   Durable, every-session instructions
+SESSION_HANDOFF.md          This file
 ```
 
-No `.claude/` directory exists in this repo.
+## 4. Work Completed (this session — ticket #82)
 
-## 4. Work Completed
+Built and verified the Phase 2 support-agent slice end-to-end against real,
+live module instances (no Docker in this sandbox — every module runs as a
+real `uvicorn` process against its own real per-module Postgres via
+`scripts/product-slice-stubs/stack.py`). All three of the design doc's
+scripted conversations pass for real; the refund scenario's real escalation
+reaches Human Oversight's real queue and a real reviewer decision resumes
+the conversation; Auditability shows a real hash-chained trail; Billing and
+Metering shows real non-zero usage. Full narrative (every fix, every gap
+found) is in root `README.md`'s Phase 2 section and in each touched
+module's own README — not duplicated here. Touched modules: Workflow
+Engine, Multi-tenancy, Billing and Metering, LLM Gateway, Vector DB,
+Knowledge Base, Tool Orchestration, Conversational Engine, Agentic RAG,
+Guardrails. New: `tests/product-slices/` (the one net-new automated test
+tier this ticket adds), `scripts/seed_support_agent_demo.py`,
+`scripts/post_support_agent_definition.py`,
+`scripts/product-slice-stubs/{stack.py,external_mocks.py,smoke_test.py}`.
 
-This session closed four tickets (all committed and pushed to
-`claude/practical-wozniak-l1723c`, working tree clean):
-
-- **#78** (`86a4a0e`) — Wired LLM Gateway (rate-shaped) and Vector DB
-  (capacity-shaped) to call Multi-tenancy's real `quota/check` before doing
-  work, via a new `HTTPMultiTenancyClient` in each, fail-open posture.
-- **#79** (`561faf8`) — Rolled Workflow Engine's CloudEvents+outbox pattern
-  out to Multi-tenancy's Tenant lifecycle (`register`/`suspend`/
-  `reactivate`/`delete`); new `event_outbox` table (migration `0006`), new
-  `OutboxRelayWorker`/`KafkaEventPublisher`. Organisation/Workspace/
-  Environment deliberately stay on the pre-existing best-effort Auditability
-  path only.
-- **#80** (`6bb7e7a`) — Rolled Billing and Metering's schemathesis/Hypothesis
-  OpenAPI contract-test tier out to Workflow Engine, Multi-tenancy, Vector
-  DB, LLM Gateway. Fixed two reusable harness issues (ASGI lifespan side
-  effects, `NullPool` for the fuzzing event-loop-per-call pattern — see
-  `CLAUDE.md`) and a real bug in every module fuzzing turned up (non-UUID
-  path/query segments reaching `asyncpg` unguarded, unbounded `offset`,
-  NUL bytes in free-text fields, invalid enum filters, degenerate vectors in
-  Vector DB, etc. — full list in README.md's ticket #80 narrative).
-- **#81** (`6bbfc03`) — Design doc for Phase 2's first product slice:
-  `docs/phase2-product-slice-01-support-agent.md` (a tenant support agent —
-  multi-turn dialogue, retrieval-grounded answers, a real tool call, human
-  escalation, and the identity/entitlement/billing/audit/tracing path every
-  one of those needs in production).
-
-Each ticket's full reasoning/tradeoffs are narrated in the root `README.md`
-(search for the ticket's fix description) and in the touched modules' own
-READMEs — not duplicated here.
+Committed and pushed to `claude/practical-wozniak-l1723c-rw7pp0`
+(commit `4d7197c`, on top of `75a5439`).
 
 ## 5. Files Changed
 
-All already committed and pushed; see `git log --oneline` (commits
-`86a4a0e`, `561faf8`, `6bb7e7a`, `6bbfc03`) and `git show --stat <sha>` for
-exact diffs per ticket. Touched: `modules/{llm-gateway,vector-db}` (core
-domain/ports/service/app_context/main/routes, new `clients/
-multi_tenancy_client.py`, tests, README) for #78; `modules/multi-tenancy`
-(events/outbox/kafka-publisher, db models+repository, config, app_context,
-main, new Alembic migration `0006`, deploy manifests, tests, README) for
-#79; four modules' `tests/contract/{conftest.py,test_openapi_contract.py}`
-plus assorted repository/route/schema bug fixes for #80; `docs/
-phase2-product-slice-01-support-agent.md` (new) for #81; root `README.md`
-updated after every ticket. **New this handover session**: `CLAUDE.md`,
-`SESSION_HANDOFF.md` (both at repo root).
+See `git show --stat 4d7197c` for the exact diff (54 files). Summary: one
+real wire-shape fix or missing-endpoint fix per touched module (each
+module's own README documents its own fix in full); `KafkaEventPublisher`'s
+half-initialized-producer hang fixed in both Workflow Engine and
+Multi-tenancy; Conversational Engine's real `WorkflowEngineClient` +
+`resume_from_workflow` addition; `tests/product-slices/` (new); root
+`README.md` updated.
 
 ## 6. Current Application State
 
-`git status`: clean, branch `claude/practical-wozniak-l1723c`, up to date
-with `origin/claude/practical-wozniak-l1723c` (before this handover's own
-commit). All 4 modules touched this session re-verified green just now (see
-§10). A broader spot-check of two untouched modules (billing-and-metering,
-identity-and-access) also passed. No local Docker; local Postgres 16 and
-Redis running (started this session, see `CLAUDE.md`).
+`git status`: clean, branch `claude/practical-wozniak-l1723c-rw7pp0`, pushed
+and up to date with `origin/claude/practical-wozniak-l1723c-rw7pp0` at
+commit `4d7197c`. All 10 touched modules' full suites (ruff + unit +
+integration + contract where present) re-verified green after every fix
+(see §10). `tests/product-slices/` itself passes 8/8 (6 support-agent
+scenarios + 2 trace-propagation regression tests) from a clean venv, stack
+up, and stack down. No live module processes left running; local Postgres
+16 and Redis are up (both needed a restart mid-session after a container
+restart — see §8).
 
 ## 7. Incomplete Work
 
-- **Ticket #82 was paused before this handover, not started.** It is the
-  next real product-slice ticket: build and verify the support-agent slice
-  (`docs/phase2-product-slice-01-support-agent.md`) end-to-end against real
-  running module instances. Blocked on a real infrastructure decision — see
-  §9 and §13.
-- Organisation → Tenant cascading offboarding (Multi-tenancy) remains
-  unbuilt — `OrganisationService.delete`'s own docstring still flags it.
-- LLM Gateway's `tokens_per_minute` quota class is deliberately not wired to
-  quota/check (actual token count is only known after the provider
-  responds — different accounting design, out of scope for #78's reference
-  pass).
-- Rolling the quota pre-flight pattern (#78), the event-outbox pattern
-  (#79), and the contract-test tier (#80) out to the platform's remaining
-  ~29 modules is explicitly named follow-up work in each ticket's README
-  narrative, not started.
+- **`tests/product-slices/` is not wired into CI.** Running 16 real
+  processes concurrently is a heavier ask than a per-module CI job is
+  shaped for. Real, tracked follow-up, not a silent gap — see that
+  directory's own README.
+- **Observability's own real store isn't exercised.** Trace-propagation
+  verification is deliberately scoped to proving W3C `traceparent`
+  continuity across one real HTTP hop (`test_trace_propagation.py`), not
+  spans landing in Observability's real store — no real OTel
+  Collector/Tempo is available in this sandbox. Documented in that test's
+  own docstring and in root README's Phase 2 section.
+- **A demo front-end / SDK-and-Developer-Portal exercise** — explicitly
+  out of this slice's scope per the design doc's own "What this slice
+  deliberately does not cover" section; unchanged this session.
+- **Agentic RAG's hybrid retrieval fan-out (Graph DB, Knowledge Base's own
+  symbolic lookup) is disabled**, not fixed, for this slice
+  (`AGENTIC_RAG_RETRIEVAL__HYBRID_RETRIEVAL_ENABLED=false` in
+  `stack.py`): Graph DB is legitimately out of this slice's scope, and
+  Knowledge Base has no real symbolic-lookup endpoint at all yet — a real,
+  separately-scoped gap (`HTTPGraphDBClient`/`HTTPKnowledgeBaseClient` in
+  Agentic RAG still carry their own pre-existing invented wire shapes,
+  unexercised and unfixed by this ticket).
+- Everything named in the prior handoff's own backlog (rolling the quota
+  pre-flight/event-outbox/contract-test patterns out to the platform's
+  remaining ~29 modules; Organisation → Tenant cascading offboarding is
+  actually now built per a later commit — re-check `git log` rather than
+  trusting this line) is unchanged by this session and still open.
 
 ## 8. Known Issues
 
-- No Docker daemon in this sandbox (confirmed again this session) — blocks
-  anything needing a real Kafka broker or a module's own
-  `docker-compose.yml` stack. See `CLAUDE.md` and §9.
-- Deprecation warnings (non-blocking, pre-existing): `aiobreaker`'s internal
-  use of `datetime.utcnow()`, and an Alembic `path_separator` config
-  warning — both cosmetic, appear in every module's test output, not
-  introduced this session.
-- No known regressions or newly-introduced bugs from this session's four
-  tickets — full suites re-run clean this handover (§10).
+- **Postgres and Redis are not durable across a container restart in this
+  sandbox**, despite `CLAUDE.md`'s own claim that the Postgres password
+  persists — both had to be restarted mid-session
+  (`sudo pg_ctlcluster 16 main start`;
+  `redis-server --daemonize yes --port 6379 --save "" --appendonly no`)
+  and the Postgres password re-set once
+  (`ALTER USER postgres PASSWORD 'postgres'`). Check both are actually up
+  before trusting a "connection refused" as a real bug.
+- **A leftover live product-slice stack breaks unrelated modules' own
+  contract tests.** Diagnosed this session: multi-tenancy's contract test
+  failed with `RuntimeError: Event loop is closed` only because a
+  previous manual `stack.py` run was still running underneath it — its
+  real HTTP clients (Auditability, probe targets) found a real peer
+  instead of the no-op/stub the contract fixture expects, and a pooled
+  connection reused across schemathesis's fresh-event-loop-per-call
+  pattern is exactly `CLAUDE.md`'s own documented bug class, just on an
+  HTTP client pool instead of a DB engine pool. **Always confirm no
+  `stack.py`-launched processes are still running (`ps aux | grep
+  uvicorn`) before trusting any one module's own contract-test result.**
+  `tests/product-slices/conftest.py`'s own `live_stack` fixture tears
+  itself down in a `finally` for exactly this reason.
+- Deprecation warnings (non-blocking, pre-existing): `aiobreaker`'s
+  internal use of `datetime.utcnow()`, an Alembic `path_separator` config
+  warning, harmless "Failed to export traces to localhost:4317" OTLP
+  noise (no collector in this sandbox) — all cosmetic, not introduced
+  this session.
+- No known regressions from this session's work — every touched module's
+  full suite re-run clean (§10).
 
 ## 9. Decisions and Constraints
 
-- **No secrets in this repo.** This file intentionally names only env var
-  names (`TECTONIC_TEST_POSTGRES_URL`), never values beyond the sandbox's
-  own well-known local dev password (`postgres`/`postgres` on
-  `localhost:5432`, not a production credential).
-- **Real infrastructure over mocks**, established and reinforced all
-  session: integration/contract tests run against a real local Postgres
-  (no Docker/testcontainers available here — see `CLAUDE.md`), modules call
-  real peer HTTP APIs in tests, not mocks of this platform's own code.
-- **Open decision point for #82**: the support-agent slice's end-to-end
-  verification plan (per its design doc) implies exercising several modules
-  together with real inter-service calls. Whether that needs a real Kafka
-  broker (blocked — no Docker here) or can be verified with the modules'
-  existing HTTP-only real-peer pattern (no Kafka involved in the slice's
-  synchronous request path) needs to be re-checked against the design doc
-  by the next session before deciding how to proceed — this was the open
-  question pending when the handover request arrived.
+- **No secrets in this repo.** Only the sandbox's own well-known local dev
+  Postgres password (`postgres`/`postgres` on `localhost:5432`) and the
+  platform-wide insecure default JWT shared secret
+  (`dev-insecure-shared-secret-change-me`) appear anywhere — neither is a
+  production credential.
+- **Real infrastructure over mocks**, reinforced again this session: the
+  only mocked piece anywhere in the support-agent slice is
+  `scripts/product-slice-stubs/external_mocks.py`, standing in for exactly
+  two things genuinely outside this platform's own 34 modules (an LLM
+  provider, a merchant's order-status backend) — every module-to-module
+  call is real.
+- **Kafka is confirmed not required for this slice's critical path** — the
+  outbox pattern is fire-and-forget by design, and no module in this
+  platform runs a real Kafka consumer yet. This was checked and confirmed
+  (with the user) before any ticket #82 code was written; not re-litigate
+  this without new evidence.
+- **Tracing verification is deliberately scoped down** (agreed with the
+  user before building): prove real cross-process W3C `traceparent`
+  propagation, not spans landing in Observability's real store (no real
+  OTel Collector/Tempo available here).
+- **The CE→WE integration was built for real**, not stubbed around (agreed
+  with the user before building): Conversational Engine now has a real
+  `WorkflowEngineClient`, gated behind `settings.workflow_routing.enabled`
+  (default off) so every pre-existing direct-LLM-Gateway deployment is
+  unaffected.
 
 ## 10. Tests and Validation
 
-Re-run for real this handover session (not assumed from memory), all green:
+Re-run for real this session (not assumed from memory), all green, after
+every fix and after a Postgres/Redis restart mid-session:
 
 | Module | ruff | unit | integration | contract |
 |---|---|---|---|---|
-| workflow-engine | clean | 67 passed | 6 passed | 1 passed |
-| multi-tenancy | clean | 173 passed | 19 passed | 1 passed |
+| workflow-engine | clean | 78 passed | 7 passed | 1 passed |
+| multi-tenancy | clean | 174 passed | 19 passed | 1 passed |
+| billing-and-metering | clean | 75 passed | 10 passed | 1 passed |
+| llm-gateway | clean | 74 passed | 4 passed | 1 passed |
 | vector-db | clean | 61 passed | 3 passed | 1 passed |
-| llm-gateway | clean | 74 passed | 3 passed | 1 passed |
+| knowledge-base | clean | 70 passed | 4 passed | (no contract tier) |
+| tool-orchestration | clean | 57 passed | 3 passed | (no contract tier) |
+| conversational-engine | clean | 59 passed | 4 passed | (no contract tier) |
+| agentic-rag | clean | 48 passed | 3 passed | (no contract tier) |
+| guardrails | clean | 58 passed | 4 passed | (no contract tier) |
+
+Plus `tests/product-slices/`: **8 passed** (6 support-agent scenarios + 2
+trace-propagation), full stack up→seed→test→down cycle, run twice from a
+freshly rebuilt venv to confirm it's not an artifact of leftover state.
 
 Commands used (per module, from `modules/<name>/`):
 ```bash
@@ -184,17 +216,22 @@ pytest tests/unit -v
 TECTONIC_TEST_POSTGRES_URL=postgresql://postgres:postgres@localhost:5432/postgres pytest tests/integration -v
 TECTONIC_TEST_POSTGRES_URL=postgresql://postgres:postgres@localhost:5432/postgres pytest tests/contract -v
 ```
-No build step beyond `uv pip install -e ".[dev]"` (no compiled artifacts;
-pure Python services). CI (`.github/workflows/ci.yml`) runs the same
-commands per-module in a matrix, plus SBOM generation/signing on push.
+`tests/product-slices/` — see its own README for the exact setup; briefly:
+```bash
+cd tests/product-slices
+uv venv && source .venv/bin/activate
+uv pip install pytest pytest-asyncio httpx fastapi uvicorn \
+  "opentelemetry-api>=1.27" "opentelemetry-sdk>=1.27" \
+  "opentelemetry-instrumentation-fastapi>=0.48b0" "opentelemetry-instrumentation-httpx>=0.48b0"
+pytest -v   # stands the whole stack up and tears it down itself
+```
 
 ## 11. Environment and Running Locally
 
-(No secrets or credentials below beyond the sandbox's own well-known local
-dev Postgres password.)
-
 ```bash
-# Start local infra (no Docker in this sandbox — see CLAUDE.md)
+# Start local infra (no Docker in this sandbox — see CLAUDE.md).
+# Check both are actually up before trusting a "connection refused" —
+# neither reliably persists across a container restart in this sandbox.
 sudo pg_ctlcluster 16 main start
 redis-server --daemonize yes --port 6379 --save "" --appendonly no
 
@@ -207,88 +244,60 @@ pytest tests/unit -v
 TECTONIC_TEST_POSTGRES_URL=postgresql://postgres:postgres@localhost:5432/postgres pytest tests/integration -v   # if tests/integration/ exists
 TECTONIC_TEST_POSTGRES_URL=postgresql://postgres:postgres@localhost:5432/postgres pytest tests/contract -v      # if tests/contract/ exists
 
-# Full local stack for one module (requires Docker — unavailable in this sandbox)
-docker compose -f deploy/docker-compose.yml up --build
+# The whole support-agent product slice, live (see tests/product-slices/README.md)
+python3 scripts/product-slice-stubs/stack.py          # up: launches all 15 modules + mock stub, seeds, posts the workflow definition
+python3 scripts/product-slice-stubs/stack.py down     # tear down by port scan
 ```
 
 Postgres local dev credentials: role `postgres`, password `postgres`,
-`localhost:5432` — this is the sandbox's own pre-provisioned local cluster,
-not a shared or production credential.
+`localhost:5432`. Platform-wide insecure JWT shared secret:
+`dev-insecure-shared-secret-change-me` (every module's own zero-config
+default). Neither is a production credential.
 
 ## 12. Backlog (P0/P1/P2/P3)
 
 - **P0**: None. Nothing is broken or blocking; all touched modules are
   green.
-- **P1**: Ticket #82 — build and verify the Phase 2 support-agent product
-  slice end-to-end (see §13). This is the natural next task.
-- **P2**: Roll the three new reference patterns (quota pre-flight, event
-  outbox, contract-test tier) out beyond their current reference-implementation
-  modules to the rest of the platform, per each ticket's own README
-  follow-up note. Organisation → Tenant cascading offboarding in
-  Multi-tenancy.
-- **P3**: LLM Gateway `tokens_per_minute` quota accounting design (needs a
-  genuinely different post-hoc accounting shape, not a mechanical rollout).
+- **P1**: Wire `tests/product-slices/` into CI (currently manual-only —
+  see §7). Fix Agentic RAG's own Graph DB/Knowledge-Base-symbolic-lookup
+  client wire shapes properly (currently sidestepped via
+  `hybrid_retrieval_enabled=false` for this slice only) once Knowledge
+  Base has a real symbolic-lookup endpoint to fix them against.
+- **P2**: A demo front-end for the support-agent slice (explicitly named
+  as separately-scoped follow-up in the design doc). Roll the reference
+  patterns from earlier tickets (quota pre-flight, event outbox,
+  contract-test tier) out beyond their current modules.
+- **P3**: LLM Gateway `tokens_per_minute` quota accounting design.
 
 ## 13. Recommended Next Task
 
-**Ticket #82 — Build and verify the Phase 2 support-agent product slice.**
-
-- **Objective**: Stand up and verify, end-to-end against real running
-  module instances (not just unit tests), the tenant support-agent scenario
-  designed in `docs/phase2-product-slice-01-support-agent.md`: multi-turn
-  dialogue, retrieval-grounded answers, a real tool call, a genuine
-  human-escalation path, and the identity/entitlement/billing/audit/tracing
-  governance path each of those needs in production.
-- **Relevant files**: `docs/phase2-product-slice-01-support-agent.md` (the
-  design — read this first, in full); the modules it names as slice
-  participants (re-read the doc to get the exact list — likely includes
-  Conversational Engine, LLM Gateway, Agentic RAG / Knowledge Base / Vector
-  DB, Tool Orchestration, Human Oversight, Identity and Access,
-  Multi-tenancy, Billing and Metering, Auditability, Observability).
-- **Dependencies / open question to resolve first**: whether the slice's
-  verification plan requires a real Kafka broker (blocked in this sandbox —
-  no Docker daemon; see `CLAUDE.md` §"Sandbox infrastructure") or can be
-  fully verified through the modules' existing real-HTTP-peer pattern with
-  no Kafka in the synchronous path. Re-check this against the design doc's
-  own verification section before starting build work; if Kafka turns out
-  to be required, that's a decision point for the user (accept
-  unverified-against-real-Kafka status, find/install a non-Docker Kafka
-  option, or scope verification down) rather than something to silently
-  route around.
-- **Acceptance criteria**: each module participating in the slice is called
-  for real (real HTTP, real Postgres) in at least one end-to-end test path
-  that walks the scenario from a user's opening message through retrieval,
-  tool call, and (for the escalation branch) a human-oversight handoff, with
-  real entitlement/quota/audit/billing/tracing side effects verified, not
-  asserted from mocks.
-- **Tests required**: new end-to-end test(s) exercising the real
-  multi-module flow (naming/location TBD by the next session — this
-  platform doesn't yet have a "cross-module e2e" test tier convention;
-  establishing one, or reusing an existing module's `tests/integration`
-  convention across module boundaries, is part of this ticket's own design
-  work). Every participating module's own existing unit/integration/contract
-  tiers must stay green throughout.
-- **Definition of done**: the slice runs and is verified per the design
-  doc's own acceptance bar; root `README.md` updated with the ticket's
-  narrative (per this repo's established convention — see `CLAUDE.md`);
-  any newly-discovered "not built yet" gaps documented explicitly rather
-  than silently left implicit; all module test suites green; branch pushed.
+No single next ticket is mandated by this session — ticket #82 (the prior
+handoff's own "Recommended Next Task") is done. Pick from §12's backlog, or
+ask the user what Phase 2 product slice comes next (the design doc's own
+module-role table names SDK/Developer Portal and a second, differently-shaped
+scenario as natural candidates for a slice #2, per root README's "What this
+slice deliberately does not cover" section).
 
 ## 14. Important Context for Next Claude Session
 
 - Read `CLAUDE.md` first (durable conventions), then this file, then the
-  relevant module READMEs and `docs/phase2-product-slice-01-support-agent.md`
-  before writing any code.
+  relevant module READMEs before writing any code.
 - The root `README.md` is the authoritative narrative of every design
-  decision made so far, organized chronologically by ticket — grep it for a
-  ticket number or module name rather than re-deriving "why" from source.
-- No Docker daemon in this sandbox is a recurring, real constraint, not a
-  one-off — it shaped ticket #80's contract-test harness fixes and is the
-  open blocker for #82. Don't assume it will "probably work" without
+  decision made so far, organized chronologically by ticket — grep it for
+  a ticket number or module name rather than re-deriving "why" from
+  source.
+- **Before running any single module's own `tests/integration`/
+  `tests/contract` tier, confirm no `stack.py`-launched live process is
+  still running** (`ps aux | grep uvicorn`) — see §8's own documented
+  false-regression class this exact mistake caused mid-session.
+- No Docker daemon in this sandbox is a recurring, real constraint — it
+  shaped both ticket #80's contract-test harness fixes and ticket #82's
+  entire live-verification approach (real per-module Postgres processes
+  instead of docker-compose). Don't assume it will "probably work" without
   checking.
-- This session's own four tickets (#78-81) are fully done, committed, and
-  pushed — do not redo or second-guess them without new evidence; build on
-  top of them.
+- Ticket #82 is fully done, committed, and pushed
+  (`claude/practical-wozniak-l1723c-rw7pp0`, commit `4d7197c`) — do not
+  redo or second-guess it without new evidence; build on top of it.
 
 ## 15. Resume Prompt
 
@@ -300,18 +309,21 @@ anything else, read CLAUDE.md (durable, every-session conventions) and
 SESSION_HANDOFF.md (this session's handover snapshot) at the repo root in
 full.
 
-Then start on ticket #82, the "Recommended Next Task" in
-SESSION_HANDOFF.md §13: build and verify the Phase 2 support-agent product
-slice (docs/phase2-product-slice-01-support-agent.md) end-to-end against
-real running module instances. Read that design doc in full first. Before
-writing code, re-check whether the slice's verification plan requires a
-real Kafka broker — this sandbox has no Docker daemon (see CLAUDE.md), so
-if Kafka turns out to be required, stop and ask how to proceed rather than
-silently working around it or faking it.
+Ticket #82 (the Phase 2 support-agent product slice, built and verified
+end-to-end against real running module instances) is done, committed, and
+pushed to claude/practical-wozniak-l1723c-rw7pp0. Pick up the next task from
+SESSION_HANDOFF.md §12's backlog, or ask what Phase 2 slice #2 should be —
+whichever the user actually wants; don't assume.
 
-Work on branch claude/practical-wozniak-l1723c (already up to date with
-origin). Follow this repo's established conventions: real infrastructure in
-tests (real local Postgres via TECTONIC_TEST_POSTGRES_URL, real HTTP calls
+Before running any single module's own tests/integration or tests/contract
+tier, confirm no live product-slice stack process is still running
+(`ps aux | grep uvicorn`) — a leftover live stack from a manual
+scripts/product-slice-stubs/stack.py run gives an unrelated module's own
+contract test a real peer instead of the no-op/stub it expects, which reads
+as a false regression (see SESSION_HANDOFF.md §8 for the full diagnosis).
+
+Follow this repo's established conventions: real infrastructure in tests
+(real local Postgres via TECTONIC_TEST_POSTGRES_URL, real HTTP calls
 between modules, no mocking of this platform's own peer modules), update
 both the touched module(s)' own README and the root README's running
 narrative with what was built and what deliberately remains out of scope,
