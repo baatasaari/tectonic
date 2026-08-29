@@ -7,7 +7,19 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CHAR, JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    CHAR,
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -182,6 +194,32 @@ class ResourceAllocation(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
     )
+
+
+class EventOutbox(Base):
+    """The transactional outbox (independent architecture assessment
+    §3.3): one row per CloudEvents envelope awaiting relay to Kafka,
+    written in the same commit as the Tenant state change it
+    accompanies. The rollout of Workflow Engine's own `EventOutbox`
+    model (Module 1) to a second module. See `core/domain.py`'s
+    `EventOutboxRecord` docstring and `core/outbox_worker.py`."""
+
+    __tablename__ = "event_outbox"
+    __table_args__ = (
+        Index("ix_event_outbox_status_lease", "status", "lease_expires_at"),
+    )
+
+    id: Mapped[str] = mapped_column(UUIDType, primary_key=True)  # = the CloudEvents envelope's own `id`
+    topic: Mapped[str] = mapped_column(String(128))
+    tenant_id: Mapped[str] = mapped_column(String(255))
+    envelope: Mapped[dict] = mapped_column(JSONType)
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    attempts: Mapped[int] = mapped_column(Integer(), default=0)
+    worker_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class TenantEntitlement(Base):

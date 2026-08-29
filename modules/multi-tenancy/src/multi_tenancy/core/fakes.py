@@ -3,15 +3,17 @@ contract")."""
 from __future__ import annotations
 
 import copy
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from multi_tenancy.core.domain import (
     EnvironmentRecord,
+    EventOutboxRecord,
     HierarchyStatus,
     IsolationProbeResult,
     OptimisticConcurrencyError,
     OrganisationRecord,
+    OutboxEventStatus,
     QuotaSet,
     ResidencyPolicy,
     ResourceAllocation,
@@ -39,6 +41,7 @@ class InMemoryMultiTenancyRepository:
         self.residency_policies: dict[str, ResidencyPolicy] = {}
         self.quota_counters: dict[tuple[str, str, datetime], float] = {}
         self.resource_allocations: dict[str, ResourceAllocation] = {}
+        self.outbox: dict[str, EventOutboxRecord] = {}
 
     def _compare_and_swap(self, store: dict, record, *, expected_version: int):
         """Mirrors `db/repository.py`'s own real compare-and-swap so unit
@@ -69,6 +72,26 @@ class InMemoryMultiTenancyRepository:
     async def update_tenant(self, record: TenantRecord) -> TenantRecord:
         self.tenants[record.id] = record
         return record
+
+    async def create_tenant_and_enqueue_event(
+        self, record: TenantRecord, *, topic: str, envelope: dict[str, Any],
+    ) -> TenantRecord:
+        self.tenants[record.id] = copy.deepcopy(record)
+        outbox_record = EventOutboxRecord(
+            id=envelope["id"], topic=topic, tenant_id=envelope["tenant_id"], envelope=copy.deepcopy(envelope),
+        )
+        self.outbox[outbox_record.id] = outbox_record
+        return copy.deepcopy(record)
+
+    async def update_tenant_and_enqueue_event(
+        self, record: TenantRecord, *, topic: str, envelope: dict[str, Any],
+    ) -> TenantRecord:
+        self.tenants[record.id] = copy.deepcopy(record)
+        outbox_record = EventOutboxRecord(
+            id=envelope["id"], topic=topic, tenant_id=envelope["tenant_id"], envelope=copy.deepcopy(envelope),
+        )
+        self.outbox[outbox_record.id] = outbox_record
+        return copy.deepcopy(record)
 
     async def replace_entitlements(
         self, *, tenant_id: str, module_names: list[str],
@@ -252,6 +275,67 @@ class InMemoryMultiTenancyRepository:
         results = sorted(results, key=lambda r: r.created_at, reverse=True)
         return [copy.deepcopy(r) for r in results[offset:offset + limit]], len(results)
 
+    # --- Event outbox relay (core/outbox_worker.py) ---
+
+    async def claim_next_outbox_event(self, worker_id: str, lease_seconds: int) -> EventOutboxRecord | None:
+        moment = now()
+        candidates = [
+            e for e in self.outbox.values()
+            if e.status == OutboxEventStatus.PENDING and (e.lease_expires_at is None or e.lease_expires_at < moment)
+        ]
+        if not candidates:
+            return None
+        oldest = min(candidates, key=lambda e: e.created_at)
+        oldest.worker_id = worker_id
+        oldest.attempts += 1
+        oldest.lease_expires_at = moment + timedelta(seconds=lease_seconds)
+        return copy.deepcopy(oldest)
+
+    async def mark_outbox_event_published(self, event_id: str) -> None:
+        record = self.outbox.get(event_id)
+        if record is None:
+            return
+        record.status = OutboxEventStatus.PUBLISHED
+        record.published_at = now()
+        record.lease_expires_at = None
+
+    async def requeue_outbox_event_for_retry(self, event_id: str, *, error: str) -> None:
+        record = self.outbox.get(event_id)
+        if record is None:
+            return
+        record.lease_expires_at = None
+        record.last_error = error
+
+    async def fail_exhausted_outbox_events(self, max_attempts: int) -> int:
+        count = 0
+        for record in self.outbox.values():
+            if record.status == OutboxEventStatus.PENDING and record.attempts >= max_attempts:
+                record.status = OutboxEventStatus.FAILED
+                record.last_error = f"exceeded max attempts ({max_attempts})"
+                count += 1
+        return count
+
+    async def force_expire_stale_outbox_leases(self) -> int:
+        moment = now()
+        count = 0
+        for record in self.outbox.values():
+            if (
+                record.status == OutboxEventStatus.PENDING
+                and record.lease_expires_at is not None
+                and record.lease_expires_at > moment
+            ):
+                record.lease_expires_at = moment
+                count += 1
+        return count
+
+
+class InMemoryEventPublisher:
+    def __init__(self) -> None:
+        self.published: list[tuple[str, dict[str, Any]]] = []
+
+    async def publish(self, topic: str, event: dict[str, Any]) -> None:
+        self.published.append((topic, event))
+
 
 class StubAuditabilityClient:
     """Records every emitted event and never raises -- mirrors
@@ -283,4 +367,7 @@ class StubTenantScopedListClient:
         return self._items
 
 
-__all__ = ["InMemoryMultiTenancyRepository", "StubAuditabilityClient", "StubTenantScopedListClient"]
+__all__ = [
+    "InMemoryEventPublisher", "InMemoryMultiTenancyRepository", "StubAuditabilityClient",
+    "StubTenantScopedListClient",
+]

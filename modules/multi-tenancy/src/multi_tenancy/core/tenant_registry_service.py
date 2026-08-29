@@ -12,9 +12,21 @@ scoped gap WorkspaceService.delete's and OrganisationService.delete's
 own docstrings still flag for the *Organisation* level (Organisation
 -> Tenant cascading remains separate, unbuilt work; a Tenant's own
 descendants no longer are).
+
+register()/_transition() also enqueue a real CloudEvents envelope into
+the transactional event outbox (core/events.py, core/outbox_worker.py
+-- independent architecture assessment §3.3, the rollout of Workflow
+Engine's own reference implementation to this module), in the SAME DB
+commit as the tenant row's own create/update -- a separate, additional
+concern from the `_auditability.emit()` best-effort audit trail this
+already sent: one is Auditability's own immutable compliance log, the
+other is the general event bus other modules (Billing and Metering,
+SDK and Developer Portal, Observability) can consume from. Both fire
+on every register()/_transition() call.
 """
 from __future__ import annotations
 
+from multi_tenancy.core import events
 from multi_tenancy.core.domain import (
     HierarchyStatus,
     InvalidTransitionError,
@@ -51,7 +63,10 @@ class TenantRegistryService:
         self, *, name: str, tier: str = "standard", organisation_id: str | None = None,
     ) -> TenantRecord:
         record = TenantRecord(id=new_id(), name=name, tier=tier, organisation_id=organisation_id)
-        created = await self._repository.create_tenant(record)
+        envelope = events.tenant_registered(record.id, name, tier, organisation_id)
+        created = await self._repository.create_tenant_and_enqueue_event(
+            record, topic=events.TOPIC_TENANT, envelope=envelope,
+        )
         await self._auditability.emit({
             "event": "tenant_created", "tenant_id": created.id, "name": created.name,
             "organisation_id": organisation_id,
@@ -76,7 +91,10 @@ class TenantRegistryService:
         from_status = tenant.status
         tenant.status = to_status
         tenant.updated_at = now()
-        updated = await self._repository.update_tenant(tenant)
+        envelope = events.tenant_status_changed(tenant_id, from_status.value, to_status.value)
+        updated = await self._repository.update_tenant_and_enqueue_event(
+            tenant, topic=events.TOPIC_TENANT, envelope=envelope,
+        )
         await self._auditability.emit({
             "event": "tenant_status_changed", "tenant_id": tenant_id,
             "from_status": from_status.value, "to_status": to_status.value,

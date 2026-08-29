@@ -9,6 +9,7 @@ from typing import Any, Protocol
 
 from multi_tenancy.core.domain import (
     EnvironmentRecord,
+    EventOutboxRecord,
     HierarchyStatus,
     IsolationProbeResult,
     OrganisationRecord,
@@ -29,6 +30,24 @@ class MultiTenancyRepository(Protocol):
     async def get_tenant(self, tenant_id: str) -> TenantRecord | None: ...
 
     async def update_tenant(self, record: TenantRecord) -> TenantRecord: ...
+
+    async def create_tenant_and_enqueue_event(
+        self, record: TenantRecord, *, topic: str, envelope: dict[str, Any],
+    ) -> TenantRecord:
+        """Atomically creates the tenant AND enqueues its accompanying
+        CloudEvents envelope into `event_outbox`, one DB commit -- the
+        rollout of Workflow Engine's own `update_instance_and_enqueue_event`
+        pattern to this module's top-level entity. See
+        `core.domain.EventOutboxRecord`'s own docstring."""
+        ...
+
+    async def update_tenant_and_enqueue_event(
+        self, record: TenantRecord, *, topic: str, envelope: dict[str, Any],
+    ) -> TenantRecord:
+        """Atomically updates the tenant AND enqueues its accompanying
+        CloudEvents envelope, one DB commit -- see
+        `create_tenant_and_enqueue_event`'s own docstring."""
+        ...
 
     async def list_tenants(
         self, *, status: TenantStatus | None = None, limit: int = 50, offset: int = 0,
@@ -153,6 +172,35 @@ class MultiTenancyRepository(Protocol):
         self, *, environment_id: str | None = None, status: ResourceAllocationStatus | None = None,
         limit: int = 50, offset: int = 0,
     ) -> tuple[list[ResourceAllocation], int]: ...
+
+    # --- Event outbox relay (core/outbox_worker.py) ---
+
+    async def claim_next_outbox_event(self, worker_id: str, lease_seconds: int) -> EventOutboxRecord | None:
+        """`SELECT ... FOR UPDATE SKIP LOCKED` in the SQL implementation --
+        the same claim shape Workflow Engine's `claim_next_outbox_event`
+        already established, so multiple worker processes/pods can poll
+        this table concurrently with no double-claim."""
+        ...
+
+    async def mark_outbox_event_published(self, event_id: str) -> None: ...
+
+    async def requeue_outbox_event_for_retry(self, event_id: str, *, error: str) -> None: ...
+
+    async def fail_exhausted_outbox_events(self, max_attempts: int) -> int:
+        """The poison-pill guard: an event that has failed `max_attempts`
+        times in a row stops being retried and is marked `failed` for
+        good, rather than being reclaimed forever."""
+        ...
+
+    async def force_expire_stale_outbox_leases(self) -> int:
+        """The startup recovery sweep: force-expires every currently-held
+        lease, so anything left mid-flight by a now-dead previous worker
+        instance is reclaimed on the very next poll tick."""
+        ...
+
+
+class EventPublisher(Protocol):
+    async def publish(self, topic: str, event: dict[str, Any]) -> None: ...
 
 
 class AuditabilityClient(Protocol):

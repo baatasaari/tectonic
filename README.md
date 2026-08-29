@@ -907,6 +907,38 @@ mechanical rollout second" shape the entitlement-gate and OpenAPI-
 security rollouts already used. Full reasoning in each module's own
 README.
 
+**Fixed**: the event-backbone gap ("built in one module, not rolled
+out"). Workflow Engine's own CloudEvents-envelope + transactional-
+outbox reference implementation (ticket #65) had no second adopter —
+Multi-tenancy now carries it too, for Tenant lifecycle
+(`register()`/`suspend()`/`reactivate()`/`delete()`): a real CloudEvents
+v1.0 envelope (`core/events.py` — `tenant.registered`/
+`tenant.status_changed`) is written into a new `event_outbox` table in
+the SAME DB commit as the tenant row's own create/update
+(`MultiTenancyRepository.create_tenant_and_enqueue_event`/
+`.update_tenant_and_enqueue_event`), relayed to Kafka by a new
+`OutboxRelayWorker` — identical claim/lease/poison-pill shape to
+Workflow Engine's own, copied rather than cross-module-imported per
+this platform's independent-deployability contract. This is a
+genuinely separate concern from the pre-existing
+`HTTPAuditabilityClient.emit()` best-effort audit trail Multi-tenancy
+already sent on every transition — both now fire: one is Auditability's
+own immutable compliance log, the other is the general event bus other
+modules (Billing and Metering, SDK and Developer Portal, Observability)
+can consume from. Tenant is Multi-tenancy's own top-level
+instance-lifecycle analogue, the entity other modules most need a
+durability guarantee on — Organisation/Workspace/Environment
+transitions deliberately stay on the best-effort Auditability path
+only, the same scoped-not-oversight choice Workflow Engine's own
+step/approval/replan events already made. Verified against real
+Postgres (`tests/integration/test_outbox_worker_postgres.py`):
+concurrent workers claiming from the same `event_outbox` table never
+double-claim a row, an active lease is invisible to a concurrent
+claimer, and a dead worker's stale lease recovers on the next startup
+sweep. Rolling this pattern out further — deeper into Multi-tenancy's
+own hierarchy, and to other modules' own event-emission needs — is
+follow-up work. Full reasoning in that module's own README.
+
 ## Modules
 
 ### Module 1: Workflow Engine

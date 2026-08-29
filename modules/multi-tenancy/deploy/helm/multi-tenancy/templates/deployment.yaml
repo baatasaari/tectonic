@@ -53,6 +53,8 @@ spec:
               value: {{ .Values.config.probeTargets | quote }}
             - name: MULTI_TENANCY_AUDITABILITY_BASE_URL
               value: {{ .Values.auditabilityBaseUrl | quote }}
+            - name: MULTI_TENANCY_KAFKA_BOOTSTRAP_SERVERS
+              value: {{ .Values.kafka.bootstrapServers | quote }}
             {{- if .Values.database.existingSecret }}
             - name: MULTI_TENANCY_DATABASE_URL
               valueFrom:

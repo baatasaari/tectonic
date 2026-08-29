@@ -47,6 +47,12 @@ class MultiTenancySettings(BaseSettings):
     db_max_overflow: int = 5
     db_pool_timeout_seconds: int = 30
     db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
+    kafka_bootstrap_servers: str = "localhost:9092"
+    # Event outbox relay worker (core/outbox_worker.py) -- same tuning knobs, and same
+    # defaults' rationale, as Workflow Engine's own event outbox worker (Module 1).
+    outbox_worker_poll_interval_seconds: float = 1.0
+    outbox_worker_lease_seconds: int = 60
+    outbox_worker_max_attempts: int = 5
     service_name: str = "multi-tenancy"
     http_port: int = 8109
 

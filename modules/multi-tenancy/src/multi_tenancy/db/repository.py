@@ -1,7 +1,8 @@
 """SQLAlchemy-backed implementation of MultiTenancyRepository (LLD §3)."""
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy import update as sa_update
@@ -10,10 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from multi_tenancy.core.domain import (
     EnvironmentRecord,
+    EventOutboxRecord,
     HierarchyStatus,
     IsolationProbeResult,
     OptimisticConcurrencyError,
     OrganisationRecord,
+    OutboxEventStatus,
     QuotaSet,
     ResidencyPolicy,
     ResourceAllocation,
@@ -22,6 +25,7 @@ from multi_tenancy.core.domain import (
     TenantRecord,
     TenantStatus,
     WorkspaceRecord,
+    now,
     quota_window_start,
 )
 from multi_tenancy.db import models
@@ -92,6 +96,15 @@ def _residency_policy_to_domain(m: models.TenantResidencyPolicy) -> ResidencyPol
     )
 
 
+def _outbox_to_domain(m: models.EventOutbox) -> EventOutboxRecord:
+    return EventOutboxRecord(
+        id=str(m.id), topic=m.topic, tenant_id=m.tenant_id, envelope=dict(m.envelope or {}),
+        status=OutboxEventStatus(m.status), attempts=m.attempts, worker_id=m.worker_id,
+        lease_expires_at=_as_utc(m.lease_expires_at), last_error=m.last_error,
+        created_at=_as_utc(m.created_at), published_at=_as_utc(m.published_at),
+    )
+
+
 def _resource_allocation_to_domain(m: models.ResourceAllocation) -> ResourceAllocation:
     return ResourceAllocation(
         id=str(m.id), environment_id=str(m.environment_id), resources=dict(m.resources or {}),
@@ -146,6 +159,41 @@ class SQLAlchemyMultiTenancyRepository:
         m.status = record.status.value
         m.tier = record.tier
         m.organisation_id = record.organisation_id
+        await self.session.commit()
+        await self.session.refresh(m)
+        return _tenant_to_domain(m)
+
+    def _add_outbox_row(self, *, topic: str, envelope: dict[str, Any]) -> None:
+        self.session.add(
+            models.EventOutbox(id=envelope["id"], topic=topic, tenant_id=envelope["tenant_id"], envelope=envelope)
+        )
+
+    async def create_tenant_and_enqueue_event(
+        self, record: TenantRecord, *, topic: str, envelope: dict[str, Any],
+    ) -> TenantRecord:
+        m = models.Tenant(
+            id=record.id, name=record.name, status=record.status.value, tier=record.tier,
+            organisation_id=record.organisation_id,
+        )
+        self.session.add(m)
+        self._add_outbox_row(topic=topic, envelope=envelope)
+
+        # One commit for both writes -- the whole point of the outbox pattern: if this
+        # transaction commits, the tenant row and its accompanying event are guaranteed
+        # to both be there; if it rolls back, neither is.
+        await self.session.commit()
+        await self.session.refresh(m)
+        return _tenant_to_domain(m)
+
+    async def update_tenant_and_enqueue_event(
+        self, record: TenantRecord, *, topic: str, envelope: dict[str, Any],
+    ) -> TenantRecord:
+        m = await self.session.get(models.Tenant, record.id)
+        m.status = record.status.value
+        m.tier = record.tier
+        m.organisation_id = record.organisation_id
+        self._add_outbox_row(topic=topic, envelope=envelope)
+
         await self.session.commit()
         await self.session.refresh(m)
         return _tenant_to_domain(m)
@@ -475,3 +523,78 @@ class SQLAlchemyMultiTenancyRepository:
         )
         rows = await self.session.execute(stmt)
         return [_resource_allocation_to_domain(m) for m in rows.scalars().all()], total
+
+    # --- Event outbox relay (core/outbox_worker.py) ---
+
+    async def claim_next_outbox_event(self, worker_id: str, lease_seconds: int) -> EventOutboxRecord | None:
+        """`SELECT ... FOR UPDATE SKIP LOCKED`: the row-level lock this
+        takes is what lets multiple worker processes/pods poll
+        concurrently without two of them ever claiming the same pending
+        event -- a competing claimant simply skips a row another
+        transaction already has locked, rather than blocking on it or
+        double-claiming it. Same shape Workflow Engine's own
+        `claim_next_outbox_event` already established."""
+        moment = now()
+        stmt = (
+            select(models.EventOutbox)
+            .where(
+                models.EventOutbox.status == OutboxEventStatus.PENDING.value,
+                (models.EventOutbox.lease_expires_at.is_(None)) | (models.EventOutbox.lease_expires_at < moment),
+            )
+            .order_by(models.EventOutbox.created_at)
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+        rows = await self.session.execute(stmt)
+        m = rows.scalars().first()
+        if m is None:
+            return None
+        m.worker_id = worker_id
+        m.attempts += 1
+        m.lease_expires_at = moment + timedelta(seconds=lease_seconds)
+        await self.session.commit()
+        await self.session.refresh(m)
+        return _outbox_to_domain(m)
+
+    async def mark_outbox_event_published(self, event_id: str) -> None:
+        m = await self.session.get(models.EventOutbox, event_id)
+        if m is None:
+            return
+        m.status = OutboxEventStatus.PUBLISHED.value
+        m.published_at = now()
+        m.lease_expires_at = None
+        await self.session.commit()
+
+    async def requeue_outbox_event_for_retry(self, event_id: str, *, error: str) -> None:
+        m = await self.session.get(models.EventOutbox, event_id)
+        if m is None:
+            return
+        m.lease_expires_at = None
+        m.last_error = error[:1024]
+        await self.session.commit()
+
+    async def fail_exhausted_outbox_events(self, max_attempts: int) -> int:
+        result = await self.session.execute(
+            sa_update(models.EventOutbox)
+            .where(
+                models.EventOutbox.status == OutboxEventStatus.PENDING.value,
+                models.EventOutbox.attempts >= max_attempts,
+            )
+            .values(status=OutboxEventStatus.FAILED.value, last_error=f"exceeded max attempts ({max_attempts})")
+        )
+        await self.session.commit()
+        return result.rowcount or 0
+
+    async def force_expire_stale_outbox_leases(self) -> int:
+        moment = now()
+        result = await self.session.execute(
+            sa_update(models.EventOutbox)
+            .where(
+                models.EventOutbox.status == OutboxEventStatus.PENDING.value,
+                models.EventOutbox.lease_expires_at.is_not(None),
+                models.EventOutbox.lease_expires_at > moment,
+            )
+            .values(lease_expires_at=moment)
+        )
+        await self.session.commit()
+        return result.rowcount or 0

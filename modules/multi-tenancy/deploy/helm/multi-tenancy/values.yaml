@@ -42,6 +42,9 @@ database:
   existingSecret: ""
   existingSecretKey: "database-url"
 
+kafka:
+  bootstrapServers: "kafka:9092"
+
 podDisruptionBudget:
   minAvailable: 2
 

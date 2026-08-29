@@ -406,3 +406,51 @@ class ResourceAllocation:
     version: int = 1
     created_at: datetime = field(default_factory=now)
     updated_at: datetime = field(default_factory=now)
+
+
+class OutboxEventStatus(StrEnum):
+    """`EventOutboxRecord`'s own lifecycle -- the same claim/lease/
+    poison-pill shape Workflow Engine's `EventOutboxRecord` (Module 1)
+    and Regulatory Compliance's `EvidencePackRecord` already established
+    for this platform's durable background jobs."""
+
+    PENDING = "pending"
+    PUBLISHED = "published"
+    FAILED = "failed"
+
+
+@dataclass
+class EventOutboxRecord:
+    """The transactional outbox (independent architecture assessment
+    §3.3 "Add an event backbone"): written in the SAME DB commit as the
+    Tenant state change it accompanies (see
+    `MultiTenancyRepository.create_tenant_and_enqueue_event`/
+    `.update_tenant_and_enqueue_event`), so a committed tenant
+    registration or lifecycle transition is guaranteed to have its
+    event durably queued for relay to Kafka -- no dual-write window
+    where the DB write succeeds but a direct publish is lost, or vice
+    versa. This is the rollout of Workflow Engine's own reference
+    implementation (see that module's `core/events.py`/
+    `core/outbox_worker.py` docstrings) to a second module: Tenant
+    lifecycle is Multi-tenancy's own top-level instance-lifecycle
+    analogue -- the entity other modules (Billing and Metering, SDK
+    and Developer Portal, Observability) most need a durability
+    guarantee on. Organisation/Workspace/Environment transitions stay
+    on the pre-existing best-effort `HTTPAuditabilityClient.emit` path,
+    the same scoped-not-oversight choice Workflow Engine's own
+    step/approval/replan events already made. A separate
+    `OutboxRelayWorker` (core/outbox_worker.py) actually delivers
+    these; this row's own `id` is the CloudEvents envelope's own `id`
+    (its idempotency key), not a separately generated one."""
+
+    id: str
+    topic: str
+    tenant_id: str
+    envelope: dict
+    status: OutboxEventStatus = OutboxEventStatus.PENDING
+    attempts: int = 0
+    worker_id: str | None = None
+    lease_expires_at: datetime | None = None
+    last_error: str | None = None
+    created_at: datetime = field(default_factory=now)
+    published_at: datetime | None = None

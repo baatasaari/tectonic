@@ -26,8 +26,10 @@ src/multi_tenancy/
     residency_policy_service.py        Residency Policy CRUD — enforcement lives in EnvironmentService.register
     resource_allocation_service.py      Resource Allocation Service — request/approve/reject
     isolation_probe_service.py           Isolation Probe Service — the real, executable isolation check
-  db/                      SQLAlchemy 2.0 async models + repository (Tenant/Organisation/Workspace/Environment/QuotaSet/ResidencyPolicy/ResourceAllocation/IsolationProbeResult)
-  clients/                 Resilient HTTP clients: Auditability, and the one reused against every registered probe target
+    events.py                             CloudEvents envelope builders for Tenant lifecycle (event backbone)
+    outbox_worker.py                       OutboxRelayWorker — durable event_outbox -> Kafka relay
+  db/                      SQLAlchemy 2.0 async models + repository (Tenant/Organisation/Workspace/Environment/QuotaSet/ResidencyPolicy/ResourceAllocation/IsolationProbeResult/EventOutbox)
+  clients/                 Resilient HTTP clients: Auditability, the one reused against every registered probe target, and a Kafka event publisher
   security/                 Service-to-service JWT bearer auth (shared signing key), real OpenAPI security scheme declarations
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI router — tenant lifecycle, gate, isolation probes, the hierarchy control plane
@@ -145,6 +147,39 @@ src/multi_tenancy/
   Workflow Engine runs, Conversational Engine sessions — are still
   tenant-scoped only), so nothing downstream of Environment
   registration re-checks residency before actually placing data.
+  **Tenant lifecycle also carries a real event-backbone outbox now**
+  (independent architecture assessment §3.3 "Add an event backbone" —
+  this is the rollout of Workflow Engine's own reference
+  implementation, Module 1, to a second module): `register()`/
+  `suspend()`/`reactivate()`/`delete()` (via `_transition`) each write
+  a real CloudEvents v1.0 envelope (`core/events.py` --
+  `tenant.registered`/`tenant.status_changed`, topic
+  `tenant.lifecycle`) into a new `event_outbox` table, in the SAME DB
+  commit as the tenant row's own create/update
+  (`MultiTenancyRepository.create_tenant_and_enqueue_event`/
+  `.update_tenant_and_enqueue_event`) — no dual-write window. A new
+  `OutboxRelayWorker` (core/outbox_worker.py, identical claim/lease/
+  poison-pill shape to Workflow Engine's own, copied rather than
+  cross-module-imported per this platform's independent-deployability
+  contract) actually delivers these to Kafka via a new
+  `KafkaEventPublisher`. This is a genuinely separate concern from the
+  pre-existing `HTTPAuditabilityClient.emit()` best-effort audit
+  trail — both fire on every register()/_transition() call: one is
+  Auditability's own immutable compliance log, the other is the
+  general event bus other modules (Billing and Metering, SDK and
+  Developer Portal, Observability) can consume from. Tenant is this
+  module's own top-level instance-lifecycle analogue — Organisation/
+  Workspace/Environment transitions deliberately stay on the
+  pre-existing best-effort Auditability path only, the same
+  scoped-not-oversight choice Workflow Engine's own step/approval/
+  replan events already made; extending outbox-grade delivery further
+  down the hierarchy is separate, unbuilt follow-up work. Proven
+  against real Postgres
+  (`tests/integration/test_outbox_worker_postgres.py`): concurrent
+  workers claiming from the same `event_outbox` table never
+  double-claim a row (`SELECT ... FOR UPDATE SKIP LOCKED`), an active
+  lease is invisible to a concurrent claimer, and a dead worker's
+  stale lease is recoverable on the next startup sweep.
 - **Quota Set and Resource Allocation** (independent architecture
   assessment §5.2 "Resource allocation and quota change"): the
   remaining two legs of the assessment's own canonical resource chain

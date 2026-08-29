@@ -1,6 +1,8 @@
 """FastAPI application entrypoint (LLD §Level 4 "Deployment")."""
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 from contextlib import asynccontextmanager
 
@@ -13,8 +15,11 @@ from sqlalchemy import text
 from multi_tenancy.api.routes_multi_tenancy import router as multi_tenancy_router
 from multi_tenancy.app_context import AppContext
 from multi_tenancy.clients.auditability_client import HTTPAuditabilityClient
+from multi_tenancy.clients.kafka_publisher import KafkaEventPublisher
 from multi_tenancy.clients.tenant_scoped_list_client import HTTPTenantScopedListClient
 from multi_tenancy.config import MultiTenancySettings, load_settings
+from multi_tenancy.core.outbox_worker import OutboxRelayWorker
+from multi_tenancy.db.repository import SQLAlchemyMultiTenancyRepository
 from multi_tenancy.db.session import make_engine, make_session_factory
 from multi_tenancy.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from multi_tenancy.security.openapi_security import configure_openapi_security
@@ -24,7 +29,7 @@ from multi_tenancy.telemetry.tracing import configure_tracing
 logger = get_logger(component="main")
 
 
-def build_app_context(settings: MultiTenancySettings) -> AppContext:
+def build_app_context(settings: MultiTenancySettings) -> tuple[AppContext, KafkaEventPublisher]:
     engine = make_engine(settings)
     probe_clients = {
         target.name: HTTPTenantScopedListClient(
@@ -33,15 +38,18 @@ def build_app_context(settings: MultiTenancySettings) -> AppContext:
         )
         for target in settings.probe_targets
     }
-    return AppContext(
+    event_publisher = KafkaEventPublisher(settings.kafka_bootstrap_servers)
+    ctx = AppContext(
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
         auditability=HTTPAuditabilityClient(
             settings.auditability_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
         ),
+        event_publisher=event_publisher,
         probe_clients=probe_clients,
     )
+    return ctx, event_publisher
 
 
 @asynccontextmanager
@@ -56,16 +64,38 @@ async def lifespan(app: FastAPI):
             hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
         )
 
-    ctx = build_app_context(settings)
+    ctx, event_publisher = build_app_context(settings)
+    await event_publisher.start()
     app.state.ctx = ctx
+
+    @asynccontextmanager
+    async def repository_factory():
+        async with ctx.session_factory() as session:
+            yield SQLAlchemyMultiTenancyRepository(session)
+
+    outbox_worker = OutboxRelayWorker(
+        repository_factory, event_publisher,
+        poll_interval_seconds=settings.outbox_worker_poll_interval_seconds,
+        lease_seconds=settings.outbox_worker_lease_seconds,
+        max_attempts=settings.outbox_worker_max_attempts,
+    )
+    await outbox_worker.recover_stuck_events()
+    outbox_worker_task = asyncio.create_task(outbox_worker.run_forever())
+    app.state.outbox_worker = outbox_worker
 
     logger.info(
         "startup_complete", service=settings.service_name,
         probe_targets=[t.name for t in settings.probe_targets],
+        outbox_worker_id=outbox_worker.worker_id,
     )
     try:
         yield
     finally:
+        outbox_worker.stop()
+        outbox_worker_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await outbox_worker_task
+        await event_publisher.stop()
         await ctx.engine.dispose()
         logger.info("shutdown_complete")
 
@@ -96,6 +126,12 @@ def create_app() -> FastAPI:
             components["postgres"] = "ok"
         except Exception as e:
             components["postgres"] = f"degraded: {e}"
+
+        try:
+            producer = ctx.event_publisher
+            components["kafka"] = "ok" if getattr(producer, "_producer", None) is not None else "degraded: not started"
+        except Exception as e:
+            components["kafka"] = f"degraded: {e}"
 
         overall = "ok" if all(v == "ok" for v in components.values()) else "degraded"
         status_code = 200 if overall == "ok" else 503

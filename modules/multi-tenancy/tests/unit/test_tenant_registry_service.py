@@ -46,6 +46,36 @@ async def test_status_transitions_emit_audit_events(harness):
     }
 
 
+async def test_register_also_enqueues_a_real_cloudevents_outbox_event(harness):
+    """The event-backbone rollout (independent architecture assessment
+    §3.3): a genuinely separate concern from the Auditability emit
+    above -- both fire, neither replaces the other."""
+    tenant = await harness.tenant_registry_service.register(name="Acme Corp", tier="enterprise")
+
+    outbox_events = list(harness.repository.outbox.values())
+    assert len(outbox_events) == 1
+    record = outbox_events[0]
+    assert record.topic == "tenant.lifecycle"
+    assert record.tenant_id == tenant.id
+    assert record.envelope["type"] == "com.tectonic.tenant.registered"
+    assert record.envelope["data"] == {
+        "tenant_id": tenant.id, "name": "Acme Corp", "tier": "enterprise", "organisation_id": None,
+    }
+
+
+async def test_status_transitions_also_enqueue_a_cloudevents_outbox_event(harness):
+    tenant = await harness.tenant_registry_service.register(name="Acme Corp")
+    await harness.tenant_registry_service.suspend(tenant.id, reason="non-payment")
+
+    transition_events = [
+        e for e in harness.repository.outbox.values() if e.envelope["type"] == "com.tectonic.tenant.status_changed"
+    ]
+    assert len(transition_events) == 1
+    assert transition_events[0].envelope["data"] == {
+        "tenant_id": tenant.id, "from_status": "active", "to_status": "suspended",
+    }
+
+
 async def test_get_raises_when_missing(harness):
     with pytest.raises(TenantNotFoundError):
         await harness.tenant_registry_service.get("does-not-exist")

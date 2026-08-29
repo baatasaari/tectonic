@@ -12,6 +12,7 @@ from multi_tenancy.api.routes_multi_tenancy import router
 from multi_tenancy.app_context import AppContext
 from multi_tenancy.config import MultiTenancySettings
 from multi_tenancy.core.fakes import (
+    InMemoryEventPublisher,
     InMemoryMultiTenancyRepository,
     StubAuditabilityClient,
     StubTenantScopedListClient,
@@ -33,6 +34,7 @@ def _app(repository, *, probe_clients=None, auditability=None):
     ctx = AppContext(
         settings=MultiTenancySettings(), engine=None, session_factory=None,
         auditability=auditability or StubAuditabilityClient(),
+        event_publisher=InMemoryEventPublisher(),
         probe_clients=probe_clients or {"agent-cards": StubTenantScopedListClient()},
     )
     app.dependency_overrides[get_ctx] = lambda: ctx
