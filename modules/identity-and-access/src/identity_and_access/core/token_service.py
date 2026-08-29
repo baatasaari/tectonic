@@ -32,8 +32,14 @@ class TokenService:
         if identity.status != IdentityStatus.ACTIVE:
             raise IdentityNotActiveError(identity_id)
 
+        # Manually-assigned role_names and federation-managed federated_role_names
+        # (recomputed fresh from IdP group membership on every federated login --
+        # see core/oidc_federation_service.py) are unioned here: a federated login
+        # must never silently take away a role an operator granted by hand, and a
+        # manually-granted role must never be required just to keep IdP-driven
+        # access working.
         granted_pool: set[str] = set()
-        for role_name in identity.role_names:
+        for role_name in {*identity.role_names, *identity.federated_role_names}:
             role = await self._repository.get_role(role_name)
             if role is not None:
                 granted_pool.update(role.scopes)

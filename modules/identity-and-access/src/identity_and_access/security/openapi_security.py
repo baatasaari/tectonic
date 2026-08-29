@@ -17,6 +17,14 @@ separately-maintained list here -- one source of truth per module for
 "which paths skip auth", so a module with a non-default exclusion set
 (A2A adds its own two well-known unauthenticated paths) is handled
 correctly with no special-casing in this file.
+
+`_EXCLUDED_PATH_PREFIXES` (SCIM, `/scim/`) is a different case from
+`_EXCLUDED_PATHS`: those paths are not unauthenticated, they're
+authenticated by a *different* scheme (`ScimBearerAuth`, the per-tenant
+token `security/scim_auth.py` verifies) -- an external IdP never holds
+`TECTONIC_JWT_SHARED_SECRET`. So SCIM paths get `ScimBearerAuth` as
+their per-operation `security` override rather than the empty list
+`_EXCLUDED_PATHS` gets.
 """
 from __future__ import annotations
 
@@ -25,7 +33,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 
-from identity_and_access.security.jwt_auth import _EXCLUDED_PATHS
+from identity_and_access.security.jwt_auth import _EXCLUDED_PATH_PREFIXES, _EXCLUDED_PATHS
 
 _HTTP_METHODS = frozenset({"get", "post", "put", "patch", "delete", "head", "options"})
 
@@ -43,6 +51,19 @@ _SECURITY_SCHEME = {
     ),
 }
 
+_SCIM_SECURITY_SCHEME_NAME = "ScimBearerAuth"
+_SCIM_SECURITY_SCHEME = {
+    "type": "http",
+    "scheme": "bearer",
+    "bearerFormat": "opaque",
+    "description": (
+        "Per-tenant SCIM provisioning token (security/scim_auth.py): minted once via "
+        "POST /v1/identity-access/scim-tokens and shown only at creation (stored hashed, "
+        "never in cleartext). Independent of ServiceBearerAuth -- issued to an external "
+        "IdP, which never holds TECTONIC_JWT_SHARED_SECRET."
+    ),
+}
+
 
 def configure_openapi_security(app: FastAPI) -> None:
     """Call once from create_app(), after every route is registered."""
@@ -52,17 +73,21 @@ def configure_openapi_security(app: FastAPI) -> None:
             return app.openapi_schema
 
         schema = get_openapi(title=app.title, version=app.version, description=app.description, routes=app.routes)
-        schema.setdefault("components", {}).setdefault("securitySchemes", {})[_SECURITY_SCHEME_NAME] = (
-            _SECURITY_SCHEME
-        )
+        security_schemes = schema.setdefault("components", {}).setdefault("securitySchemes", {})
+        security_schemes[_SECURITY_SCHEME_NAME] = _SECURITY_SCHEME
+        security_schemes[_SCIM_SECURITY_SCHEME_NAME] = _SCIM_SECURITY_SCHEME
         schema["security"] = [{_SECURITY_SCHEME_NAME: []}]
 
         for path, operations in schema.get("paths", {}).items():
-            if path not in _EXCLUDED_PATHS:
+            if path in _EXCLUDED_PATHS:
+                override: list[dict[str, list[str]]] = []
+            elif path.startswith(_EXCLUDED_PATH_PREFIXES):
+                override = [{_SCIM_SECURITY_SCHEME_NAME: []}]
+            else:
                 continue
             for method, operation in operations.items():
                 if method in _HTTP_METHODS and isinstance(operation, dict):
-                    operation["security"] = []
+                    operation["security"] = override
 
         app.openapi_schema = schema
         return app.openapi_schema

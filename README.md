@@ -636,11 +636,37 @@ this platform's own constrained Helm template vocabulary, run against
 every one of the 34 modules' 3 templates (102 renders), each checked
 by parsing the actual rendered YAML — not just visual inspection.
 
+**Also fixed**: Identity and Access's OIDC federation and SCIM 2.0
+provisioning (assessment §31: "no complete OIDC/SAML federation,
+SCIM, user/group/membership lifecycle... or universal enforcement",
+maturity 38/100, P0). `POST /v1/identity-access/oidc/login` verifies a
+tenant's registered IdP's ID token for real (JWKS fetch + cache,
+PyJWT signature/issuer/audience verification against a real RSA
+keypair in tests) and JIT-provisions or updates the matching identity
+by `(tenant_id, provider_id, sub)`, never by email; group-claim
+membership resolves to a `federated_role_names` list recomputed fresh
+on every login, unioned with an identity's manually-assigned
+`role_names` when `TokenService.issue` computes granted scopes, so an
+IdP-side group change and a hand-granted role can never silently
+clobber each other. SAML gets a real, storable
+`IdentityProviderRecord` config shape and nothing else — no assertion
+consumer, no XML-DSig verification — a stated, deliberate gap rather
+than a fabricated or unsigned parser. `api/routes_scim.py` mounts a
+spec-shaped SCIM 2.0 API (`schemas`/`meta`/`ListResponse`/`PatchOp`,
+real RFC 7643/7644 wire shapes) for Users and Groups at
+`/scim/v2/{tenant_id}/...`, authenticated by its own per-tenant,
+show-once bearer token rather than this platform's internal
+`TECTONIC_JWT_SHARED_SECRET` (an external IdP never holds it) —
+`security/jwt_auth.py`'s `ServiceAuthMiddleware` carves `/scim/*` out
+by path prefix rather than the exact-match-only exclusion
+`/healthz`/`/metrics` used, and `openapi_security.py` declares it as a
+second, distinct security scheme rather than folding it into the
+"unauthenticated" set. Full reasoning in that module's own README.
+
 **In progress**, tracked against the assessment's own Phase 1 (platform
-kernel) scope: Identity and Access's OIDC/SAML/SCIM federation,
-Secrets' managed-KMS integration, an idempotent metering ledger,
-Observability's trace-query/SLO surfaces, and CI supply-chain gates
-(SBOM, signing, contract tests).
+kernel) scope: Secrets' managed-KMS integration, an idempotent
+metering ledger, Observability's trace-query/SLO surfaces, and CI
+supply-chain gates (SBOM, signing, contract tests).
 
 ## Modules
 

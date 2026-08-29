@@ -11,7 +11,11 @@ from identity_and_access.api.deps import get_ctx, get_repository
 from identity_and_access.api.routes_identity_and_access import router
 from identity_and_access.app_context import AppContext
 from identity_and_access.config import IdentityAndAccessSettings
-from identity_and_access.core.fakes import InMemoryIdentityAccessRepository, StubAuditabilityClient
+from identity_and_access.core.fakes import (
+    InMemoryIdentityAccessRepository,
+    StubAuditabilityClient,
+    StubOidcTokenVerifier,
+)
 from identity_and_access.security.jwt_auth import (
     INSECURE_DEFAULT_SECRET,
     ServiceAuthMiddleware,
@@ -31,6 +35,7 @@ def _app(repository, *, auditability=None):
     ctx = AppContext(
         settings=IdentityAndAccessSettings(), engine=None, session_factory=None,
         auditability=auditability or StubAuditabilityClient(), signer=JWTTokenSigner(signing_secret=SIGNING_SECRET),
+        oidc_verifier=StubOidcTokenVerifier(),
     )
     app.dependency_overrides[get_ctx] = lambda: ctx
     app.dependency_overrides[get_repository] = lambda: repository

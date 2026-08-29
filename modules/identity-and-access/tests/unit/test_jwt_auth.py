@@ -88,6 +88,21 @@ def test_middleware_excludes_healthz_and_metrics_from_auth():
         assert client.get("/metrics").status_code == 200
 
 
+def test_middleware_excludes_scim_paths_by_prefix_even_without_a_token():
+    # SCIM has its own bearer scheme (security/scim_auth.py) -- an external IdP never
+    # holds this middleware's shared_secret, so /scim/* must never demand one.
+    app = _protected_app(audience="this-service", shared_secret=SECRET)
+
+    @app.get("/scim/v2/acme/Users")
+    async def scim_users():
+        return {"Resources": []}
+
+    with TestClient(app) as client:
+        resp = client.get("/scim/v2/acme/Users")
+
+    assert resp.status_code == 200
+
+
 def test_middleware_rejects_protected_route_without_a_token():
     app = _protected_app(audience="this-service", shared_secret=SECRET)
     with TestClient(app) as client:

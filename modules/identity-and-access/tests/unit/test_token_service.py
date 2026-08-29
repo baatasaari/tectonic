@@ -58,6 +58,23 @@ async def test_issue_with_a_fully_unheld_requested_scope_grants_nothing(harness)
     assert issued.granted_scopes == []
 
 
+async def test_issue_unions_role_names_and_federated_role_names(harness):
+    """A federated login must never take away a manually-granted role, and a
+    manually-granted role must never be required just to keep IdP-driven access
+    working -- see core/token_service.py's own comment on this union."""
+    await harness.role_service.create(name="reader", scopes=["cards:read"])
+    await harness.role_service.create(name="approver", scopes=["cards:approve"])
+    identity = await harness.identity_registry_service.register(
+        tenant_id="acme", name="agent-1", role_names=["reader"],
+    )
+    identity.federated_role_names = ["approver"]
+    await harness.repository.update_identity(identity)
+
+    issued = await harness.token_service.issue(identity_id=identity.id)
+
+    assert issued.granted_scopes == ["cards:approve", "cards:read"]
+
+
 async def test_issued_token_verifies_with_the_signer(harness):
     await harness.role_service.create(name="reader", scopes=["cards:read"])
     identity = await harness.identity_registry_service.register(

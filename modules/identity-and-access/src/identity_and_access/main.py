@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI, Response
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
@@ -11,11 +12,13 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
 from identity_and_access.api.routes_identity_and_access import router as identity_and_access_router
+from identity_and_access.api.routes_scim import router as scim_router
 from identity_and_access.app_context import AppContext
 from identity_and_access.clients.auditability_client import HTTPAuditabilityClient
 from identity_and_access.config import IdentityAndAccessSettings, load_settings
 from identity_and_access.db.session import make_engine, make_session_factory
 from identity_and_access.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from identity_and_access.security.oidc_verifier import HTTPOidcTokenVerifier
 from identity_and_access.security.openapi_security import configure_openapi_security
 from identity_and_access.security.token_signer import JWTTokenSigner
 from identity_and_access.telemetry.logging import configure_logging, get_logger
@@ -36,6 +39,10 @@ def build_app_context(settings: IdentityAndAccessSettings) -> AppContext:
             settings.auditability_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
         ),
         signer=JWTTokenSigner(signing_secret=settings.token_signing_secret),
+        # No ServiceBearerAuth here, deliberately: the peer is an arbitrary external
+        # IdP's JWKS endpoint, not a platform module -- it holds neither
+        # TECTONIC_JWT_SHARED_SECRET nor any reason to expect it.
+        oidc_verifier=HTTPOidcTokenVerifier(client=httpx.AsyncClient(timeout=httpx.Timeout(10.0))),
     )
 
 
@@ -82,6 +89,7 @@ def create_app() -> FastAPI:
         ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )
     app.include_router(identity_and_access_router)
+    app.include_router(scim_router)
 
     @app.get("/healthz")
     async def healthz() -> Response:

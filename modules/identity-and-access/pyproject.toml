@@ -23,6 +23,7 @@ dependencies = [
   "tenacity>=9.0",
   "aiobreaker>=1.2",
   "pyjwt>=2.9",
+  "cryptography>=42.0",
   "pyyaml>=6.0",
   "greenlet>=3.1",
 ]

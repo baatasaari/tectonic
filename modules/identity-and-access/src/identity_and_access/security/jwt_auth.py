@@ -18,7 +18,23 @@ the two are deliberately kept separate.
   `Authorization: Bearer <token>` against this module's own
   `service_name` as the required audience, except `/healthz` and
   `/metrics` (cluster-internal probes/scraping, the same exclusion every
-  module makes).
+  module makes) and every path under `/scim/` (`_EXCLUDED_PATH_PREFIXES`).
+
+The SCIM exclusion is a different shape from the healthz/metrics one:
+those two are genuinely unauthenticated; SCIM is authenticated, just not
+by this mechanism. An external IdP pushing SCIM provisioning calls
+(`api/routes_scim.py`) has no way to hold `TECTONIC_JWT_SHARED_SECRET` --
+that secret is this platform's own internal module-to-module trust
+boundary, never handed to a third party -- so SCIM carries its own
+per-tenant bearer token instead, verified independently by
+`security/scim_auth.py`'s own dependency. `_EXCLUDED_PATH_PREFIXES`
+keeps that carve-out declared in exactly one place (`_EXCLUDED_PATHS`
+already plays this "one source of truth" role for `openapi_security.py`;
+this extends it rather than duplicating the check there too), matched by
+prefix because SCIM's real paths are tenant-parameterized
+(`/scim/v2/{tenant_id}/Users`, `.../Groups/{id}`, ...) and this
+middleware has no route-parameter awareness -- it runs before FastAPI's
+own routing resolves the path template.
 """
 from __future__ import annotations
 
@@ -41,6 +57,7 @@ ALGORITHM = "HS256"
 DEFAULT_TTL_SECONDS = 300
 INSECURE_DEFAULT_SECRET = "dev-insecure-shared-secret-change-me"
 _EXCLUDED_PATHS = frozenset({"/healthz", "/metrics"})
+_EXCLUDED_PATH_PREFIXES = ("/scim/",)
 
 
 def mint_service_token(
@@ -92,7 +109,7 @@ class ServiceAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
-        if request.url.path in _EXCLUDED_PATHS:
+        if request.url.path in _EXCLUDED_PATHS or request.url.path.startswith(_EXCLUDED_PATH_PREFIXES):
             return await call_next(request)
 
         header = request.headers.get("authorization", "")

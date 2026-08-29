@@ -5,7 +5,7 @@ entirely (independent architecture assessment §3.6).
 from __future__ import annotations
 
 from identity_and_access.main import app
-from identity_and_access.security.jwt_auth import _EXCLUDED_PATHS
+from identity_and_access.security.jwt_auth import _EXCLUDED_PATH_PREFIXES, _EXCLUDED_PATHS
 
 
 def test_the_security_scheme_is_declared():
@@ -39,12 +39,29 @@ def test_a_regular_operation_inherits_the_global_default_rather_than_overriding_
     # explicit empty list here would be wrong: it would mean "this operation is
     # unauthenticated", the opposite of reality. Any path this module actually serves
     # beyond its own _EXCLUDED_PATHS proves the point -- no need to name one specifically.
-    non_excluded_paths = {p: ops for p, ops in schema["paths"].items() if p not in _EXCLUDED_PATHS}
+    # SCIM paths (_EXCLUDED_PATH_PREFIXES) are excluded from this check too -- they DO
+    # carry an explicit per-operation override, just a different scheme (ScimBearerAuth,
+    # not the document default), covered by their own test below.
+    non_excluded_paths = {
+        p: ops for p, ops in schema["paths"].items()
+        if p not in _EXCLUDED_PATHS and not p.startswith(_EXCLUDED_PATH_PREFIXES)
+    }
     assert non_excluded_paths, "this module has no non-excluded paths to check"
     for operations in non_excluded_paths.values():
         for method, operation in operations.items():
             if method in ("get", "post", "put", "patch", "delete", "head", "options"):
                 assert "security" not in operation
+
+
+def test_scim_paths_declare_the_scim_bearer_scheme_instead_of_the_default():
+    schema = app.openapi()
+
+    scim_paths = {p: ops for p, ops in schema["paths"].items() if p.startswith(_EXCLUDED_PATH_PREFIXES)}
+    assert scim_paths, "this module has no SCIM paths to check"
+    for operations in scim_paths.values():
+        for method, operation in operations.items():
+            if method in ("get", "post", "put", "patch", "delete", "head", "options"):
+                assert operation["security"] == [{"ScimBearerAuth": []}]
 
 
 def test_the_schema_is_cached_after_the_first_call():
