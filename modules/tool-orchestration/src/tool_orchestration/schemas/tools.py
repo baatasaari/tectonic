@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ToolDefinitionSummary(BaseModel):
@@ -52,6 +52,35 @@ class InvokeToolResponse(BaseModel):
     status: str
     retry_count: int
     latency_ms: float
+
+
+class RegisterToolRequest(BaseModel):
+    """Ticket #82 (Phase 2 support-agent slice): before this, the only way
+    through this module's own real API to create any ToolDefinition at all
+    was `/synthesise` -- which always calls LLM Gateway to *invent* a
+    proposal and always requires a Sentinel Agents review, appropriate for
+    a genuinely novel LLM-synthesised tool but not for onboarding a known,
+    already-specified integration an admin already vouches for (this
+    slice's own get_order_status tool, e.g.) -- there was no way to do that
+    without either standing up Sentinel Agents (out of this slice's scope
+    entirely) or mischaracterising a known integration as `synthesised`.
+    This endpoint registers a tool directly as `active`, `synthesised=False`,
+    skipping the guarded synthesis/review pipeline -- that gate exists to
+    guard LLM-invented tools, not admin-registered ones."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    name: str
+    mcp_server_ref: str
+    schema_: dict[str, Any] = Field(default_factory=dict, alias="schema")
+
+
+class RegisterToolResponse(BaseModel):
+    id: str
+    name: str
+    mcp_server_ref: str
+    status: str
+    synthesised: bool
 
 
 class SynthesiseToolRequest(BaseModel):

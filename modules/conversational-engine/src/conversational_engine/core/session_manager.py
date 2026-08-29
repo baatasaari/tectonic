@@ -34,6 +34,7 @@ from conversational_engine.core.ports import (
     LLMGatewayClient,
     ObservabilityClient,
     SessionStateStore,
+    WorkflowEngineClient,
 )
 from conversational_engine.core.refusal import RefusalComposer
 from conversational_engine.telemetry.logging import get_logger
@@ -59,6 +60,20 @@ def _is_explicit_handoff_request(text: str) -> bool:
 
 _DEFAULT_PERSONA = PersonaConfigRecord(id="default", tenant_id="*", name="default")
 
+# The step id `support-agent-v1` uses for its own final answer-composing
+# step (docs/phase2-product-slice-01-support-agent.md) -- a real, if
+# narrow, contract between this module and that one workflow definition;
+# a differently-shaped definition run through this same path would need
+# its own extraction convention.
+_RESPOND_STEP_ID = "respond"
+
+
+def _extract_workflow_response_content(context: dict) -> str:
+    step_output = context.get(_RESPOND_STEP_ID)
+    if isinstance(step_output, dict) and isinstance(step_output.get("content"), str):
+        return step_output["content"]
+    return "I'm sorry, I wasn't able to put together an answer for that."
+
 
 class SessionManager:
     def __init__(
@@ -71,6 +86,7 @@ class SessionManager:
         observability: ObservabilityClient,
         auditability: AuditabilityClient,
         settings: ConversationalEngineSettings,
+        workflow_engine: WorkflowEngineClient | None = None,
     ) -> None:
         self.repository = repository
         self.state_store = state_store
@@ -80,6 +96,7 @@ class SessionManager:
         self.observability = observability
         self.auditability = auditability
         self.settings = settings
+        self.workflow_engine = workflow_engine
         self.emotion_detector = EmotionUrgencyDetector(llm_gateway)
         self.persona_engine = PersonaEngine()
         self.refusal_composer = RefusalComposer()
@@ -105,6 +122,9 @@ class SessionManager:
         *,
         on_chunk: Callable[[str], Awaitable[None]] | None = None,
     ) -> TurnResult:
+        if self.settings.workflow_routing.enabled and self.workflow_engine is not None:
+            return await self._handle_turn_via_workflow_engine(session, message_content)
+
         tenant_id = session.tenant_id
         trace_id = session.trace_id
 
@@ -193,6 +213,98 @@ class SessionManager:
             refused=refusal_category is not None,
             refusal_category=refusal_category,
             emotion_score=emotion_score,
+            handoff_event=handoff_event,
+        )
+
+    async def _handle_turn_via_workflow_engine(
+        self, session: ConversationSessionRecord, message_content: str
+    ) -> TurnResult:
+        """Phase 2 support-agent slice (ticket #82): routes the turn through
+        Workflow Engine's own `support-agent-v1` definition (intent ->
+        retrieve-or-tool-call -> guardrail -> respond-or-escalate) instead of
+        calling LLM Gateway directly. Only reached when
+        `settings.workflow_routing.enabled` is set — every other tenant/
+        deployment keeps the pre-existing direct path untouched.
+
+        Streaming (`on_chunk`) isn't supported on this path: Workflow
+        Engine's own `/instances` call runs the whole graph synchronously
+        and returns one final result, not a token stream — a real,
+        documented simplification of this path, not a bug; the streaming
+        direct-LLM-Gateway path above is unaffected for every tenant not
+        opted into workflow routing.
+        """
+        tenant_id = session.tenant_id
+        assert self.workflow_engine is not None  # guarded by the caller
+
+        await self.repository.append_message(
+            MessageRecord(
+                id=new_id(), session_id=session.id, direction=MessageDirection.INBOUND, content=message_content,
+            )
+        )
+
+        result = await self.workflow_engine.start_instance(
+            definition_id=self.settings.workflow_routing.definition_id,
+            initial_context={"message": message_content},
+            tenant_id=tenant_id,
+        )
+
+        handoff_event: HandoffEventRecord | None = None
+        refusal_category: str | None = None
+        status = result.get("status")
+
+        if status == "paused_for_approval":
+            # Workflow Engine's own refund-threshold symbolic step (or any
+            # future business-rule escalation) paused this instance for a
+            # real Human Oversight review -- a genuinely different trigger
+            # than this module's own emotion/keyword-based HandoffTriggerEngine,
+            # so it's recorded with its own HandoffTriggerReason rather than
+            # reusing EXPLICIT/EMOTION/REPEATED_REFUSAL.
+            text = "I've escalated this to a specialist for review — they'll follow up shortly."
+            outbound = await self.repository.append_message(
+                MessageRecord(id=new_id(), session_id=session.id, direction=MessageDirection.OUTBOUND, content=text)
+            )
+            event = HandoffEventRecord(
+                id=new_id(), session_id=session.id, trigger_reason=HandoffTriggerReason.WORKFLOW_ESCALATION,
+                target=f"workflow-instance:{result.get('id')}",
+            )
+            handoff_event = await self.repository.create_handoff_event(event)
+            await self.auditability.emit(
+                {
+                    "event_type": "conversation.handoff",
+                    "session_id": session.id,
+                    "tenant_id": tenant_id,
+                    "trigger_reason": HandoffTriggerReason.WORKFLOW_ESCALATION.value,
+                    "workflow_instance_id": result.get("id"),
+                }
+            )
+            session = replace(session, status=SessionStatus.HANDED_OFF)
+        elif status == "completed":
+            content = _extract_workflow_response_content(result.get("context", {}))
+            outbound = await self.repository.append_message(
+                MessageRecord(id=new_id(), session_id=session.id, direction=MessageDirection.OUTBOUND, content=content)
+            )
+        else:
+            outbound, refusal_category = await self._refuse(session, "workflow_failed", str(status))
+
+        session = replace(session, last_activity_at=now())
+        await self.repository.update_session(session)
+
+        await self.observability.emit(
+            {
+                "event_type": "conversation.turn.completed" if refusal_category is None else "conversation.turn.refused",
+                "session_id": session.id,
+                "tenant_id": tenant_id,
+                "trace_id": result.get("trace_id", session.trace_id),
+                "channel": session.channel.value,
+                "workflow_instance_id": result.get("id"),
+            }
+        )
+
+        return TurnResult(
+            outbound_message=outbound,
+            refused=refusal_category is not None,
+            refusal_category=refusal_category,
+            emotion_score=0.0,
             handoff_event=handoff_event,
         )
 

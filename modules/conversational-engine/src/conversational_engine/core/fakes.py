@@ -89,6 +89,30 @@ class StubLLMGatewayClient:
         return dict(self.classify_result)
 
 
+class StubWorkflowEngineClient:
+    """Deterministic stand-in for the Workflow Engine module (Module 1),
+    added for the WorkflowEngineClient port (ticket #82)."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self._responses: list[dict[str, Any]] = []
+        self.default_response: dict[str, Any] = {
+            "id": "instance-1", "status": "completed", "trace_id": "trace-1",
+            "context": {"respond": {"content": "stub workflow response"}},
+        }
+
+    def queue_response(self, response: dict[str, Any]) -> None:
+        self._responses.append(response)
+
+    async def start_instance(
+        self, *, definition_id: str, initial_context: dict[str, Any], tenant_id: str
+    ) -> dict[str, Any]:
+        self.calls.append({"definition_id": definition_id, "initial_context": initial_context, "tenant_id": tenant_id})
+        if self._responses:
+            return self._responses.pop(0)
+        return copy.deepcopy(self.default_response)
+
+
 class StubGuardrailsClient:
     def __init__(self) -> None:
         self.block_next = False

@@ -62,6 +62,10 @@ class InMemoryGatewayRepository:
     async def list_provider_configs(self) -> list[ProviderConfigRecord]:
         return [copy.deepcopy(p) for p in self.provider_configs.values()]
 
+    async def create_provider_config(self, record: ProviderConfigRecord) -> ProviderConfigRecord:
+        self.provider_configs[record.id] = copy.deepcopy(record)
+        return copy.deepcopy(record)
+
     async def update_provider_config(self, record: ProviderConfigRecord) -> ProviderConfigRecord:
         self.provider_configs[record.id] = copy.deepcopy(record)
         return copy.deepcopy(record)

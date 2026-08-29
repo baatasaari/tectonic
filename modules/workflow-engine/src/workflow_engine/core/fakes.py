@@ -191,6 +191,46 @@ class StubLLMGatewayClient:
         return {"content": f"stub completion for {agent_ref}"}, self.default_confidence
 
 
+class StubIntentDetectionClient:
+    """Deterministic stand-in for the Intent Detection module (Module 5),
+    added for the intent step (ticket #82's IntentDetectionClient port)."""
+
+    def __init__(self, default_intent: str = "unknown", default_confidence: float = 0.5) -> None:
+        self.default_intent = default_intent
+        self.default_confidence = default_confidence
+        self._overrides: dict[str, tuple[str, float]] = {}
+        self.calls: list[dict[str, Any]] = []
+
+    def set_response(self, message: str, intent: str, confidence: float) -> None:
+        self._overrides[message] = (intent, confidence)
+
+    async def classify(self, *, message: str, tenant_id: str) -> tuple[str, float]:
+        self.calls.append({"message": message, "tenant_id": tenant_id})
+        if message in self._overrides:
+            return self._overrides[message]
+        return self.default_intent, self.default_confidence
+
+
+class StubAgenticRAGClient:
+    """Deterministic stand-in for the Agentic RAG module (Module 6),
+    added for the retrieve step (ticket #82's AgenticRAGClient port)."""
+
+    def __init__(self, default_context: str = "", default_groundedness: float = 0.9) -> None:
+        self.default_context = default_context
+        self.default_groundedness = default_groundedness
+        self._overrides: dict[str, dict[str, Any]] = {}
+        self.calls: list[dict[str, Any]] = []
+
+    def set_response(self, query: str, response: dict[str, Any]) -> None:
+        self._overrides[query] = response
+
+    async def retrieve(self, *, query: str, tenant_id: str) -> dict[str, Any]:
+        self.calls.append({"query": query, "tenant_id": tenant_id})
+        if query in self._overrides:
+            return self._overrides[query]
+        return {"synthesized_context": self.default_context, "groundedness_score": self.default_groundedness}
+
+
 class StubToolOrchestrationClient:
     async def invoke(
         self, *, tool_ref: str, arguments: dict[str, Any], tenant_id: str, trace_id: str
@@ -210,12 +250,14 @@ class StubHumanOversightClient:
         self.requests: list[dict[str, Any]] = []
 
     async def request_approval(
-        self, *, approval_request_id: str, step_execution_id: str, context: dict[str, Any], tenant_id: str
+        self, *, approval_request_id: str, step_execution_id: str, instance_id: str,
+        context: dict[str, Any], tenant_id: str,
     ) -> str:
         self.requests.append(
             {
                 "approval_request_id": approval_request_id,
                 "step_execution_id": step_execution_id,
+                "instance_id": instance_id,
                 "context": context,
                 "tenant_id": tenant_id,
             }

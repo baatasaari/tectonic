@@ -82,6 +82,25 @@ class HumanOversightClient(Protocol):
         ...
 
 
+class WorkflowEngineClient(Protocol):
+    """Port to the Workflow Engine module (Module 1). Added for the Phase 2
+    support-agent product slice (ticket #82): this module had no client for
+    Workflow Engine at all before this -- handle_turn() called LLM Gateway
+    directly for every turn, never routing through Workflow Engine's own
+    neurosymbolic orchestration, contrary to what the slice's own design doc
+    always assumed. Gated behind `settings.workflow_routing.enabled` (default
+    off) so every pre-existing direct-LLM-Gateway turn is unaffected."""
+
+    async def start_instance(
+        self, *, definition_id: str, initial_context: dict[str, Any], tenant_id: str
+    ) -> dict[str, Any]:
+        """POSTs /instances; Workflow Engine runs the graph synchronously
+        within the call. Returns {"id", "status", "trace_id", "context"} --
+        status is "completed" (context carries the final answer),
+        "paused_for_approval" (escalated to Human Oversight), or "failed"."""
+        ...
+
+
 class ObservabilityClient(Protocol):
     async def emit(self, event: dict[str, Any]) -> None: ...
 

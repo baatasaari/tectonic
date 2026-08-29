@@ -14,9 +14,11 @@ from tool_orchestration.core.domain import (
     CircuitOpenError,
     SynthesisRejectedError,
     ToolCallError,
+    ToolDefinitionRecord,
     ToolNotActiveError,
     ToolNotFoundError,
     ToolStatus,
+    new_id,
 )
 from tool_orchestration.core.ports import ToolRepository
 from tool_orchestration.schemas.tools import (
@@ -24,6 +26,8 @@ from tool_orchestration.schemas.tools import (
     ApproveToolResponse,
     InvokeToolRequest,
     InvokeToolResponse,
+    RegisterToolRequest,
+    RegisterToolResponse,
     ReliabilityScoreSummary,
     SynthesiseToolRequest,
     ToolDefinitionDetail,
@@ -105,6 +109,29 @@ async def invoke(
 
     return InvokeToolResponse(
         result=outcome.output, status=outcome.status.value, retry_count=outcome.retry_count, latency_ms=outcome.latency_ms
+    )
+
+
+@router.post("/tools", response_model=RegisterToolResponse, status_code=201)
+async def register_tool(
+    body: RegisterToolRequest,
+    request: Request,
+    ctx: AppContext = Depends(get_ctx),
+    repository: ToolRepository = Depends(get_repository),
+) -> RegisterToolResponse:
+    """Registers a known, already-specified tool directly as `active` --
+    see schemas/tools.py's RegisterToolRequest docstring (ticket #82) for
+    why this is distinct from the guarded `/synthesise` -> `/approve`
+    pipeline, which is for LLM-invented tools, not admin-known ones."""
+    tenant_id = _tenant_id(request, ctx)
+    record = ToolDefinitionRecord(
+        id=new_id(), tenant_id=tenant_id, name=body.name, mcp_server_ref=body.mcp_server_ref,
+        schema=body.schema_, status=ToolStatus.ACTIVE, synthesised=False,
+    )
+    record = await repository.create_tool_definition(record)
+    return RegisterToolResponse(
+        id=record.id, name=record.name, mcp_server_ref=record.mcp_server_ref,
+        status=record.status.value, synthesised=record.synthesised,
     )
 
 

@@ -31,7 +31,10 @@ async def get_repository(request: Request) -> AsyncIterator[WorkflowRepository]:
 
 
 def build_scheduler(ctx: AppContext, repository: WorkflowRepository) -> ExecutionScheduler:
-    neural_executor = NeuralStepExecutor(ctx.llm_gateway, ctx.tool_orchestration, ctx.guardrails)
+    neural_executor = NeuralStepExecutor(
+        ctx.llm_gateway, ctx.tool_orchestration, ctx.guardrails,
+        intent_detection=ctx.intent_detection, agentic_rag=ctx.agentic_rag,
+    )
     human_handler = HumanApprovalHandler(repository, ctx.human_oversight)
     replanner = Replanner(repository, ctx.llm_gateway)
     return ExecutionScheduler(

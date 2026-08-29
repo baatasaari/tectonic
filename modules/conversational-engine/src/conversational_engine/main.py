@@ -20,6 +20,7 @@ from conversational_engine.clients.http_clients import (
     HTTPLLMGatewayClient,
     HTTPLongTermMemoryClient,
     HTTPObservabilityClient,
+    HTTPWorkflowEngineClient,
 )
 from conversational_engine.config import ConversationalEngineSettings, load_settings
 from conversational_engine.db.session import make_engine, make_session_factory
@@ -61,6 +62,10 @@ def build_app_context(settings: ConversationalEngineSettings) -> AppContext:
         ),
         auditability=HTTPAuditabilityClient(
             settings.auditability_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        workflow_engine=HTTPWorkflowEngineClient(
+            settings.workflow_engine_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
             ttl_seconds=settings.jwt_ttl_seconds,
         ),
     )

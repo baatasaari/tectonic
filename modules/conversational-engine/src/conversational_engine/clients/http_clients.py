@@ -83,6 +83,42 @@ class HTTPGuardrailsClient(ResilientHTTPClient):
         return bool(data["allowed"]), data.get("detail", {})
 
 
+class HTTPWorkflowEngineClient(ResilientHTTPClient):
+    """Adapter to Workflow Engine (Module 1) — added for the Phase 2
+    support-agent slice (ticket #82); this module had no client for Workflow
+    Engine before this."""
+
+    def __init__(
+        self, base_url: str, client: httpx.AsyncClient | None = None, *,
+        issuer: str = "", shared_secret: str = "", ttl_seconds: int = 300,
+    ) -> None:
+        auth = ServiceBearerAuth(
+            issuer=issuer, audience="workflow-engine", shared_secret=shared_secret, ttl_seconds=ttl_seconds,
+        ) if issuer else None
+        super().__init__(base_url, client=client, breaker_name="workflow-engine", auth=auth)
+
+    async def start_instance(
+        self, *, definition_id: str, initial_context: dict[str, Any], tenant_id: str
+    ) -> dict[str, Any]:
+        resp = await self._post(
+            "/v1/workflow-engine/instances",
+            json={"definition_id": definition_id, "initial_context": initial_context},
+            headers={"X-Tenant-Id": tenant_id},
+        )
+        started = resp.json()
+        # start_instance's own POST runs the graph synchronously but its
+        # response (StartInstanceResponse) never echoes back the resulting
+        # context -- a second real call to the same real instance fetches it,
+        # rather than this module guessing at or duplicating Workflow
+        # Engine's own instance-detail shape.
+        detail_resp = await self._get(f"/v1/workflow-engine/instances/{started['id']}", headers={"X-Tenant-Id": tenant_id})
+        detail = detail_resp.json()
+        return {
+            "id": started["id"], "status": detail["status"], "trace_id": started["trace_id"],
+            "context": detail.get("context", {}),
+        }
+
+
 class HTTPLongTermMemoryClient(ResilientHTTPClient):
     def __init__(
         self, base_url: str, client: httpx.AsyncClient | None = None, *,

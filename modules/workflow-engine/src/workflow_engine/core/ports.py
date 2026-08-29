@@ -104,6 +104,29 @@ class LLMGatewayClient(Protocol):
         ...
 
 
+class IntentDetectionClient(Protocol):
+    """Port to the Intent Detection module (Module 5). Added for the Phase 2
+    support-agent product slice (ticket #82): this module had no client for
+    Intent Detection at all before this, even though the slice's own design
+    doc's sequence diagram always assumed one — the intent step is a real
+    new call, not a change to how symbolic/neural/human steps already work."""
+
+    async def classify(self, *, message: str, tenant_id: str) -> tuple[str, float]:
+        """Returns (top_intent_name, confidence)."""
+        ...
+
+
+class AgenticRAGClient(Protocol):
+    """Port to the Agentic RAG module (Module 6). Added for the retrieve step
+    (ticket #82); this module had no client for Agentic RAG at all before
+    the Phase 2 support-agent slice."""
+
+    async def retrieve(self, *, query: str, tenant_id: str) -> dict[str, Any]:
+        """Returns Agentic RAG's real RetrieveResponse as a dict
+        (synthesized_context/groundedness_score/outcome/...)."""
+        ...
+
+
 class ToolOrchestrationClient(Protocol):
     async def invoke(
         self, *, tool_ref: str, arguments: dict[str, Any], tenant_id: str, trace_id: str
@@ -120,7 +143,14 @@ class GuardrailsClient(Protocol):
 
 class HumanOversightClient(Protocol):
     async def request_approval(
-        self, *, approval_request_id: str, step_execution_id: str, context: dict[str, Any], tenant_id: str
+        self, *, approval_request_id: str, step_execution_id: str, instance_id: str,
+        context: dict[str, Any], tenant_id: str,
     ) -> str:
-        """Registers the request with Human Oversight, returns its external ref id."""
+        """Registers the request with Human Oversight, returns its external ref id.
+        `instance_id` was added for ticket #82 (Phase 2 support-agent slice):
+        Human Oversight's own real decision-callback dispatcher resumes a
+        workflow-engine-originated request via
+        `"{instance_id}:{approval_request_id}"` as `requesting_ref` (see
+        Human Oversight's clients/http_clients.py docstring) -- without it,
+        this module had no way to identify which instance to resume."""
         ...

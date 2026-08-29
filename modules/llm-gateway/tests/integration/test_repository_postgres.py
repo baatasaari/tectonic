@@ -14,11 +14,11 @@ import os
 
 import pytest
 from alembic.config import Config as AlembicConfig
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from alembic import command
 from llm_gateway.core.domain import ProviderConfigRecord, VirtualKeyRecord, new_id
-from llm_gateway.db import models
 from llm_gateway.db.repository import SQLAlchemyGatewayRepository
 
 pytestmark = pytest.mark.asyncio
@@ -60,22 +60,45 @@ async def test_virtual_key_provider_scope_round_trips_as_real_jsonb_with_real_uu
         await engine.dispose()
 
 
+async def test_create_provider_config_round_trips_and_rejects_duplicate_name(migrated_url):
+    """`create_provider_config` (ticket #82) is the first real way, through
+    this module's own repository, to provision a provider at all -- before
+    this, a provider row could only be inserted directly against the
+    SQLAlchemy model (see the previous version of this file), which is not
+    something a real running deployment could ever do through this module's
+    own API surface."""
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyGatewayRepository(session)
+            created = await repo.create_provider_config(
+                ProviderConfigRecord(id=new_id(), provider_name="acme-mock-llm", endpoint="http://localhost:9200", priority=1)
+            )
+            assert created.provider_name == "acme-mock-llm"
+            assert created.health_status == "healthy"
+
+            fetched = [p for p in await repo.list_provider_configs() if p.id == created.id]
+            assert len(fetched) == 1
+            assert fetched[0].endpoint == "http://localhost:9200"
+
+            with pytest.raises(IntegrityError):
+                await repo.create_provider_config(
+                    ProviderConfigRecord(id=new_id(), provider_name="acme-mock-llm", endpoint="http://other", priority=2)
+                )
+    finally:
+        await engine.dispose()
+
+
 async def test_provider_config_deprecation_notices_round_trip_list_of_dicts(migrated_url):
     engine = create_async_engine(migrated_url)
     try:
         async with engine.connect() as conn, AsyncSession(conn) as session:
-            # No create_provider_config exists on the repository (provider configs are
-            # seeded data), so insert the row directly and exercise the real
-            # repository's update_provider_config / list_provider_configs to prove the
-            # JSONB list-of-dicts column comes back intact.
-            provider_id = new_id()
-            m = models.ProviderConfig(
-                id=provider_id, provider_name="openai", endpoint="https://api.openai.com/v1", priority=1,
-            )
-            session.add(m)
-            await session.commit()
-
             repo = SQLAlchemyGatewayRepository(session)
+            provider_id = new_id()
+            await repo.create_provider_config(
+                ProviderConfigRecord(id=provider_id, provider_name="openai", endpoint="https://api.openai.com/v1", priority=1)
+            )
+
             notices = [
                 {"model": "gpt-4-32k", "sunset_date": "2026-06-01", "replacement": "gpt-4.1"},
                 {"model": "text-davinci-003", "sunset_date": "2024-01-04", "replacement": "gpt-3.5-turbo"},

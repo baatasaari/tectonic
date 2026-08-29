@@ -41,3 +41,31 @@ class ProviderStatusResponse(BaseModel):
     priority: int
     health_status: str
     deprecation_notices: list[dict]
+
+
+class CreateProviderConfigRequest(BaseModel):
+    """Ticket #82 (Phase 2 support-agent slice): before this, this module had
+    no way at all -- through its own real API -- to provision a provider a
+    tenant's completions could actually route to; `list_provider_configs`/
+    `update_provider_config` both assumed a row already existed via some
+    other, never-built mechanism (not even a data migration seeded one)."""
+
+    provider_name: str
+    endpoint: str
+    priority: int = 0
+
+
+class CreateBudgetPolicyRequest(BaseModel):
+    tenant_id: str
+    period: str
+    limit_amount: float
+    alert_threshold_pct: float = 0.8
+
+
+class BudgetPolicyResponse(BaseModel):
+    id: str
+    tenant_id: str
+    period: str
+    limit_amount: float
+    current_spend: float
+    alert_threshold_pct: float

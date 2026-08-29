@@ -2,14 +2,24 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 
 from llm_gateway.api.deps import get_repository
 from llm_gateway.config import BudgetConfig
 from llm_gateway.core.cost_governance import CostGovernanceEngine
-from llm_gateway.core.domain import VirtualKeyRecord, new_id
+from llm_gateway.core.domain import (
+    BudgetPeriod,
+    BudgetPolicyRecord,
+    ProviderConfigRecord,
+    VirtualKeyRecord,
+    new_id,
+)
 from llm_gateway.core.ports import GatewayRepository
 from llm_gateway.schemas.admin import (
+    BudgetPolicyResponse,
     BudgetStatusResponse,
+    CreateBudgetPolicyRequest,
+    CreateProviderConfigRequest,
     CreateVirtualKeyRequest,
     ProviderStatusResponse,
     VirtualKeyListResponse,
@@ -78,6 +88,48 @@ async def get_budget_status(
         limit_amount=policy.limit_amount, current_spend=policy.current_spend,
         utilisation_ratio=ratio, alert_threshold_pct=policy.alert_threshold_pct,
         alert=ratio >= policy.alert_threshold_pct,
+    )
+
+
+@router.post("/budget-policies", response_model=BudgetPolicyResponse, status_code=201)
+async def create_budget_policy(
+    body: CreateBudgetPolicyRequest,
+    repository: GatewayRepository = Depends(get_repository),
+) -> BudgetPolicyResponse:
+    try:
+        period = BudgetPeriod(body.period)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=f"invalid period '{body.period}'") from e
+
+    record = BudgetPolicyRecord(
+        id=new_id(), tenant_id=body.tenant_id, period=period,
+        limit_amount=body.limit_amount, alert_threshold_pct=body.alert_threshold_pct,
+    )
+    record = await repository.create_budget_policy(record)
+    return BudgetPolicyResponse(
+        id=record.id, tenant_id=record.tenant_id, period=record.period.value,
+        limit_amount=record.limit_amount, current_spend=record.current_spend,
+        alert_threshold_pct=record.alert_threshold_pct,
+    )
+
+
+@router.post("/providers", response_model=ProviderStatusResponse, status_code=201)
+async def create_provider_config(
+    body: CreateProviderConfigRequest,
+    repository: GatewayRepository = Depends(get_repository),
+) -> ProviderStatusResponse:
+    """Ticket #82: the one real way, through this module's own API, to
+    provision a provider a tenant's completions can route to -- see
+    schemas/admin.py's CreateProviderConfigRequest docstring for why this
+    didn't already exist."""
+    record = ProviderConfigRecord(id=new_id(), provider_name=body.provider_name, endpoint=body.endpoint, priority=body.priority)
+    try:
+        record = await repository.create_provider_config(record)
+    except IntegrityError as e:
+        raise HTTPException(status_code=409, detail=f"provider '{body.provider_name}' already configured") from e
+    return ProviderStatusResponse(
+        provider_name=record.provider_name, priority=record.priority,
+        health_status=record.health_status, deprecation_notices=record.deprecation_notices,
     )
 
 
