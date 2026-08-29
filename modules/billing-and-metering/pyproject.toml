@@ -49,7 +49,10 @@ packages = ["src/billing_and_metering"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-markers = ["integration: requires a real Postgres (testcontainers/Docker, or TECTONIC_TEST_POSTGRES_URL)"]
+markers = [
+  "integration: requires a real Postgres (testcontainers/Docker, or TECTONIC_TEST_POSTGRES_URL)",
+  "contract: real OpenAPI-schema-driven fuzz testing against the running app (needs the same real Postgres as `integration`)",
+]
 
 [tool.ruff]
 line-length = 100

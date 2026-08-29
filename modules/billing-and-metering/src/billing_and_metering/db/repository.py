@@ -1,6 +1,7 @@
 """SQLAlchemy-backed implementation of BillingRepository (LLD §3)."""
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, func, select
@@ -16,6 +17,19 @@ from billing_and_metering.core.domain import (
     PricingPlanRecord,
 )
 from billing_and_metering.db import models
+
+
+def _is_valid_uuid(value: str) -> bool:
+    """`id` columns are Postgres `UUID`; a path-param `str` that isn't a
+    syntactically valid UUID by definition names no row, but handing it to
+    `asyncpg` regardless raises an unhandled `ValueError` deep in the
+    driver instead of the caller's own `None`/404 path. Callers to `.get()`
+    with an externally-supplied id must check this first."""
+    try:
+        uuid.UUID(value)
+        return True
+    except (ValueError, AttributeError, TypeError):
+        return False
 
 
 def _as_utc(dt: datetime | None) -> datetime | None:
@@ -67,6 +81,8 @@ class SQLAlchemyBillingRepository:
         return _plan_to_domain(m)
 
     async def get_pricing_plan(self, plan_id: str) -> PricingPlanRecord | None:
+        if not _is_valid_uuid(plan_id):
+            return None
         m = await self.session.get(models.PricingPlan, plan_id)
         return _plan_to_domain(m) if m else None
 
@@ -182,6 +198,8 @@ class SQLAlchemyBillingRepository:
         return _invoice_to_domain(m)
 
     async def get_invoice(self, invoice_id: str) -> InvoiceRecord | None:
+        if not _is_valid_uuid(invoice_id):
+            return None
         m = await self.session.get(models.Invoice, invoice_id)
         return _invoice_to_domain(m) if m else None
 

@@ -128,6 +128,19 @@ def test_get_invoice_returns_404_when_missing():
     assert resp.status_code == 404
 
 
+def test_list_invoices_rejects_a_status_that_is_not_a_real_invoice_status():
+    """Real bug the contract-test tier caught: `?status=<anything>` used to
+    be handed to `InvoiceStatus(status)` by hand inside the route, which
+    raised an unhandled `ValueError` (500) for any non-member string
+    instead of the clean `422` a bad query parameter should get."""
+    app = _app(InMemoryBillingRepository())
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/billing/invoices?status=not-a-real-status", headers=_headers())
+
+    assert resp.status_code == 422
+
+
 def test_creating_a_tenant_plan_syncs_its_modules_to_multi_tenancy():
     multi_tenancy = StubMultiTenancyClient()
     app = _app(InMemoryBillingRepository(), multi_tenancy=multi_tenancy)

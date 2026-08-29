@@ -51,6 +51,22 @@ async def test_pricing_plan_unit_prices_json_round_trips(migrated_url):
         await engine.dispose()
 
 
+async def test_get_pricing_plan_and_get_invoice_return_none_for_a_malformed_id(migrated_url):
+    """`id` is a Postgres `UUID` column; a path-param string that isn't a
+    syntactically valid UUID names no row and must resolve to `None` (a
+    clean 404 at the route), not an unhandled `asyncpg` `ValueError` from
+    trying to bind it as one. Real regression coverage for the bug the
+    contract-test tier (`tests/contract/`) caught on a real running app."""
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyBillingRepository(session)
+            assert await repo.get_pricing_plan("not-a-uuid") is None
+            assert await repo.get_invoice("not-a-uuid") is None
+    finally:
+        await engine.dispose()
+
+
 async def test_default_plan_lookup_finds_the_null_tenant_plan(migrated_url):
     engine = create_async_engine(migrated_url)
     try:

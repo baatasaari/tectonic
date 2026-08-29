@@ -77,7 +77,7 @@ async def create_pricing_plan(
 async def list_pricing_plans(
     tenant_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: BillingRepository = Depends(get_repository),
 ) -> PricingPlanListResponse:
     service = build_pricing_plan_service(repository)
@@ -116,15 +116,19 @@ async def generate_invoice(
 @router.get("/invoices", response_model=InvoiceListResponse)
 async def list_invoices(
     tenant_id: str | None = Query(None),
-    status: str | None = Query(None),
+    status: InvoiceStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: BillingRepository = Depends(get_repository),
 ) -> InvoiceListResponse:
     service = build_invoice_service(repository, ctx)
-    status_filter = InvoiceStatus(status) if status is not None else None
-    invoices, total = await service.list_invoices(tenant_id=tenant_id, status=status_filter, limit=limit, offset=offset)
+    # Query(...) typed as InvoiceStatus | None: FastAPI/Pydantic validates and coerces it
+    # itself, rejecting anything not a real InvoiceStatus value with a clean 422 -- this
+    # used to accept an arbitrary str and call InvoiceStatus(status) by hand, which raised
+    # an unhandled ValueError (500) for any non-member string (caught by the contract-test
+    # tier in tests/contract/).
+    invoices, total = await service.list_invoices(tenant_id=tenant_id, status=status, limit=limit, offset=offset)
     return InvoiceListResponse(items=[_invoice_schema(i) for i in invoices], total=total, limit=limit, offset=offset)
 
 
@@ -165,7 +169,7 @@ async def list_usage_records(
     tenant_id: str | None = Query(None),
     period: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: BillingRepository = Depends(get_repository),
 ) -> UsageRecordListResponse:
     records, total = await repository.list_usage_records(tenant_id=tenant_id, period=period, limit=limit, offset=offset)

@@ -130,3 +130,28 @@ docker compose -f deploy/docker-compose.yml up --build    # full stack incl. Pos
 |---|---|---|
 | Unit | Nothing — in-memory fakes only | `pytest tests/unit` |
 | Integration (isolated) | Real Postgres (`TECTONIC_TEST_POSTGRES_URL` or Docker via `testcontainers`) | `pytest tests/integration` |
+| Contract | Real Postgres (same as Integration) | `pytest tests/contract` |
+
+The contract tier (`tests/contract/`) is this platform's reference
+implementation of Phase 1's CI supply-chain gates: `schemathesis`/
+Hypothesis drive schema-conformant-but-otherwise-arbitrary requests at
+this module's real, running app (real middleware, real Postgres) for
+every operation its own generated OpenAPI document declares, and any
+`5xx` is a genuine contract violation — this module's own documented
+`422` isn't actually enforced. It found four real bugs on its first
+runs (unbounded `offset`, a NUL byte in a request string, a non-UUID
+path segment, an invalid `status` filter — all now fixed; see the
+module docstring in `tests/contract/test_openapi_contract.py` for the
+full account of each). CI (`.github/workflows/ci.yml`) runs this tier
+automatically for any module with a `tests/contract/` directory.
+
+CI also generates a CycloneDX SBOM of this module's real runtime
+dependency set and signs it keylessly with Sigstore via the workflow
+run's own GitHub Actions OIDC identity (the `sbom-and-sign` job,
+platform-wide, all 34 modules) — no long-lived signing key for the
+repo to hold. Verify a downloaded SBOM's provenance with:
+
+```bash
+sigstore verify github --cert-identity <workflow identity> \
+  --repository <owner>/tectonic sbom.cyclonedx.json
+```

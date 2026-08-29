@@ -727,8 +727,42 @@ background-computation endpoint already has) — both are exposed as
 real, tested endpoints a scheduler is meant to call. Full reasoning in
 that module's own README.
 
-**In progress**, tracked against the assessment's own Phase 1 (platform
-kernel) scope: CI supply-chain gates (SBOM, signing, contract tests).
+**Also fixed**: CI supply-chain gates — SBOM generation, keyless signing,
+and OpenAPI-schema-driven contract testing, none of which existed
+despite `schemathesis` already being a listed dev dependency of every
+module and never once invoked. `.github/workflows/ci.yml` now runs a
+second matrix job, `sbom-and-sign` (all 34 modules, push events only),
+that installs each module's real *runtime* dependency set into a clean
+venv separate from the `[dev]`-extras install `lint-and-test` uses (so
+test tooling never shows up in the SBOM as if it shipped), generates a
+CycloneDX 1.6 SBOM with `cyclonedx-py`, and signs it keylessly with
+`sigstore-python` via that workflow run's own GitHub Actions OIDC
+identity — no long-lived signing key for the repo to hold or leak.
+Contract testing is a bigger lift — it needs real, hand-written
+per-module test code, not just a tool invocation — so it got one real
+reference implementation, in Billing and Metering
+(`tests/contract/test_openapi_contract.py`), rather than a mechanical
+rollout to all 34: Hypothesis drives schema-conformant-but-otherwise-
+arbitrary requests at that module's real running app (real middleware,
+real Postgres) for every operation its own generated OpenAPI document
+declares, and any `5xx` is a genuine contract violation. Driven with
+Hypothesis's own `@given`/`@settings` directly rather than
+schemathesis's `@schema.parametrize()`/`LazySchema` pytest integration,
+which was verified, in this installed schemathesis version, not to
+deliver a `schemathesis.auth()` provider's injected `Authorization`
+header to the actual outgoing request against a lazily-resolved,
+fixture-backed ASGI schema. It found four real bugs on its first runs —
+an unbounded `offset` overflowing Postgres's `bigint`, a NUL byte in a
+request string crashing the UTF-8 text encoding, a non-UUID path
+segment crashing the `asyncpg` driver instead of resolving to a clean
+404, and an unvalidated `status` query filter raising an unhandled
+`ValueError` instead of a `422` — all fixed alongside the test, each
+documented in that file's own module docstring. `.github/workflows/
+ci.yml`'s `lint-and-test` job runs `tests/contract` for any module that
+has that directory, the same opt-in-by-directory-existence pattern
+`tests/integration` already established, so rolling the reference
+implementation out to more modules needs no workflow change. Full
+reasoning in that module's own README.
 
 ## Modules
 

@@ -24,6 +24,11 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege default; the sbom-and-sign job below grants itself the extra
+# id-token: write a keyless Sigstore signature needs, nothing else does.
+permissions:
+  contents: read
+
 jobs:
   lint-and-test:
     name: ${{ matrix.module }}
@@ -117,18 +122,132 @@ jobs:
           TECTONIC_TEST_POSTGRES_URL: postgresql://tectonic_ci:tectonic_ci@localhost:5432/postgres
         run: pytest tests/integration -v
 
+      - name: Contract tests (real Postgres + OpenAPI-schema-driven fuzzing, only if this module has that tier)
+        if: hashFiles(format('modules/{0}/tests/contract/**', matrix.module)) != ''
+        env:
+          TECTONIC_TEST_POSTGRES_URL: postgresql://tectonic_ci:tectonic_ci@localhost:5432/postgres
+        run: pytest tests/contract -v
+
+  sbom-and-sign:
+    # Supply-chain gate: a CycloneDX SBOM of each module's real *runtime*
+    # dependency set (a clean install of the module alone, deliberately
+    # separate from the [dev]-extras install lint-and-test uses, so test
+    # tooling never shows up as if it shipped), keylessly signed with
+    # Sigstore via this workflow run's own GitHub Actions OIDC identity --
+    # no long-lived signing key for this repo to leak. Verify a downloaded
+    # SBOM against this provenance with:
+    #   sigstore verify github --cert-identity <this workflow's identity> \
+    #     --repository ${{ github.repository }} sbom.cyclonedx.json
+    # Runs on push only (not pull_request): forked-PR runs don't carry the
+    # OIDC token this needs, and signing every PR permutation of every
+    # module isn't the point -- what matters is provenance for what actually
+    # lands on a branch.
+    name: sbom (${{ matrix.module }})
+    if: github.event_name == 'push'
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - a2a
+          - agent-cards
+          - agent-marketplace
+          - agentic-rag
+          - auditability
+          - billing-and-metering
+          - context-engineering
+          - conversational-engine
+          - data-source-plugins
+          - deployment-strategy
+          - evaluation-framework
+          - finops
+          - graph-db
+          - guardrails
+          - human-oversight
+          - identity-and-access
+          - intent-detection
+          - knowledge-base
+          - llm-gateway
+          - llmops
+          - long-term-memory
+          - mcp
+          - multi-modality
+          - multi-tenancy
+          - observability
+          - promptops
+          - regulatory-compliance
+          - secrets-and-credential-management
+          - sdk-and-developer-portal
+          - sentinel-agents
+          - short-term-memory
+          - tool-orchestration
+          - vector-db
+          - workflow-engine
+
+    defaults:
+      run:
+        working-directory: modules/${{ matrix.module }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: "modules/${{ matrix.module }}/pyproject.toml"
+
+      - name: Install the module's runtime dependencies only (no dev/test extras)
+        run: |
+          uv venv .sbom-venv
+          uv pip install --python .sbom-venv/bin/python -e .
+
+      - name: Generate SBOM (CycloneDX, from the clean runtime environment)
+        run: >-
+          uvx --from cyclonedx-bom cyclonedx-py environment
+          --of json -o sbom.cyclonedx.json .sbom-venv/bin/python
+
+      - name: Sign SBOM (Sigstore, keyless via this run's GitHub Actions OIDC identity)
+        run: uvx --from sigstore sigstore sign --bundle sbom.cyclonedx.json.sigstore --overwrite sbom.cyclonedx.json
+
+      - name: Upload SBOM + signature
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.module }}
+          path: |
+            modules/${{ matrix.module }}/sbom.cyclonedx.json
+            modules/${{ matrix.module }}/sbom.cyclonedx.json.sigstore
+          retention-days: 90
+
   ci:
     # A single, stable check name for branch protection to require, instead of
     # 19 individual matrix-leg names that shift whenever a module is added.
     name: CI
     if: always()
-    needs: [lint-and-test]
+    needs: [lint-and-test, sbom-and-sign]
     runs-on: ubuntu-latest
     steps:
       - name: Require every module job to have succeeded
         run: |
           if [ "${{ needs.lint-and-test.result }}" != "success" ]; then
             echo "One or more module jobs failed (result: ${{ needs.lint-and-test.result }})."
+            exit 1
+          fi
+          # sbom-and-sign only runs on push (see its own `if:`) -- "skipped" is
+          # its expected, passing result on a pull_request event.
+          if [ "${{ needs.sbom-and-sign.result }}" != "success" ] && [ "${{ needs.sbom-and-sign.result }}" != "skipped" ]; then
+            echo "One or more SBOM/signing jobs failed (result: ${{ needs.sbom-and-sign.result }})."
             exit 1
           fi
           echo "All module jobs passed."
