@@ -982,6 +982,18 @@ remaining 29 modules is follow-up work. Full reasoning in each
 module's own README and in each `tests/contract/test_openapi_contract.py`
 module docstring.
 
+With every kernel gap Phase 1 deliberately left open now closed,
+Phase 2 moves into the assessment's own next stage: real product
+slices. The first one's design is
+[`docs/phase2-product-slice-01-support-agent.md`](docs/phase2-product-slice-01-support-agent.md)
+— a tenant support agent, chosen because it's the smallest concrete
+scenario that still exercises nearly every module for a real reason
+(multi-turn dialogue, retrieval-grounded answers, a real tool call, a
+genuine human-escalation path, and the identity/entitlement/billing/
+audit/tracing governance every one of those needs in production), not
+a contrived one. Building and verifying it end-to-end against real
+running module instances is separate, tracked follow-up work.
+
 ## Modules
 
 ### Module 1: Workflow Engine
