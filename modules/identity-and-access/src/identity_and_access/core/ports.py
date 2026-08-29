@@ -102,3 +102,21 @@ class OidcTokenVerifier(Protocol):
         unknown `kid`, expired, wrong issuer/audience) -- callers never
         need to know which JWT-library exception that was."""
         ...
+
+
+class SamlAssertionVerifier(Protocol):
+    async def verify(self, *, saml_response: str, provider: IdentityProviderRecord) -> dict[str, Any]:
+        """Verifies a base64-encoded SAMLResponse's XML-DSig signature
+        against `provider.x509_certificate`, validates its Conditions
+        (NotBefore/NotOnOrAfter) and AudienceRestriction (against
+        `provider.client_id`, reused as this SP's expected
+        audience/entityID), and returns a claims-shaped dict --
+        `{"sub": <NameID>, <attribute Name>: <value or [values]>, ...}` --
+        the same shape `OidcTokenVerifier.verify` returns, so
+        `core/federation_common.py`'s JIT-provisioning logic and a
+        provider's `email_claim`/`groups_claim`/`name_claim` config work
+        identically for both protocols. Raises `core.domain.FederationError`
+        on any failure (bad signature, expired, wrong audience, missing
+        NameID) -- callers never need to know which XML/signxml exception
+        that was."""
+        ...

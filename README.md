@@ -648,10 +648,10 @@ membership resolves to a `federated_role_names` list recomputed fresh
 on every login, unioned with an identity's manually-assigned
 `role_names` when `TokenService.issue` computes granted scopes, so an
 IdP-side group change and a hand-granted role can never silently
-clobber each other. SAML gets a real, storable
-`IdentityProviderRecord` config shape and nothing else — no assertion
-consumer, no XML-DSig verification — a stated, deliberate gap rather
-than a fabricated or unsigned parser. `api/routes_scim.py` mounts a
+clobber each other. SAML got the same treatment in a later pass (see
+"Phase 2: closing the remaining kernel gaps" below) — a real assertion
+consumer, real XML-DSig verification, not just the storable config
+shape this pass shipped first. `api/routes_scim.py` mounts a
 spec-shaped SCIM 2.0 API (`schemas`/`meta`/`ListResponse`/`PatchOp`,
 real RFC 7643/7644 wire shapes) for Users and Groups at
 `/scim/v2/{tenant_id}/...`, authenticated by its own per-tenant,
@@ -762,6 +762,47 @@ ci.yml`'s `lint-and-test` job runs `tests/contract` for any module that
 has that directory, the same opt-in-by-directory-existence pattern
 `tests/integration` already established, so rolling the reference
 implementation out to more modules needs no workflow change. Full
+reasoning in that module's own README.
+
+## Phase 2: closing the remaining kernel gaps, then product slices
+
+Phase 1 above closed every item the independent architecture
+assessment's own "platform kernel" sequencing called for, but several
+of those fixes deliberately shipped a stated, honest sub-gap rather
+than fabricating coverage they weren't ready to claim — a real,
+storable SAML config shape with no assertion consumer; quota
+enforcement with nothing calling it yet; no cascading tenant
+offboarding, optimistic-concurrency enforcement, or residency-policy
+enforcement in Multi-tenancy; the event-backbone and contract-test
+reference implementations each built in one module, not rolled out.
+Phase 2 closes those, then moves into the assessment's own next stage
+— real product slices — once they're closed.
+
+**Fixed**: Identity and Access's SAML gap. `POST
+/v1/identity-access/saml/login` is a real SAML 2.0 assertion consumer
+(ACS): it verifies the HTTP-POST binding's `SAMLResponse` (base64-
+encoded XML) for real via `signxml` — the XML digital signature is
+checked against the tenant's registered `x509_certificate`,
+constrained to the exact expected `Assertion` location (`signxml`'s
+own documented SAML best practice, and the real defense against a
+basic signature-wrapping attack: an attacker appending a second,
+unsigned or differently-signed `Assertion` elsewhere in the document
+while leaving the genuinely-signed one in place); only the verified
+element is ever read from afterward, never the raw untrusted input
+tree. `Conditions/@NotBefore`/`@NotOnOrAfter` and `AudienceRestriction`
+are validated by hand once the signature itself is trusted — `signxml`
+verifies the *signature*, not SAML's own semantic constraints, the
+same split PyJWT already has between signature verification and the
+caller's own `exp`/`aud` checks. JIT-provisioning is identical to
+OIDC's — by `(tenant_id, provider_id, NameID)`, never by email, with
+`federated_role_names` recomputed fresh from the assertion's
+group-bearing attribute on every login — sharing that logic with OIDC
+via a new `core/federation_common.py` rather than duplicating it
+between the two federation services. Verified with a real RSA keypair,
+a real self-signed X.509 certificate, and a real XML-DSig-signed
+assertion built and signed with `signxml` itself, including a
+tampered-assertion case (digest mismatch caught) and a signature from
+an untrusted-but-internally-valid key (correctly rejected). Full
 reasoning in that module's own README.
 
 ## Modules

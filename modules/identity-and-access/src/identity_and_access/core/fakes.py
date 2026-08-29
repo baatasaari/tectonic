@@ -192,8 +192,28 @@ class StubOidcTokenVerifier:
         return claims
 
 
+class StubSamlAssertionVerifier:
+    """No XML, no XML-DSig -- a canned claims dict per `saml_response`
+    string value, keyed exactly, for pure SamlFederationService
+    business-logic tests. `XmlDsigSamlAssertionVerifier`
+    (security/saml_verifier.py) is the real thing; see
+    tests/unit/test_saml_verifier.py for the real-signed-XML,
+    real-signxml-verification end-to-end tests that exercise it instead
+    of this stub."""
+
+    def __init__(self) -> None:
+        self.claims_by_response: dict[str, dict[str, Any]] = {}
+
+    async def verify(self, *, saml_response: str, provider: IdentityProviderRecord) -> dict[str, Any]:
+        claims = self.claims_by_response.get(saml_response)
+        if claims is None:
+            raise FederationError("unknown or invalid saml_response")
+        return claims
+
+
 __all__ = [
     "InMemoryIdentityAccessRepository",
     "StubAuditabilityClient",
     "StubOidcTokenVerifier",
+    "StubSamlAssertionVerifier",
 ]

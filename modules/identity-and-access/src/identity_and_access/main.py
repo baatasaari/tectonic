@@ -20,6 +20,7 @@ from identity_and_access.db.session import make_engine, make_session_factory
 from identity_and_access.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
 from identity_and_access.security.oidc_verifier import HTTPOidcTokenVerifier
 from identity_and_access.security.openapi_security import configure_openapi_security
+from identity_and_access.security.saml_verifier import XmlDsigSamlAssertionVerifier
 from identity_and_access.security.token_signer import JWTTokenSigner
 from identity_and_access.telemetry.logging import configure_logging, get_logger
 from identity_and_access.telemetry.tracing import configure_tracing
@@ -43,6 +44,10 @@ def build_app_context(settings: IdentityAndAccessSettings) -> AppContext:
         # IdP's JWKS endpoint, not a platform module -- it holds neither
         # TECTONIC_JWT_SHARED_SECRET nor any reason to expect it.
         oidc_verifier=HTTPOidcTokenVerifier(client=httpx.AsyncClient(timeout=httpx.Timeout(10.0))),
+        # No network client needed: unlike OIDC's JWKS fetch, everything a SAML
+        # assertion's signature is verified against (the IdP's x509_certificate) is
+        # already stored on the IdentityProviderRecord itself.
+        saml_verifier=XmlDsigSamlAssertionVerifier(),
     )
 
 

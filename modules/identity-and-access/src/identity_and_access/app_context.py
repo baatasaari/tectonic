@@ -6,7 +6,11 @@ from dataclasses import dataclass
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from identity_and_access.config import IdentityAndAccessSettings
-from identity_and_access.core.ports import AuditabilityClient, OidcTokenVerifier
+from identity_and_access.core.ports import (
+    AuditabilityClient,
+    OidcTokenVerifier,
+    SamlAssertionVerifier,
+)
 from identity_and_access.security.token_signer import JWTTokenSigner
 
 
@@ -18,3 +22,4 @@ class AppContext:
     auditability: AuditabilityClient
     signer: JWTTokenSigner
     oidc_verifier: OidcTokenVerifier
+    saml_verifier: SamlAssertionVerifier

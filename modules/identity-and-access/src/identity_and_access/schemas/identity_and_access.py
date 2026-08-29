@@ -138,6 +138,13 @@ class OidcLoginRequest(BaseModel):
     id_token: str
 
 
+class SamlLoginRequest(BaseModel):
+    provider_id: str
+    # The real SAML HTTP-POST binding's SAMLResponse form field: base64-encoded XML,
+    # verified for real by security/saml_verifier.py -- see that module's docstring.
+    saml_response: str
+
+
 class RegisterGroupRequest(BaseModel):
     provider_id: str
     external_id: str

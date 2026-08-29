@@ -14,6 +14,7 @@ from identity_and_access.core.fakes import (
     InMemoryIdentityAccessRepository,
     StubAuditabilityClient,
     StubOidcTokenVerifier,
+    StubSamlAssertionVerifier,
 )
 from identity_and_access.core.scim_token_service import ScimTokenService
 from identity_and_access.security.token_signer import JWTTokenSigner
@@ -28,7 +29,7 @@ def _app(repository):
     ctx = AppContext(
         settings=IdentityAndAccessSettings(), engine=None, session_factory=None,
         auditability=StubAuditabilityClient(), signer=JWTTokenSigner(signing_secret=SIGNING_SECRET),
-        oidc_verifier=StubOidcTokenVerifier(),
+        oidc_verifier=StubOidcTokenVerifier(), saml_verifier=StubSamlAssertionVerifier(),
     )
     app.dependency_overrides[get_ctx] = lambda: ctx
     app.dependency_overrides[get_repository] = lambda: repository

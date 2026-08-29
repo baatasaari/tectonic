@@ -10,6 +10,7 @@ from identity_and_access.api.deps import (
     build_identity_registry_service,
     build_oidc_federation_service,
     build_role_service,
+    build_saml_federation_service,
     build_scim_token_service,
     build_token_service,
     get_ctx,
@@ -51,6 +52,7 @@ from identity_and_access.schemas.identity_and_access import (
     RegisterIdentityRequest,
     RoleListResponse,
     RoleSchema,
+    SamlLoginRequest,
     ScimTokenCreatedSchema,
     ScimTokenListResponse,
     ScimTokenSchema,
@@ -317,6 +319,27 @@ async def oidc_login(
     service = build_oidc_federation_service(repository, ctx)
     try:
         identity = await service.login(tenant_id=tenant_id, provider_id=body.provider_id, id_token=body.id_token)
+    except IdentityProviderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FederationError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    return _identity_schema(identity)
+
+
+@router.post("/saml/login", response_model=IdentitySchema)
+async def saml_login(
+    body: SamlLoginRequest,
+    tenant_id: str = Depends(resolve_tenant_id),
+    ctx: AppContext = Depends(get_ctx),
+    repository: IdentityAccessRepository = Depends(get_repository),
+) -> IdentitySchema:
+    """SAML 2.0 assertion consumer (ACS): verifies `saml_response`'s real
+    XML-DSig signature and JIT-provisions/updates the matching identity
+    the same way `/oidc/login` does for OIDC -- see
+    `security/saml_verifier.py` and `core/saml_federation_service.py`."""
+    service = build_saml_federation_service(repository, ctx)
+    try:
+        identity = await service.login(tenant_id=tenant_id, provider_id=body.provider_id, saml_response=body.saml_response)
     except IdentityProviderNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except FederationError as exc:

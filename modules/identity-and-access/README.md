@@ -19,7 +19,7 @@ src/identity_and_access/
   config.py                  Pydantic Settings — LLD config schema
   core/
     domain.py                 IdentityRecord/RoleRecord/AuthDecisionRecord, IdentityProviderRecord/GroupRecord/ScimTokenRecord, the identity lifecycle state machine
-    ports.py                    Repository, the real Auditability client port, OidcTokenVerifier
+    ports.py                    Repository, the real Auditability client port, OidcTokenVerifier, SamlAssertionVerifier
     fakes.py                     In-memory implementations of every port, for unit tests
     identity_registry_service.py  Identity Registry — register/revoke/reinstate
     role_service.py                Role Service — create/get/list
@@ -27,6 +27,8 @@ src/identity_and_access/
     authorization_service.py        Authorization Service — the zero-trust live authorize check
     identity_provider_service.py    Identity Provider Service — per-tenant OIDC/SAML config CRUD
     oidc_federation_service.py       OIDC Federation Service — verify + JIT-provision/update on login
+    saml_federation_service.py       SAML Federation Service — verify + JIT-provision/update on login
+    federation_common.py             JIT-provisioning logic shared between OIDC and SAML
     group_service.py                 Group Service — IdP-group -> default-role mapping, live recompute
     scim_token_service.py            SCIM Token Service — show-once per-tenant provisioning bearer tokens
     scim_service.py                   SCIM 2.0 User/Group lifecycle, mapped onto IdentityRecord/GroupRecord
@@ -37,10 +39,11 @@ src/identity_and_access/
     openapi_security.py       Real OpenAPI security scheme declaration (ServiceBearerAuth + ScimBearerAuth)
     token_signer.py             This module's own distinct signing key for the scoped tokens it issues
     oidc_verifier.py             Real JWKS-fetching, PyJWT-based OIDC ID token verifier
+    saml_verifier.py              Real signxml-based SAML assertion (XML-DSig) verifier
     scim_auth.py                  SCIM's own per-tenant bearer token dependency
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/
-    routes_identity_and_access.py  FastAPI router — roles, identities, tokens, authorize, identity-providers, oidc/login, groups, scim-tokens
+    routes_identity_and_access.py  FastAPI router — roles, identities, tokens, authorize, identity-providers, oidc/login, saml/login, groups, scim-tokens
     routes_scim.py                   SCIM 2.0 router — /scim/v2/{tenant_id}/Users and /Groups
   schemas/
     identity_and_access.py     Pydantic request/response models for this module's own REST shapes
@@ -95,20 +98,39 @@ src/identity_and_access/
   group granted on their very next login, without this module ever
   polling the IdP, and without a hand-granted role ever depending on
   federation staying configured correctly.
-- **SAML: a real, storable config model, and an honest, undisguised
-  gap.** `IdentityProviderRecord` stores `provider_type=saml`,
-  `sso_url`, and `x509_certificate` as real fields an operator can
-  register and read back — but this module has no SAML assertion
-  consumer service (ACS) endpoint and performs no XML-DSig
-  verification anywhere. `OidcFederationService.login` raises
-  `FederationError` for a non-OIDC provider rather than silently
-  no-op'ing or, worse, accepting an unverified assertion. A real SAML
-  ACS is substantial, security-critical, separate work (canonical XML,
-  signature-wrapping-attack defenses, `xmlsec`-grade tooling); shipping
-  a partial or unsigned parser would be strictly worse than shipping
-  none, the same "document real gaps, never fabricate insecure crypto"
-  call this platform already made for envelope encryption and the
-  service-JWT boundary.
+- **SAML: a real assertion consumer (ACS), real XML-DSig verification.**
+  `POST /v1/identity-access/saml/login` takes the real SAML 2.0
+  HTTP-POST binding's `SAMLResponse` (base64-encoded XML) and verifies
+  it for real (`security/saml_verifier.py`, via `signxml`): the XML
+  digital signature is checked against the tenant's registered
+  `x509_certificate`, constrained to the exact expected `Assertion`
+  location (`signxml`'s own documented SAML best practice — the real
+  defense against a basic signature-wrapping attack, an attacker
+  appending a second, unsigned or differently-signed `Assertion`
+  elsewhere in the document while leaving the genuinely-signed one in
+  place); only the verified `signed_xml` element is ever read from
+  afterward, never the raw untrusted input tree. `Conditions/
+  @NotBefore`/`@NotOnOrAfter` and `AudienceRestriction` (checked
+  against `client_id`, reused from OIDC's identical "who is this
+  for" concept rather than adding a second field) are validated by
+  hand once the signature itself is trusted — `signxml` verifies the
+  *signature*, not SAML's own semantic constraints, same as PyJWT
+  leaving `exp`/`aud` to the caller. `SamlFederationService.login`
+  then JIT-provisions/updates the identity by `(tenant_id, provider_id,
+  NameID)` and resolves `federated_role_names` from the assertion's
+  group-bearing attribute — identical semantics to OIDC, sharing the
+  exact same provisioning logic via `core/federation_common.py` rather
+  than duplicating it. `OidcFederationService.login`/
+  `SamlFederationService.login` each still raise `FederationError` for
+  the other provider type, so a misconfigured login attempt is refused,
+  never silently no-op'd or (worse) accepted unverified. Verified with
+  a real RSA keypair, a real self-signed X.509 certificate, and a real
+  XML-DSig-signed assertion built and signed with `signxml` itself
+  (`tests/unit/test_saml_verifier.py`) — including a tampered-assertion
+  case (digest mismatch caught) and a signature from an untrusted key
+  (correctly rejected even though internally self-consistent) — plus
+  full JIT-provisioning coverage (`tests/unit/test_saml_federation_service.py`)
+  mirroring OIDC's own.
 - **SCIM 2.0 (RFC 7643/7644): Users and Groups, real wire shapes, its
   own auth.** `api/routes_scim.py` mounts a spec-shaped provisioning
   API at `/scim/v2/{tenant_id}/Users` and `.../Groups` — real

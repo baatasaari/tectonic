@@ -12,6 +12,7 @@ from identity_and_access.core.identity_registry_service import IdentityRegistryS
 from identity_and_access.core.oidc_federation_service import OidcFederationService
 from identity_and_access.core.ports import IdentityAccessRepository
 from identity_and_access.core.role_service import RoleService
+from identity_and_access.core.saml_federation_service import SamlFederationService
 from identity_and_access.core.scim_token_service import ScimTokenService
 from identity_and_access.core.token_service import TokenService
 from identity_and_access.db.repository import SQLAlchemyIdentityAccessRepository
@@ -60,3 +61,7 @@ def build_scim_token_service(repository: IdentityAccessRepository) -> ScimTokenS
 
 def build_oidc_federation_service(repository: IdentityAccessRepository, ctx: AppContext) -> OidcFederationService:
     return OidcFederationService(repository, ctx.oidc_verifier)
+
+
+def build_saml_federation_service(repository: IdentityAccessRepository, ctx: AppContext) -> SamlFederationService:
+    return SamlFederationService(repository, ctx.saml_verifier)
