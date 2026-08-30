@@ -254,6 +254,25 @@ src/multi_tenancy/
   hanging forever instead. Fixed identically, with the same regression
   test shape (`tests/unit/test_kafka_publisher.py`).
 
+- **NUL bytes in raw `Query()` string parameters reaching Postgres
+  unvalidated** (ticket #82's own CI wiring for `tests/product-slices/`
+  — a real GitHub Actions run of this module's own contract tier, not
+  reproducible locally against this sandbox's own Hypothesis random
+  seed, first surfaced it). This module's schema-level `_reject_null_byte`
+  (ticket #80) already rejects a NUL byte in any *body* field, but a raw
+  `Query()` parameter on a GET/list route (`tenant_id`, `target_name`,
+  `workspace_id`, `environment_id` across `/isolation-probes`,
+  `/workspaces`, `/environments`, `/resource-allocations`) never runs
+  through that validator at all — it reached Postgres raw and
+  500'd (`UntranslatableCharacterError`) instead of a clean `422`. Fixed
+  with a small `_reject_null_byte_query()` applied at the top of each of
+  those four routes; `tests/unit/test_routes_multi_tenancy.py` pins the
+  regression directly rather than relying on fuzzing luck to rediscover
+  it. This exact bug class (an unvalidated free-text `Query()` parameter)
+  recurs across other modules in this platform too — Billing and
+  Metering's own README documents the identical fix; a platform-wide
+  sweep is real, separately-scoped follow-up work, not done here.
+
 ## Running locally
 
 ```bash

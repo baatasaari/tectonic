@@ -215,6 +215,21 @@ def test_list_isolation_probes():
     assert resp.json()["total"] == 1
 
 
+def test_list_isolation_probes_rejects_a_null_byte_in_target_name_with_a_clean_422():
+    """Ticket #82: a real CI run of this module's own contract tier found
+    this -- `target_name` is a raw `Query()` string, which (unlike a
+    Pydantic body field) never runs through `_reject_null_byte`, so a NUL
+    byte reached Postgres raw and 500'd instead of a clean 422."""
+    app = _app(InMemoryMultiTenancyRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/multi-tenancy/isolation-probes", params={"target_name": "a\x00b"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
 # --- Organisation / Workspace / Environment (platform hierarchy control plane) ---
 
 

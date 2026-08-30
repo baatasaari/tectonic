@@ -137,6 +137,21 @@ restart — see §8).
 
 ## 8. Known Issues
 
+- **This sandbox's own local Postgres never actually validates real
+  GitHub Actions CI** -- ticket #82's own earlier work (before the CI
+  job existed) was verified thoroughly against this sandbox's own local
+  Postgres/Redis, but the branch's *real* CI runs (checked only once the
+  new `product-slice-support-agent` job's own push triggered a look at
+  them) had been failing since the very first ticket #82 commit, on two
+  modules this sandbox's own local runs never caught: a real, GitHub-
+  Actions-only-reproducible Hypothesis fuzzing seed found a NUL-byte-in-
+  a-raw-`Query()`-parameter bug (see §12's own P1 item) that this
+  sandbox's own local Postgres/seed never happened to hit. **Check the
+  branch's actual GitHub Actions run after any push that touches a
+  module with a `tests/contract/` tier** (`list_workflow_runs` for
+  `ci.yml` on this branch) rather than trusting a local-only green as
+  the final word -- this sandbox's own Postgres/Hypothesis state isn't
+  identical to a fresh GitHub Actions runner's.
 - **Postgres and Redis are not durable across a container restart in this
   sandbox**, despite `CLAUDE.md`'s own claim that the Postgres password
   persists — both had to be restarted mid-session
@@ -265,7 +280,25 @@ default). Neither is a production credential.
 ## 12. Backlog (P0/P1/P2/P3)
 
 - **P0**: None. Nothing is broken or blocking; all touched modules are
-  green.
+  green (including in real GitHub Actions CI, not just this sandbox --
+  see the note on `TECTONIC_TEST_POSTGRES_URL`-vs-CI-credentials below).
+- **P1**: A real, platform-wide bug class the new CI job's own first
+  real run surfaced (not reproducible against this sandbox's own local
+  Postgres/Hypothesis-seed, only against a *fresh* Postgres under GitHub
+  Actions' own random fuzzing seed): a raw FastAPI `Query()` string
+  parameter never runs through a Pydantic body field's own NUL-byte
+  validator, so a NUL byte in one reaches Postgres raw and 500s. Fixed
+  in Multi-tenancy and Billing and Metering (the two modules whose own
+  contract tier this surfaced it in for real); a `grep -rn "Query(None)"
+  */src/*/api/routes*.py` across every module shows this same
+  `str | None = Query(None)` pattern in roughly a dozen other modules
+  outside this slice's own scope (a2a, agent-cards, agent-marketplace,
+  auditability, deployment-strategy, identity-and-access, knowledge-base,
+  llmops, observability, promptops, regulatory-compliance,
+  sdk-and-developer-portal, secrets-and-credential-management,
+  sentinel-agents, and more) -- each is a latent instance of the same
+  class until it's actually fuzzed by a contract tier. Fixing all of
+  them is real, separately-scoped follow-up work, not done here.
 - **P1**: Fix Agentic RAG's own Graph DB/Knowledge-Base-symbolic-lookup
   client wire shapes properly (currently sidestepped via
   `hybrid_retrieval_enabled=false` for this slice only) once Knowledge

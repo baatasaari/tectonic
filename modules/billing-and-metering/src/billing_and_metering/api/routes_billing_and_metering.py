@@ -3,6 +3,19 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator (see e.g. Multi-tenancy's own
+    `_reject_null_byte` in schemas/multi_tenancy.py) -- a real CI run of
+    a sibling module's contract tier (ticket #82) surfaced this exact
+    bug class on a raw query parameter, an `UntranslatableCharacterError`
+    at the database instead of a clean 422. Applied at the top of every
+    route below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
 from billing_and_metering.api.deps import (
     build_invoice_service,
     build_metering_service,
@@ -82,6 +95,7 @@ async def list_pricing_plans(
     offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: BillingRepository = Depends(get_repository),
 ) -> PricingPlanListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     service = build_pricing_plan_service(repository)
     plans, total = await service.list(tenant_id=tenant_id, limit=limit, offset=offset)
     return PricingPlanListResponse(items=[_plan_schema(p) for p in plans], total=total, limit=limit, offset=offset)
@@ -124,6 +138,7 @@ async def list_invoices(
     ctx: AppContext = Depends(get_ctx),
     repository: BillingRepository = Depends(get_repository),
 ) -> InvoiceListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     service = build_invoice_service(repository, ctx)
     # Query(...) typed as InvoiceStatus | None: FastAPI/Pydantic validates and coerces it
     # itself, rejecting anything not a real InvoiceStatus value with a clean 422 -- this
@@ -197,5 +212,6 @@ async def list_usage_records(
     offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: BillingRepository = Depends(get_repository),
 ) -> UsageRecordListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id, period=period)
     records, total = await repository.list_usage_records(tenant_id=tenant_id, period=period, limit=limit, offset=offset)
     return UsageRecordListResponse(items=[_usage_schema(r) for r in records], total=total, limit=limit, offset=offset)

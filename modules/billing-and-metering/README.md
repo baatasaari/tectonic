@@ -134,6 +134,23 @@ src/billing_and_metering/
   here since it's exactly the kind of cross-module interaction a
   single-module test would never catch.
 
+- **NUL bytes in raw `Query()` string parameters reaching Postgres
+  unvalidated** (ticket #82's own CI wiring for `tests/product-slices/`
+  — a real GitHub Actions run of this module's own contract tier, not
+  reproducible locally against this sandbox's own Hypothesis random
+  seed, first surfaced it). A raw `Query()` parameter on `GET
+  /pricing-plans`, `GET /invoices`, and `GET /usage-records`
+  (`tenant_id`, `period`) never runs through a body field's own
+  NUL-byte validator — it reached Postgres raw and 500'd
+  (`UntranslatableCharacterError`) instead of a clean `422`. Fixed with
+  a small `_reject_null_byte_query()` applied at the top of each of
+  those three routes; `tests/unit/test_routes_billing_and_metering.py`
+  pins the regression directly rather than relying on fuzzing luck to
+  rediscover it. Same bug class Multi-tenancy's own README documents
+  the identical fix for; a platform-wide sweep (this repeats in several
+  other modules' own list endpoints too, per a grep across the repo) is
+  real, separately-scoped follow-up work, not done here.
+
 ## Running locally
 
 ```bash
