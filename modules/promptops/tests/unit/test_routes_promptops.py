@@ -105,6 +105,33 @@ def test_conclude_returns_409_when_not_significant():
     assert resp.status_code == 409
 
 
+def test_conclude_returns_409_when_the_winners_evaluation_gate_fails():
+    a_ref, b_ref = evaluation_ref("p", "1"), evaluation_ref("p", "2")
+    evalfw = StubEvaluationFrameworkClient(
+        scores_by_ref={a_ref: _PASSING, b_ref: _FAILING},
+        gate_results_by_ref={a_ref: {"overall_passed": False, "blocking_failures": ["faithfulness"]}},
+    )
+    app = _app(InMemoryPromptOpsRepository(), evaluation_framework=evalfw)
+    headers = _headers()
+
+    with TestClient(app) as client:
+        a = client.post(
+            "/v1/promptops/prompt-versions", json={"prompt_name": "p", "version": "1", "template": "t"}, headers=headers,
+        ).json()
+        b = client.post(
+            "/v1/promptops/prompt-versions", json={"prompt_name": "p", "version": "2", "template": "t"}, headers=headers,
+        ).json()
+        ab_test = client.post(
+            "/v1/promptops/ab-tests",
+            json={"prompt_name": "p", "version_a_id": a["id"], "version_b_id": b["id"]}, headers=headers,
+        ).json()
+
+        resp = client.post(f"/v1/promptops/ab-tests/{ab_test['id']}/conclude", headers=headers)
+
+    assert resp.status_code == 409
+    assert "faithfulness" in resp.json()["detail"]
+
+
 def test_full_register_ab_test_conclude_active_flow():
     a_ref, b_ref = evaluation_ref("claims-summariser", "1"), evaluation_ref("claims-summariser", "2")
     evalfw = StubEvaluationFrameworkClient(scores_by_ref={a_ref: _PASSING, b_ref: _FAILING})

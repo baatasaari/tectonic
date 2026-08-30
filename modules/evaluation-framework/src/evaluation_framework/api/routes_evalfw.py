@@ -15,6 +15,7 @@ from evaluation_framework.core.ports import EvaluationFrameworkRepository
 from evaluation_framework.schemas.evalfw import (
     CreateDomainPackRequest,
     DomainMetricPackSchema,
+    EvalRunListResponse,
     EvalRunSchema,
     EvaluateRequest,
     GateRequest,
@@ -95,6 +96,25 @@ async def gate(
     return GateResultSchema(
         id=result.id, eval_run_id=result.eval_run_id, overall_passed=result.overall_passed,
         blocking_failures=result.blocking_failures, environment=result.environment, created_at=result.created_at,
+    )
+
+
+@router.get("/eval-runs", response_model=EvalRunListResponse)
+async def list_eval_runs(
+    tenant_id: str,
+    agent_ref: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    repository: EvaluationFrameworkRepository = Depends(get_repository),
+) -> EvalRunListResponse:
+    """Most-recent-first. Scores aren't included here (an N+1 lookup a
+    caller resolving a bare `eval_run_id` to pass to `POST /gate` doesn't
+    need) -- fetch a specific run's own scores via `POST /evaluate`'s
+    response or a future `GET /eval-runs/{id}` if one's ever needed."""
+    _reject_null_byte_query(tenant_id=tenant_id, agent_ref=agent_ref)
+    runs, total = await repository.list_eval_runs_for_agent_ref(tenant_id, agent_ref, limit=limit, offset=offset)
+    return EvalRunListResponse(
+        items=[_run_schema(r, []) for r in runs], total=total, limit=limit, offset=offset,
     )
 
 

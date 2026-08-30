@@ -16,6 +16,7 @@ from promptops.app_context import AppContext
 from promptops.core.domain import (
     ABTestNotConclusiveError,
     ABTestNotFoundError,
+    EvaluationGateFailedError,
     InvalidTransitionError,
     NoActivePromptVersionError,
     PromptVersionNotFoundError,
@@ -203,7 +204,7 @@ async def conclude_ab_test(
         ab_test = await service.conclude(ab_test_id)
     except (ABTestNotFoundError, PromptVersionNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except ABTestNotConclusiveError as exc:
+    except (ABTestNotConclusiveError, EvaluationGateFailedError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _ab_test_schema(ab_test)
 

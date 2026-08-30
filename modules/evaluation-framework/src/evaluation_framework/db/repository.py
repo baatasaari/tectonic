@@ -111,6 +111,23 @@ class SQLAlchemyEvaluationFrameworkRepository:
         total = await self.session.execute(count_stmt)
         return [_score_to_domain(m) for m in rows.scalars().all()], total.scalar_one()
 
+    async def list_eval_runs_for_agent_ref(
+        self, tenant_id: str, agent_ref: str, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[EvalRunRecord], int]:
+        stmt = (
+            select(models.EvalRun)
+            .where(models.EvalRun.tenant_id == tenant_id, models.EvalRun.agent_ref == agent_ref)
+            .order_by(models.EvalRun.started_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        count_stmt = select(func.count(models.EvalRun.id)).where(
+            models.EvalRun.tenant_id == tenant_id, models.EvalRun.agent_ref == agent_ref,
+        )
+        rows = await self.session.execute(stmt)
+        total = await self.session.execute(count_stmt)
+        return [_run_to_domain(m) for m in rows.scalars().all()], total.scalar_one()
+
     async def create_gate_result(self, record: GateResultRecord) -> GateResultRecord:
         m = models.GateResult(
             id=record.id, eval_run_id=record.eval_run_id, overall_passed=record.overall_passed,

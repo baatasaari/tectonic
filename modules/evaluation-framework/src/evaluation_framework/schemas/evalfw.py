@@ -44,6 +44,13 @@ class EvalRunSchema(BaseModel):
     scores: list[MetricScoreSchema] = []
 
 
+class EvalRunListResponse(BaseModel):
+    items: list[EvalRunSchema]
+    total: int
+    limit: int
+    offset: int
+
+
 class GateRequest(BaseModel):
     tenant_id: str
     eval_run_id: str

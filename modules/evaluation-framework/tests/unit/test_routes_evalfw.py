@@ -18,6 +18,7 @@ from evaluation_framework.api.deps import get_ctx, get_repository
 from evaluation_framework.api.routes_evalfw import router
 from evaluation_framework.app_context import AppContext
 from evaluation_framework.config import EvaluationFrameworkSettings
+from evaluation_framework.core.domain import EvalRunRecord, EvalRunStatus, new_id
 from evaluation_framework.core.fakes import (
     InMemoryEvaluationFrameworkRepository,
     StubLLMGatewayClient,
@@ -75,6 +76,51 @@ def test_list_scores_rejects_a_null_byte_in_agent_ref_with_a_clean_422():
     with TestClient(app) as client:
         resp = client.get(
             "/v1/evaluation-framework/scores",
+            params={"tenant_id": "acme", "agent_ref": "a\x00b"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
+def test_list_eval_runs_returns_most_recent_first_scoped_to_agent_ref():
+    """The lookup a release-gating caller (PromptOps' `conclude`, LLMOps'
+    `promote`) needs to resolve `eval_run_id` before calling `/gate` --
+    must exclude another agent_ref's runs and put the newest run first."""
+    repo = InMemoryEvaluationFrameworkRepository()
+    older = EvalRunRecord(
+        id=new_id(), tenant_id="acme", trigger_source="ci_cd", agent_ref="model:x:v1",
+        status=EvalRunStatus.COMPLETED,
+    )
+    newer = EvalRunRecord(
+        id=new_id(), tenant_id="acme", trigger_source="ci_cd", agent_ref="model:x:v1",
+        status=EvalRunStatus.COMPLETED,
+    )
+    newer.started_at = older.started_at.replace(year=older.started_at.year + 1)
+    other_agent = EvalRunRecord(
+        id=new_id(), tenant_id="acme", trigger_source="ci_cd", agent_ref="model:y:v1",
+        status=EvalRunStatus.COMPLETED,
+    )
+    repo.eval_runs = {r.id: r for r in (older, newer, other_agent)}
+    app = _app(repo)
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/evaluation-framework/eval-runs",
+            params={"tenant_id": "acme", "agent_ref": "model:x:v1"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 2
+    assert [item["id"] for item in body["items"]] == [newer.id, older.id]
+
+
+def test_list_eval_runs_rejects_a_null_byte_in_agent_ref_with_a_clean_422():
+    app = _app(InMemoryEvaluationFrameworkRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/evaluation-framework/eval-runs",
             params={"tenant_id": "acme", "agent_ref": "a\x00b"}, headers=_headers(),
         )
 

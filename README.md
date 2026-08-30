@@ -1201,6 +1201,30 @@ consent check itself, and a hard consent-at-store gate — reasonable
 next steps once a real `POST /items` caller exists to need them, not
 invented ahead of one. Full account in that module's own README.
 
+**Next: the evaluation-gated release path** — the second Phase 2
+candidate, picked after the user asked to keep going on Phase 2. Both
+PromptOps' `ABTestingService.conclude` and LLMOps' `RolloutService.promote`
+already had real, blocking release gates of their own (a two-proportion
+z-test between arms; a canary pass-rate-over-time check) — but neither
+ever called Evaluation Framework's own `POST /gate` engine, which existed
+with a real `GateResultRecord` audit trail and was, in effect, dead code
+from every other module's perspective. Closed in three parts. **Evaluation
+Framework**: a new `GET /eval-runs?tenant_id=&agent_ref=` endpoint (most-
+recent-first, paginated, new composite index) — the lookup neither
+consumer had a way to make, since `/gate` needs an `eval_run_id` and
+`/scores` returns individual score rows, not grouped by run. **PromptOps**:
+`conclude` now also gates the winner's latest eval run after the A/B
+significance check passes, refusing promotion (`EvaluationGateFailedError`,
+`409`) if Evaluation Framework's own verdict on that run failed a blocking
+metric threshold — a real, distinct failure mode from "not enough A/B
+signal yet." **LLMOps**: the identical pattern in `promote`, layered after
+the existing canary pass-rate gate, reusing `CanaryGateFailedError` rather
+than inventing a second gate-failure type. Both consumers treat "no eval
+run exists yet" as a pass-through, not a block — the same "no history is
+not a failure" convention `list_scores` already established platform-wide,
+not a new, stricter one invented for this. Full account in each of the
+three modules' own READMEs.
+
 ## Modules
 
 ### Module 1: Workflow Engine

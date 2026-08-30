@@ -3,10 +3,19 @@ machine"): start_canary / promote / rollback, plus the active-version
 query. `promote` always re-runs the canary gate -- it never trusts an
 earlier pass -- and superseding the previous active deployment for the
 same target is automatic, not a separate manual step.
+
+`promote` additionally blocks on Evaluation Framework's own `POST /gate`
+verdict for the model version's most recent eval run -- the
+evaluation-gated release path, distinct from (and checked in addition
+to) the canary pass-rate-over-time comparison above: a version whose
+canary traffic looks fine on aggregate pass rate can still have a
+failing most-recent evaluation run Evaluation Framework itself flags as
+blocking (see PromptOps' own `ABTestingService.conclude` for the
+identical pattern applied to prompt-version promotion).
 """
 from __future__ import annotations
 
-from llmops.core.canary_evaluation_service import CanaryEvaluationService
+from llmops.core.canary_evaluation_service import CanaryEvaluationService, evaluation_ref
 from llmops.core.domain import (
     CanaryGateFailedError,
     CanaryGateResult,
@@ -22,13 +31,17 @@ from llmops.core.domain import (
     new_id,
     now,
 )
-from llmops.core.ports import LLMOpsRepository
+from llmops.core.ports import EvaluationFrameworkClient, LLMOpsRepository
 
 
 class RolloutService:
-    def __init__(self, repository: LLMOpsRepository, canary_evaluation: CanaryEvaluationService) -> None:
+    def __init__(
+        self, repository: LLMOpsRepository, canary_evaluation: CanaryEvaluationService,
+        evaluation_framework: EvaluationFrameworkClient,
+    ) -> None:
         self._repository = repository
         self._canary_evaluation = canary_evaluation
+        self._evaluation_framework = evaluation_framework
 
     async def start_canary(
         self, *, tenant_id: str, model_version_id: str, target: str, canary_percentage: int = 10,
@@ -73,6 +86,13 @@ class RolloutService:
         gate_result = await self._canary_evaluation.evaluate(model_version)
         if not gate_result.passed:
             raise CanaryGateFailedError(gate_result.reason)
+
+        eval_gate = await self._evaluation_framework.gate_latest_run(
+            tenant_id=model_version.tenant_id, agent_ref=evaluation_ref(model_version),
+        )
+        if eval_gate is not None and not eval_gate.get("overall_passed", True):
+            blocking = ", ".join(eval_gate.get("blocking_failures", []))
+            raise CanaryGateFailedError(f"evaluation_gate_failed: {blocking}")
 
         previous_active = await self._repository.get_active_deployment(
             tenant_id=deployment.tenant_id, model_name=deployment.model_name, target=deployment.target,

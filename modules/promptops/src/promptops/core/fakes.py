@@ -58,16 +58,27 @@ class InMemoryPromptOpsRepository:
 
 
 class StubEvaluationFrameworkClient:
-    def __init__(self, *, scores: list[dict[str, Any]] | None = None, scores_by_ref: dict[str, list[dict]] | None = None) -> None:
+    def __init__(
+        self, *, scores: list[dict[str, Any]] | None = None, scores_by_ref: dict[str, list[dict]] | None = None,
+        gate_results_by_ref: dict[str, dict[str, Any] | None] | None = None,
+    ) -> None:
         self.calls: list[dict] = []
+        self.gate_calls: list[dict] = []
         self._scores = scores if scores is not None else []
         self._scores_by_ref = scores_by_ref or {}
+        # Absent from this dict -> None (no eval run yet, matching the real client's
+        # own convention) rather than raising KeyError -- most tests never set this up.
+        self._gate_results_by_ref = gate_results_by_ref or {}
 
     async def list_scores(self, *, tenant_id: str, agent_ref: str) -> list[dict[str, Any]]:
         self.calls.append({"tenant_id": tenant_id, "agent_ref": agent_ref})
         if agent_ref in self._scores_by_ref:
             return self._scores_by_ref[agent_ref]
         return self._scores
+
+    async def gate_latest_run(self, *, tenant_id: str, agent_ref: str) -> dict[str, Any] | None:
+        self.gate_calls.append({"tenant_id": tenant_id, "agent_ref": agent_ref})
+        return self._gate_results_by_ref.get(agent_ref)
 
 
 class StubLLMGatewayClient:

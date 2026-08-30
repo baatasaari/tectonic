@@ -203,6 +203,21 @@ src/evaluation_framework/
   `tests/unit/test_routes_evalfw.py` (new) pins just this regression;
   comprehensive route coverage remains a real, separately-scoped gap.
 
+- **`GET /eval-runs` (new).** Neither `POST /gate` nor `GET /scores`
+  gave a caller a way to find the `eval_run_id` a specific agent_ref's
+  most recent evaluation actually ran under — `/scores` returns
+  individual `MetricScoreRecord` rows, not grouped by run, and `/gate`
+  requires an `eval_run_id` the caller has to already know. This closed
+  that gap: `tenant_id`/`agent_ref`-scoped, most-recent-first (by
+  `started_at`), paginated the same way as `/scores`. Built specifically
+  so PromptOps' `ABTestingService.conclude` and LLMOps'
+  `RolloutService.promote` could resolve "the latest eval run for this
+  version" before calling `/gate` on it — see those modules' own READMEs
+  for the evaluation-gated release path this unblocks. New composite
+  index (`ix_eval_runs_tenant_agent` on `eval_runs(tenant_id,
+  agent_ref)`, migration `0002`) backs the query; scores aren't included
+  in list responses (an N+1 a caller resolving a bare id doesn't need).
+
 ## Running locally
 
 ```bash

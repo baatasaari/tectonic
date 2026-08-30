@@ -23,7 +23,10 @@ UUIDType = UUID(as_uuid=False).with_variant(CHAR(36), "sqlite")
 
 class EvalRun(Base):
     __tablename__ = "eval_runs"
-    __table_args__ = (Index("ix_eval_runs_tenant", "tenant_id"),)
+    __table_args__ = (
+        Index("ix_eval_runs_tenant", "tenant_id"),
+        Index("ix_eval_runs_tenant_agent", "tenant_id", "agent_ref"),
+    )
 
     id: Mapped[str] = mapped_column(UUIDType, primary_key=True, default=_new_id)
     tenant_id: Mapped[str] = mapped_column(String(255))

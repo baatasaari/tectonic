@@ -52,6 +52,15 @@ class InMemoryEvaluationFrameworkRepository:
         results = sorted(results, key=lambda s: s.created_at, reverse=True)
         return results[offset : offset + limit], len(results)
 
+    async def list_eval_runs_for_agent_ref(
+        self, tenant_id: str, agent_ref: str, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[EvalRunRecord], int]:
+        results = [
+            r for r in self.eval_runs.values() if r.tenant_id == tenant_id and r.agent_ref == agent_ref
+        ]
+        results = sorted(results, key=lambda r: r.started_at, reverse=True)
+        return results[offset : offset + limit], len(results)
+
     async def create_gate_result(self, record: GateResultRecord) -> GateResultRecord:
         self.gate_results[record.id] = record
         return record

@@ -1,6 +1,11 @@
 """HTTP adapter for Evaluation Framework (Module 18) -- this module's
 one real platform-peer dependency. Reads that module's own `GET
 /scores`, the exact endpoint the Canary Evaluation Service gates on.
+`gate_latest_run` additionally chains `GET /eval-runs` (to resolve the
+`eval_run_id` this client itself doesn't track) into `POST /gate` -- the
+evaluation-gated release path `RolloutService.promote` blocks on (see
+that module's own core/rollout_service.py), in addition to (not instead
+of) the canary pass-rate gate it already ran.
 
 `HTTPEvaluationFrameworkClient` is a `ResilientHTTPClient` (retry +
 circuit breaker on every outbound call — see resilience.py) carrying
@@ -40,3 +45,18 @@ class HTTPEvaluationFrameworkClient(ResilientHTTPClient):
             params={"tenant_id": tenant_id, "agent_ref": agent_ref, "limit": _SCORE_SAMPLE_LIMIT},
         )
         return resp.json().get("items", [])
+
+    async def gate_latest_run(self, *, tenant_id: str, agent_ref: str) -> dict[str, Any] | None:
+        runs_resp = await self._get(
+            "/v1/evaluation-framework/eval-runs",
+            params={"tenant_id": tenant_id, "agent_ref": agent_ref, "limit": 1},
+        )
+        items = runs_resp.json().get("items", [])
+        if not items:
+            return None
+
+        gate_resp = await self._post(
+            "/v1/evaluation-framework/gate",
+            json={"tenant_id": tenant_id, "eval_run_id": items[0]["id"]},
+        )
+        return gate_resp.json()

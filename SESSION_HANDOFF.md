@@ -561,13 +561,52 @@ default). Neither is a production credential.
   coverage for hold enforcement, consent-at-query gating including
   semantic/vector hits, and every new route including the enum/NUL-byte
   regression tests); 7 integration tests green against real Postgres
-  (was 3, +4 new, including the non-UUID-id regression). **Not yet
-  committed/pushed at the time this section was last edited during the
-  same pass** -- PR #12 was still open (not yet merged) when this work
-  started, so it was deliberately kept off that branch's next push
-  until PR #12's own fate was clearer, to avoid polluting that PR's
-  diff; check `git log`/`git status` and open PRs before assuming this
-  work's push/PR state.
+  (was 3, +4 new, including the non-UUID-id regression). Pushed to
+  `claude/practical-wozniak-l1723c-rw7pp0` (a Stop hook forced the push
+  before PR #12's own review state was resolved, overriding the
+  original plan to hold it off that PR's diff) -- landed in PR #12
+  alongside the contract-test-tier commit; PR #12's title/body were
+  updated to honestly describe both bodies of work as separate
+  commits/sections.
+- **P1 (Phase 2) -- DONE (this session).** Second Phase 2 slice, picked
+  after the user said to keep going on Phase 2 without naming a specific
+  item. The evaluation-gated release path: PromptOps' `conclude` and
+  LLMOps' `promote` each already had a real, blocking gate of their own
+  (A/B significance; canary pass-rate-over-time), but neither ever
+  called Evaluation Framework's own `POST /gate` engine -- it existed,
+  had a real `GateResultRecord` audit trail, and was effectively dead
+  code from every other module's perspective. Three-module change:
+  - **Evaluation Framework**: new `GET /eval-runs?tenant_id=&agent_ref=`
+    (most-recent-first, paginated, new `ix_eval_runs_tenant_agent`
+    composite index, migration `0002`) -- the lookup neither consumer
+    had a way to make (`/gate` needs an `eval_run_id`; `/scores` returns
+    individual score rows, not grouped by run).
+  - **PromptOps**: `ABTestingService.conclude` now also gates the
+    winner's latest eval run after the A/B significance check passes,
+    via a new `EvaluationFrameworkClient.gate_latest_run` port method
+    the real HTTP client implements by chaining `GET /eval-runs` into
+    `POST /gate`. Refuses promotion with a new `EvaluationGateFailedError`
+    (`409`) when Evaluation Framework's own verdict on that run failed a
+    blocking metric threshold -- a real, distinct failure mode from "not
+    enough A/B signal yet" (`ABTestNotConclusiveError`).
+  - **LLMOps**: the identical `gate_latest_run` pattern wired into
+    `RolloutService.promote`, layered *after* the existing canary
+    pass-rate gate (both must pass), reusing `CanaryGateFailedError`
+    rather than inventing a second gate-failure type.
+  - Both consumers treat "no eval run exists yet" (`gate_latest_run`
+    returns `None`) as a pass-through, not a block -- the same "no
+    history is not a failure" convention `list_scores` already
+    established platform-wide, applied consistently rather than
+    reinvented stricter.
+  Ruff clean across all three modules. Evaluation Framework: 74 unit
+  (+3 new: filtering/ordering, NUL-byte-in-`agent_ref` regression), 5
+  integration tests green against real Postgres (+1 new: filters to
+  the right (tenant_id, agent_ref), most-recent-first). PromptOps: 73
+  unit (+5 new: gate blocks, gate passes, no-eval-run-yet passes
+  through, route-level 409), 4 integration tests green. LLMOps: 60
+  unit (+3 new: same three cases), 3 integration tests green. All
+  three modules' migrations/repositories verified against this
+  sandbox's real local Postgres, not SQLite fakes alone.
 - **P1**: Fix Agentic RAG's own Graph DB/Knowledge-Base-symbolic-lookup
   client wire shapes properly (currently sidestepped via
   `hybrid_retrieval_enabled=false` for this slice only) once Knowledge
@@ -641,14 +680,19 @@ from Agent Cards/Conversational Engine to the other 26 modules
 `QuotaEnforcementService`'s fail-open consumers (LLM Gateway, Vector DB)
 — a related but distinct gap, a quota check rather than a binary gate.
 
+**Phase 2 candidates closed this session**: memory governance
+(Long-Term Memory's consent/purpose/legal-hold gap) and the
+evaluation-gated release path (wiring Evaluation Framework's own
+`/gate` into PromptOps' `conclude` and LLMOps' `promote` — see §12's
+own "P1 (Phase 2) -- DONE" entries for both).
+
 **Still-open Phase 2 candidates from the earlier assessment, not picked
-yet**: memory governance (Long-Term Memory's consent/purpose/legal-hold
-gap, currently zero coverage), the evaluation-gated release path (wiring
-Evaluation Framework's own `/gate` as an actual blocking check before
-PromptOps publish / LLMOps canary promotion), PromptOps' own full
-review/approve/publish lifecycle. Ask the user which comes next rather
-than assuming — this session's pattern has been to offer options via
-`AskUserQuestion` and let the user pick.
+yet**: PromptOps' own full review/approve/publish lifecycle (the A/B
+test + evaluation-gate flow now closes most of "is this version good
+enough" — a human review/approval step before `conclude` is a distinct,
+still-open gap). Ask the user which comes next rather than assuming —
+this session's pattern has been to offer options via `AskUserQuestion`
+and let the user pick.
 
 ## 14. Important Context for Next Claude Session
 

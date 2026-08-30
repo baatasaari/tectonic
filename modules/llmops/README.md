@@ -40,6 +40,21 @@ src/llmops/
   re-runs this check; it never trusts an earlier pass, so there's no
   window where a regression introduced after the last check slips
   through on a stale verdict.
+- **The evaluation-gated release path (new).** The canary pass-rate gate
+  above answers "has this version's traffic looked good over time" —
+  a real, blocking check, but a different question from "did this
+  version's own most recent evaluation run pass." Evaluation Framework's
+  own `POST /gate` engine existed and had a real `GateResultRecord` audit
+  trail, but nothing in the platform ever called it. `promote` now also
+  resolves the version's latest eval run (via Evaluation Framework's new
+  `GET /eval-runs`) and gates it after the pass-rate check succeeds; a
+  version whose canary traffic looks fine on aggregate but whose most
+  recent run failed a blocking metric threshold is refused with
+  `CanaryGateFailedError` (`409`), not promoted around. No eval run yet
+  is not a failure — the same convention the pass-rate gate's own
+  `insufficient_data` case already establishes for missing evidence. See
+  PromptOps' README for the identical pattern applied to prompt-version
+  promotion.
 - **Evaluation attribution via a dedicated `agent_ref` convention.**
   `canary_evaluation_service.evaluation_ref` builds
   `model:{model_name}:{version}` as the `agent_ref` a model version's
