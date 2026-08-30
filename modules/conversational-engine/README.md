@@ -115,9 +115,19 @@ src/conversational_engine/
   implementation. Layered after `ServiceAuthMiddleware` (authenticate, then
   entitle), it calls Multi-tenancy's real `GET /tenants/{id}/gate?module=conversational-engine`,
   denying with `402 Payment Required` when the tenant's subscription doesn't
-  include this module. It **fails open** if Multi-tenancy is unreachable — a
-  deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
-  posture.
+  include this module. This module and Agent Cards are the two reference
+  implementations of the **bounded-staleness** version of this middleware
+  (`docs/entitlement-gate-rollout.md`'s "Bounded-staleness cache upgrade"):
+  a decision verified via a real, successful Multi-tenancy call is still
+  served for up to `entitlement_gate_max_staleness_seconds` after
+  Multi-tenancy becomes unreachable (each cached decision is HMAC-signed
+  against forgery/corruption), but a request with no verified decision
+  inside that window now fails **closed** (`402`) rather than the older,
+  unconditional fail-open this file used to have — a real Multi-tenancy
+  outage can no longer silently and indefinitely disable entitlement
+  enforcement. Two Prometheus counters
+  (`entitlement_gate_stale_served_total`, `entitlement_gate_fail_closed_total`)
+  make both outcomes observable.
 
 - **Its generated OpenAPI document declares the real auth it enforces**
   (`security/openapi_security.py`) — see Workflow Engine's README and the

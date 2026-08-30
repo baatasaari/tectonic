@@ -75,6 +75,11 @@ class ConversationalEngineSettings(BaseSettings):
     service_name: str = "conversational-engine"
     multi_tenancy_base_url: str = "http://localhost:8109"
     entitlement_gate_cache_ttl_seconds: float = 30.0
+    # Bounded-staleness fallback window (security/entitlement_gate.py) -- how long a
+    # VERIFIED entitlement decision may still be served after Multi-tenancy becomes
+    # unreachable before the gate switches to fail-closed. Must exceed
+    # entitlement_gate_cache_ttl_seconds to have any effect.
+    entitlement_gate_max_staleness_seconds: float = 300.0
     http_port: int = 8081
     llm_gateway_base_url: str = "http://localhost:8082"
     # One shared virtual key for every completion this module makes -- see

@@ -50,6 +50,11 @@ class AgentCardsSettings(BaseSettings):
     # stale an entitlement change can appear here versus the added load on Multi-tenancy.
     multi_tenancy_base_url: str = "http://localhost:8109"
     entitlement_gate_cache_ttl_seconds: float = 30.0
+    # Bounded-staleness fallback window (security/entitlement_gate.py) -- how long a
+    # VERIFIED entitlement decision may still be served after Multi-tenancy becomes
+    # unreachable before the gate switches to fail-closed. Must exceed
+    # entitlement_gate_cache_ttl_seconds to have any effect.
+    entitlement_gate_max_staleness_seconds: float = 300.0
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
     # every module, so this field's env var name is NOT prefixed like the rest of this

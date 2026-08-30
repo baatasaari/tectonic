@@ -80,12 +80,23 @@ src/agent_cards/
   `X-Tenant-Id` off the request and calls Multi-tenancy's real `GET
   /tenants/{id}/gate?module=agent-cards`, denying with `402 Payment
   Required` when the tenant's subscription doesn't include this module.
-  It **fails open** if Multi-tenancy is unreachable — a deliberate
-  contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
-  posture: a commercial/entitlement gate must never become a
-  platform-wide outage vector. A short in-process TTL cache plus a
-  circuit breaker bound both the added load on Multi-tenancy and the
-  added latency here during a real outage.
+  A short in-process TTL cache plus a circuit breaker bound both the
+  added load on Multi-tenancy and the added latency here during a real
+  outage. It fails open only in a **bounded** sense: a decision this
+  middleware has itself verified via a real, successful Multi-tenancy
+  call is still served for up to `entitlement_gate_max_staleness_seconds`
+  after Multi-tenancy becomes unreachable (each cached decision is
+  HMAC-signed so a corrupted entry is never trusted as verified), but
+  once no verified decision is available within that window it now
+  **fails closed** (`402`) instead of silently allowing — replacing an
+  earlier, unconditional-fail-open version of this file that could stay
+  open for as long as an outage lasted, with no way to observe it
+  happening. Two Prometheus counters
+  (`entitlement_gate_stale_served_total`,
+  `entitlement_gate_fail_closed_total`) make both outcomes of a real
+  outage observable. See `docs/entitlement-gate-rollout.md`'s "Bounded-
+  staleness cache upgrade" section for the full design and for which of
+  the platform's other 27 modules still carry the pre-upgrade version.
 
 - **Its generated OpenAPI document declares the real auth it enforces**
   (`security/openapi_security.py`) — see Workflow Engine's README and the

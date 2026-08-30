@@ -1100,6 +1100,31 @@ true token-by-token upstream streaming, voice/WebSocket channel
 adapters, the broader Long-Term Memory "memory governance" gap), in that
 module's own README.
 
+**Next P0 Phase 1A closure item, from the reassessment's own backlog:
+`EntitlementGateMiddleware`'s bounded-staleness cache.** The base
+entitlement-gate rollout (`docs/entitlement-gate-rollout.md`) gave all 28
+selectable modules a working feature-flag check, but every one of them
+failed open *unconditionally* on any Multi-tenancy outage — a prolonged
+outage silently and indefinitely disabled entitlement enforcement, with
+no operator-visible signal that it was happening. Fixed as a reference
+implementation in two modules, Agent Cards (the platform's existing
+reference for this middleware) and Conversational Engine: cached
+decisions are now HMAC-signed and distinguish a real, **verified**
+Multi-tenancy response from a merely-cached one; a verified decision is
+still served for up to a bounded `entitlement_gate_max_staleness_seconds`
+window after Multi-tenancy becomes unreachable, but a request with no
+verified decision inside that window now fails **closed** (`402`)
+instead of silently allowing. Two new Prometheus counters
+(`entitlement_gate_stale_served_total`, `entitlement_gate_fail_closed_total`)
+make both outcomes of a real outage observable for the first time. Full
+design in `docs/entitlement-gate-rollout.md`'s "Bounded-staleness cache
+upgrade" section, which is also explicit about what this pass does not
+cover: the other 26 modules still carry the pre-upgrade unconditional-
+fail-open version (porting is mechanical, tracked there), and
+`QuotaEnforcementService`'s own fail-open consumers (LLM Gateway's
+`requests_per_minute` check, Vector DB's `vector_count` check) are a
+related but distinct gap, untouched by this pass.
+
 ## Modules
 
 ### Module 1: Workflow Engine

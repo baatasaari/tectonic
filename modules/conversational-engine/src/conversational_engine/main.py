@@ -113,6 +113,7 @@ def create_app() -> FastAPI:
         issuer=settings.service_name,
         shared_secret=settings.jwt_shared_secret,
         cache_ttl_seconds=settings.entitlement_gate_cache_ttl_seconds,
+        max_staleness_seconds=settings.entitlement_gate_max_staleness_seconds,
     )
     app.add_middleware(
         ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,

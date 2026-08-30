@@ -34,6 +34,7 @@ config:
   complianceFrameworkName: "eu_ai_act"
   cardStalenessTtlSeconds: "86400"
   entitlementGateCacheTtlSeconds: "30"
+  entitlementGateMaxStalenessSeconds: "300"
 
 database:
   url: "postgresql+asyncpg://agent_cards:agent_cards@postgres:5432/agent_cards"
