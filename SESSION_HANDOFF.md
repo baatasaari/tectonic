@@ -100,10 +100,18 @@ restart — see §8).
 
 ## 7. Incomplete Work
 
-- **`tests/product-slices/` is not wired into CI.** Running 16 real
-  processes concurrently is a heavier ask than a per-module CI job is
-  shaped for. Real, tracked follow-up, not a silent gap — see that
-  directory's own README.
+- ~~`tests/product-slices/` is not wired into CI~~ — **done, later in this
+  same session**: `.github/workflows/ci.yml`'s own `product-slice-support-agent`
+  job runs it as a required check on every push/PR to `claude/**`, its own
+  `postgres:16-alpine`/`redis:7-alpine` service containers, building all
+  15 modules' own venvs first. `scripts/product-slice-stubs/stack.py`'s
+  own Postgres connection is now env-overridable
+  (`TECTONIC_STACK_POSTGRES_{HOST,PORT,USER,PASSWORD}`) for this — CI's
+  service container uses different credentials than this sandbox's own
+  local dev Postgres — and it gained a real `ensure_databases()` step
+  (idempotent) since a fresh CI Postgres container starts with none of
+  this slice's 15 databases yet. See `tests/product-slices/README.md`'s
+  own "In CI" section.
 - **Observability's own real store isn't exercised.** Trace-propagation
   verification is deliberately scoped to proving W3C `traceparent`
   continuity across one real HTTP hop (`test_trace_propagation.py`), not
@@ -258,8 +266,7 @@ default). Neither is a production credential.
 
 - **P0**: None. Nothing is broken or blocking; all touched modules are
   green.
-- **P1**: Wire `tests/product-slices/` into CI (currently manual-only —
-  see §7). Fix Agentic RAG's own Graph DB/Knowledge-Base-symbolic-lookup
+- **P1**: Fix Agentic RAG's own Graph DB/Knowledge-Base-symbolic-lookup
   client wire shapes properly (currently sidestepped via
   `hybrid_retrieval_enabled=false` for this slice only) once Knowledge
   Base has a real symbolic-lookup endpoint to fix them against.

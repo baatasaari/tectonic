@@ -1015,7 +1015,11 @@ had a committed test for (`test_trace_propagation.py`) — proving real
 W3C `traceparent` continuity across a real HTTP hop, not spans
 landing in Observability's own store (no real OTel Collector/Tempo is
 available in this sandbox either, a documented, unclosed gap, not a
-silently skipped one).
+silently skipped one). Wired into CI as its own `product-slice-support-agent`
+job (`.github/workflows/ci.yml`) — a required check like every module's own
+tiers, not optional — separate from the per-module `lint-and-test` matrix
+since it needs all 15 of this slice's own modules running as real
+processes at once.
 
 Standing the slice up for real surfaced a long tail of genuine
 module-level gaps invisible under every module's own stubbed test

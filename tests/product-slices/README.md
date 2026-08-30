@@ -71,12 +71,37 @@ doesn't build them.
 pytest -v
 ```
 
-Runs in well under a minute: the fixture brings the whole stack up, seeds
-it, runs every test, and tears it back down again, all in one session.
-This tier is **not** part of CI today (unlike every module's own
-unit/integration/contract tiers) — running 16 real processes concurrently
-is a heavier ask than a CI runner's own per-module job is shaped for; that
-remains real, tracked follow-up work, not a silent gap.
+Runs in well under two minutes locally: the fixture brings the whole stack
+up, seeds it, runs every test, and tears it back down again, all in one
+session.
+
+## In CI
+
+`.github/workflows/ci.yml`'s own `product-slice-support-agent` job runs
+this exact tier on every push/PR to `claude/**`, same as every module's
+own unit/integration/contract tiers — it's a required check
+(`needs` on the aggregate `ci` job), not an optional/best-effort one. It's
+its own job rather than folded into the per-module `lint-and-test` matrix:
+this tier needs all 15 of this slice's own modules running as real
+processes simultaneously, not one module tested in isolation, so it
+doesn't fit that job's per-module shape. The job builds each of the 15
+modules' own `.venv`s (same as running any one of them locally — no
+shared/system install, matching this platform's own per-module dependency
+isolation), starts real `postgres:16-alpine` and `redis:7-alpine` service
+containers, then runs this exact `pytest -v`. `scripts/product-slice-stubs/
+stack.py`'s own Postgres connection is env-overridable
+(`TECTONIC_STACK_POSTGRES_{HOST,PORT,USER,PASSWORD}`) specifically for
+this — CI's service container uses different credentials
+(`tectonic_ci`/`tectonic_ci`) than this sandbox's own local dev Postgres
+(`postgres`/`postgres`), and `stack.py`'s own `ensure_databases()`
+creates each module's own database on a fresh service container that
+starts with none of them yet (idempotent, so it's also a safe no-op
+against this sandbox's own already-provisioned local cluster). On
+failure, every module's own real log file
+(`scripts/product-slice-stubs/stack.py`'s own per-process log, exactly
+what a local run leaves in `/tmp/support-agent-slice-logs/`) is uploaded
+as a workflow artifact — that's the fastest way to see which real module
+actually failed, faster than re-running locally from scratch.
 
 ## What this deliberately does not cover
 

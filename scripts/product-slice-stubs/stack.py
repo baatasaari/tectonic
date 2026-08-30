@@ -52,8 +52,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 MODULES_DIR = REPO_ROOT / "modules"
 MOCK_STUB_PORT = 9200
 
-PG_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/{db}"
-JWT_SECRET = "dev-insecure-shared-secret-change-me"  # every module's own insecure zero-config default
+# All four overridable via env, defaulting to this sandbox's own local dev
+# Postgres cluster -- CI (.github/workflows/ci.yml's own `product-slice`
+# job) runs against a fresh `postgres:16-alpine` service container instead,
+# with different credentials, hence the override rather than a hardcoded
+# constant (ticket #82's own CI-wiring follow-up).
+PG_HOST = os.environ.get("TECTONIC_STACK_POSTGRES_HOST", "localhost")
+PG_PORT = os.environ.get("TECTONIC_STACK_POSTGRES_PORT", "5432")
+PG_USER = os.environ.get("TECTONIC_STACK_POSTGRES_USER", "postgres")
+PG_PASSWORD = os.environ.get("TECTONIC_STACK_POSTGRES_PASSWORD", "postgres")
+PG_URL = f"postgresql+asyncpg://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{{db}}"
+JWT_SECRET = os.environ.get(
+    "TECTONIC_JWT_SHARED_SECRET", "dev-insecure-shared-secret-change-me"
+)  # every module's own insecure zero-config default
 
 
 @dataclass
@@ -215,6 +226,29 @@ def _venv_python(module_dir: str) -> Path:
     return MODULES_DIR / module_dir / ".venv" / "bin" / "python3"
 
 
+def ensure_databases() -> None:
+    """Creates each module's own Postgres database if it doesn't already
+    exist -- idempotent, safe to call every run. This sandbox's own local
+    Postgres cluster already has all 15 pre-created from earlier work, so
+    this is a real no-op here; CI's own fresh `postgres:16-alpine` service
+    container (.github/workflows/ci.yml's `product-slice` job) starts with
+    only its default `postgres` catalog database, so this step is what
+    actually creates the 15 this slice's own modules each need before
+    `migrate_module()` can run alembic against them."""
+    dbs = [s.db for s in [*MODULE_SPECS, VECTOR_DB_SPEC, AGENTIC_RAG_SPEC, WORKFLOW_ENGINE_SPEC]]
+    env = dict(os.environ)
+    env["PGPASSWORD"] = PG_PASSWORD
+    for db in dbs:
+        # CREATE DATABASE has no IF NOT EXISTS in Postgres -- a real, already-
+        # exists error is expected and fine every run after the first; any
+        # other failure (unreachable server, bad credentials) still surfaces
+        # loudly at the first real use (migrate_module, moments later).
+        subprocess.run(
+            ["psql", "-h", PG_HOST, "-p", PG_PORT, "-U", PG_USER, "-d", "postgres", "-c", f'CREATE DATABASE "{db}"'],
+            env=env, capture_output=True, text=True, timeout=30,
+        )
+
+
 def migrate_module(spec: ModuleSpec) -> None:
     env = dict(os.environ)
     db_url = PG_URL.format(db=spec.db)
@@ -284,6 +318,8 @@ def up_phase1(*, log_dir: Path) -> None:
     three need the real, seeded LLM Gateway virtual key id baked into
     their own env before they start)."""
     log_dir.mkdir(parents=True, exist_ok=True)
+    print("Ensuring every module's own Postgres database exists...")
+    ensure_databases()
     print("Running migrations...")
     for spec in [*MODULE_SPECS, VECTOR_DB_SPEC, AGENTIC_RAG_SPEC, WORKFLOW_ENGINE_SPEC]:
         migrate_module(spec)
