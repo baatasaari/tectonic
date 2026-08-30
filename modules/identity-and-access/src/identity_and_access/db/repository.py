@@ -2,6 +2,7 @@
 extended for OIDC/SAML federation + SCIM)."""
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select
@@ -27,6 +28,23 @@ def _as_utc(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+
+
+def _is_valid_uuid(value: str) -> bool:
+    """`id` columns are Postgres `UUID`; a path-param `str` that isn't a
+    syntactically valid UUID by definition names no row, but handing it
+    to `asyncpg` regardless raises an unhandled `ValueError`/`DataError`
+    deep in the driver instead of the caller's own `None`/404 path
+    (found by this module's own brand-new OpenAPI contract-test tier --
+    see Multi-tenancy's/Billing and Metering's own `db/repository.py`
+    for the original instances of this exact fix). Callers to a
+    `get_*`/lookup-by-externally-supplied-id method must check this
+    first."""
+    try:
+        uuid.UUID(value)
+        return True
+    except ValueError:
+        return False
 
 
 def _identity_to_domain(m: models.Identity) -> IdentityRecord:
@@ -100,6 +118,8 @@ class SQLAlchemyIdentityAccessRepository:
         return _identity_to_domain(m)
 
     async def get_identity(self, identity_id: str) -> IdentityRecord | None:
+        if not _is_valid_uuid(identity_id):
+            return None
         m = await self.session.get(models.Identity, identity_id)
         return _identity_to_domain(m) if m else None
 
@@ -273,6 +293,8 @@ class SQLAlchemyIdentityAccessRepository:
         return _provider_to_domain(m)
 
     async def get_identity_provider(self, provider_id: str) -> IdentityProviderRecord | None:
+        if not _is_valid_uuid(provider_id):
+            return None
         m = await self.session.get(models.IdentityProvider, provider_id)
         return _provider_to_domain(m) if m else None
 
@@ -321,6 +343,8 @@ class SQLAlchemyIdentityAccessRepository:
         return _group_to_domain(m)
 
     async def get_group(self, group_id: str) -> GroupRecord | None:
+        if not _is_valid_uuid(group_id):
+            return None
         m = await self.session.get(models.Group, group_id)
         return _group_to_domain(m) if m else None
 
@@ -393,6 +417,8 @@ class SQLAlchemyIdentityAccessRepository:
         return [_scim_token_to_domain(m) for m in rows.scalars().all()], total
 
     async def revoke_scim_token(self, token_id: str) -> ScimTokenRecord | None:
+        if not _is_valid_uuid(token_id):
+            return None
         m = await self.session.get(models.ScimToken, token_id)
         if m is None:
             return None

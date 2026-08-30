@@ -361,3 +361,76 @@ def test_revoking_a_role_the_identity_does_not_hold_returns_404():
         )
 
     assert resp.status_code == 404
+
+
+# Regression tests for the three bug classes this module's own brand-new OpenAPI
+# contract-test tier found on its very first run (tests/contract/), fixed
+# alongside that tier's rollout -- see schemas/identity_and_access.py's own
+# `_reject_null_byte` docstring and db/repository.py's own `_is_valid_uuid`
+# docstring for the full reasoning behind each.
+
+
+def test_creating_a_role_with_a_null_byte_in_the_name_returns_a_clean_422():
+    app = _app(InMemoryIdentityAccessRepository())
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/identity-access/roles", json={"name": "a\x00b", "scopes": []}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
+def test_registering_an_identity_with_a_null_byte_in_the_name_returns_a_clean_422():
+    app = _app(InMemoryIdentityAccessRepository())
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/identity-access/identities", json={"name": "a\x00b"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
+def test_registering_an_identity_with_an_invalid_type_returns_a_clean_422():
+    """`type` used to be a bare `str` hand-converted to `IdentityType` at the
+    route, raising an unhandled `ValueError`/500 for any non-member string --
+    now typed `IdentityType` directly so FastAPI/Pydantic itself rejects an
+    invalid value with a clean 422."""
+    app = _app(InMemoryIdentityAccessRepository())
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/identity-access/identities", json={"name": "agent-1", "type": "not-a-real-type"},
+            headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
+def test_registering_an_identity_provider_with_an_invalid_provider_type_returns_a_clean_422():
+    app = _app(InMemoryIdentityAccessRepository())
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/identity-access/identity-providers",
+            json={"name": "okta", "provider_type": "not-a-real-provider-type", "issuer": "https://example.com"},
+            headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
+def test_authorize_with_a_null_byte_in_required_scope_returns_a_clean_422():
+    """AuthorizationService.authorize persists `required_scope` verbatim into
+    AuthDecisionRecord (the audit trail) on every call, allowed or denied --
+    a NUL byte there reached Postgres unguarded before this fix."""
+    app = _app(InMemoryIdentityAccessRepository())
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/identity-access/authorize",
+            json={"token": "not-a-real-token", "required_scope": "a\x00b"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422

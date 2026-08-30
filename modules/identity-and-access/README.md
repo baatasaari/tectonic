@@ -280,6 +280,47 @@ src/identity_and_access/
   regex-matched for an embedded `userName` value that then reaches the
   repository unguarded — same fix applied there.
 
+- **Contract-test tier rolled out here** (P0 Phase 1A closure item;
+  `tests/contract/`, `schemathesis`-driven fuzzing against a live ASGI
+  app + real Postgres — reference implementation Multi-tenancy's own
+  README documents, ticket #73/#80). Excludes `/scim/*` (a different
+  auth mechanism this tier's own service-bearer token can't exercise
+  meaningfully — see `tests/contract/conftest.py`'s own docstring).
+  Its very first run found three real gaps, all previously invisible
+  because this module had no contract tier until now:
+  - `POST /roles` (and every other body field this pass covers)
+    reached Postgres with a raw NUL byte and crashed with an unhandled
+    500 instead of a clean 422 — the same `_reject_null_byte`
+    field-validator pattern ticket #82's platform-wide sweep already
+    established elsewhere, applied here for the first time to this
+    module's own request schemas.
+  - `RegisterIdentityRequest.type` and
+    `RegisterIdentityProviderRequest.provider_type` were bare `str`
+    fields hand-converted to `IdentityType`/`IdentityProviderType` at
+    the route, raising an unhandled `ValueError`/500 for any
+    non-member string — the identical sibling bug class ticket #82
+    already fixed for `IdentityStatus` on the query-param side, never
+    caught here on these two body fields. Now typed directly on the
+    request schema so FastAPI/Pydantic itself rejects an invalid value
+    with a clean 422.
+  - `GET /identities/{id}`, `GET /identity-providers/{id}`, `GET
+    /groups/{id}`, and `POST /scim-tokens/{id}/revoke` all handed a
+    syntactically-invalid UUID path parameter straight to
+    `session.get()`, crashing with an unhandled `DataError` instead of
+    a clean 404 — this platform's own recurring "non-UUID path/
+    query-param" bug class (first found in Multi-tenancy/Billing and
+    Metering), fixed the same way: a `_is_valid_uuid` pre-check in
+    `db/repository.py` that returns `None` (→ a typed NotFoundError →
+    404) instead of ever reaching the database with a value that can't
+    possibly name a real row.
+  Every fix has its own regression test — the schema-level ones in
+  `tests/unit/test_routes_identity_and_access.py` (provable with the
+  in-memory fake, since Pydantic validation runs before either
+  repository is ever reached), the UUID-format one in
+  `tests/integration/test_repository_postgres.py` (real-Postgres-only:
+  a dict lookup in the unit tier's own fake never crashes on a
+  malformed key the way `asyncpg` does).
+
 ## Running locally
 
 ```bash
@@ -295,3 +336,4 @@ docker compose -f deploy/docker-compose.yml up --build    # full stack incl. Pos
 |---|---|---|
 | Unit | Nothing — in-memory fakes only | `pytest tests/unit` |
 | Integration (isolated) | Real Postgres (`TECTONIC_TEST_POSTGRES_URL` or Docker via `testcontainers`) | `pytest tests/integration` |
+| Contract | Real Postgres (same as Integration) | `pytest tests/contract` |

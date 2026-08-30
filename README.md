@@ -1152,6 +1152,28 @@ a third entity would only restate `tenant_id`. Full design, including
 the exact reasoning for both deliberate omissions, in that module's own
 README.
 
+**Immediately following that: Identity and Access's own contract-test
+tier** (P0 Phase 1A closure item — the reassessment's own backlog names
+rolling the schemathesis-fuzzing tier out to the ~29 modules that don't
+have it yet; started with this module since it was the one this
+session had just made the most changes to). `tests/contract/`, ported
+from Multi-tenancy's own reference implementation (ticket #73/#80).
+Its very first run found three real, previously-invisible gaps: a NUL
+byte in a request body field (`POST /roles` and others) crashing with
+an unhandled 500 instead of a clean 422 — this module's own body
+fields had never been swept by ticket #82, which only ever covered
+raw `Query()` parameters platform-wide; two body fields
+(`RegisterIdentityRequest.type`, `RegisterIdentityProviderRequest.
+provider_type`) hand-converting a bare `str` to an Enum at the route,
+the identical sibling bug class already fixed for `IdentityStatus` on
+the query-param side but never caught on these; and four `GET`/`POST`
+routes handing a syntactically-invalid UUID path parameter straight to
+`session.get()`, crashing instead of returning a clean 404 — this
+platform's own recurring "non-UUID path/query-param" class (first
+found in Multi-tenancy/Billing and Metering), fixed the same
+`_is_valid_uuid`-repository-guard way. All three now have regression
+tests; full account in that module's own README.
+
 ## Modules
 
 ### Module 1: Workflow Engine

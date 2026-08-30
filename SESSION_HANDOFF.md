@@ -448,7 +448,60 @@ default). Neither is a production credential.
   end-to-end through real routes); 13 integration tests green against
   real Postgres including two brand-new role-binding/tenant-scoping
   tests and the real Alembic `0003` migration itself running end-to-end
-  (backfill included).
+  (backfill included). **Merged**: PR #11
+  (`claude/practical-wozniak-l1723c-rw7pp0` -> `claude/practical-wozniak-l1723c`,
+  merge commit `8a763df`) -- but not cleanly: PR #11's own CI run found a
+  real regression this exact tenant-scoped-roles change caused in two
+  seed scripts (`seed_support_agent_demo.py`/`seed_subscription_tiers.py`
+  posted to `POST /roles` with no `X-Tenant-Id`, silently relying on the
+  old platform-global role namespace); root-caused from the real CI job
+  logs, fixed (`72b38a2`), and verified by actually re-running the full
+  15-module product-slice stack locally in this sandbox before pushing --
+  see that commit's own message for the full account. Not a fix left for
+  a future session: this was caught and closed within the same PR before
+  merge.
+- **P0 -- DONE (this session, continued immediately after IAM v2
+  merged).** Contract-test tier rolled out to Identity and Access
+  (`tests/contract/`, ported from Multi-tenancy's own reference
+  implementation, ticket #73/#80) -- the specific next P0 Phase 1A item
+  this session's own §13 already flagged as most relevant ("including
+  Identity and Access itself, which still has none"). Its very first
+  run found three real, previously-invisible bugs (this module had
+  never had a contract tier before, so none of these were ever
+  exercised):
+  - A NUL byte in a request body field (`POST /roles`'s own `name`,
+    first found; then `POST /authorize`'s `required_scope`, found on
+    the very next run once the first was fixed -- it's persisted into
+    `AuthDecisionRecord`, the audit trail, on every call, allowed or
+    denied) crashed with an unhandled 500 instead of a clean 422. Ticket
+    #82's own platform-wide sweep never covered this module's body
+    fields (only ever covered raw `Query()` params platform-wide, and
+    this module had no contract tier to surface the body-field version
+    until now). Fixed with the same `_reject_null_byte` field-validator
+    pattern applied across every persisted string field in
+    `schemas/identity_and_access.py`.
+  - `RegisterIdentityRequest.type` / `RegisterIdentityProviderRequest.
+    provider_type` were bare `str` fields hand-converted to
+    `IdentityType`/`IdentityProviderType` at the route -- the identical
+    sibling bug class already fixed for `IdentityStatus` on the
+    query-param side (ticket #82), never caught on these two body
+    fields. Now typed directly on the request schema.
+  - `GET /identities/{id}`, `GET /identity-providers/{id}`, `GET
+    /groups/{id}`, `POST /scim-tokens/{id}/revoke` all handed a
+    syntactically-invalid UUID path param straight to `session.get()`,
+    crashing with an unhandled `DataError` instead of a clean 404 --
+    this platform's own recurring "non-UUID path/query-param" class
+    (first found in Multi-tenancy/Billing and Metering), fixed with the
+    identical `_is_valid_uuid`-repository-guard pattern.
+  All three have regression tests (schema-level ones provable with the
+  in-memory fake in `tests/unit/`; the UUID-format one is real-Postgres-
+  only, in `tests/integration/`, since a dict lookup in the fake never
+  crashes on a malformed key the way `asyncpg` does). No `ci.yml` change
+  needed -- the contract job is opt-in by directory existence, already
+  wired platform-wide. Ruff clean; 174 unit (+5), 14 integration (+1),
+  1 contract test green (internally fuzzes every non-SCIM operation
+  this module's real OpenAPI schema declares). Full account in that
+  module's own README and root README's own P0 narrative.
 - **P1**: Fix Agentic RAG's own Graph DB/Knowledge-Base-symbolic-lookup
   client wire shapes properly (currently sidestepped via
   `hybrid_retrieval_enabled=false` for this slice only) once Knowledge
@@ -481,26 +534,32 @@ pasted both directly into the conversation. If a future session needs
 either one again and doesn't have it in context, ask the user to paste it
 again rather than trying to reconstruct it from README prose.
 
-**This session's own work**: closed two of the reassessment's P0 Phase
-1A items in sequence — the `EntitlementGateMiddleware` bounded-staleness
-cache, then (this same session, continued) Identity and Access's IAM v2
-foundation (tenant-scoped roles + a real role-binding lifecycle). See
-§12's two newest "P0 -- DONE" entries above for the full account of
-each. Confirm current push/PR state with `git log`/`git status` on
-`claude/practical-wozniak-l1723c-rw7pp0` and a live check of open PRs
-before assuming either is or isn't merged yet — this file is a
-point-in-time snapshot, not a live source of truth for that.
+**This session's own work**: closed three of the reassessment's P0
+Phase 1A items in sequence — the `EntitlementGateMiddleware`
+bounded-staleness cache; Identity and Access's IAM v2 foundation
+(tenant-scoped roles + a real role-binding lifecycle), merged as PR #11
+(with a real seed-script regression found by that PR's own CI and
+fixed before merge — see §12's own account); and, immediately after,
+Identity and Access's own contract-test tier (§12's newest "P0 -- DONE"
+entry), which itself found and fixed three more real bugs (NUL-byte
+body fields, two enum-hand-conversion body fields, four non-UUID
+path-param lookups). Confirm current push/PR state with `git log`/
+`git status` on `claude/practical-wozniak-l1723c-rw7pp0` and a live
+check of open PRs before assuming any of this is or isn't merged yet —
+this file is a point-in-time snapshot, not a live source of truth for
+that; the contract-tier work in particular may still be uncommitted/
+un-PR'd depending on exactly when this snapshot was taken relative to
+that work finishing.
 
 **Remaining P0 Phase 1A closure items from the reassessment's own
-backlog, not yet started** (the other two options offered alongside IAM
-v2 foundation, plus items the reassessment's own backlog named that were
-never offered as a discrete choice):
+backlog, not yet started**:
 
-- Contract-test tier (schemathesis/Hypothesis, per
-  `modules/multi-tenancy/tests/contract/conftest.py`'s established
-  harness fixes) rolled out to the remaining ~29 modules that don't have
-  it yet — including Identity and Access itself, which still has none
-  (this session's IAM v2 work only extended its unit/integration tiers).
+- Contract-test tier rolled out further — Identity and Access is now
+  done (this session); ~28 modules still don't have it. Multi-tenancy's
+  own `tests/contract/conftest.py` remains the reference implementation
+  to copy (the two established harness fixes: swap the real `lifespan`
+  for a no-op before schemathesis drives the ASGI app, and use a
+  `NullPool`-backed engine for the contract-test app context).
 - Provisioning-saga/resource-allocation reconciliation.
 - Universal operation-level authorization; a real external access
   gateway; event-backbone consumer/inbox pattern; image supply-chain

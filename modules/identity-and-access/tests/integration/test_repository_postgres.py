@@ -203,3 +203,27 @@ async def test_auth_decisions_ordered_newest_first_and_paginate(migrated_url):
             assert {d.id for d in page1}.isdisjoint({d.id for d in page2})
     finally:
         await engine.dispose()
+
+
+async def test_a_non_uuid_lookup_id_returns_none_instead_of_crashing(migrated_url):
+    """The "non-UUID path/query-param" bug class this platform has already
+    hit repeatedly (ticket #82's own sweep) recurred here too: `id` columns
+    are Postgres `UUID`, so handing a syntactically-invalid one straight to
+    `session.get()` raises an unhandled `asyncpg.exceptions.DataError`
+    instead of the caller's own clean `None`/404 path -- SQLite's unit-tier
+    fake can't reproduce this (a dict lookup never crashes on a malformed
+    key), so this is real-Postgres-only coverage, found by this module's
+    own OpenAPI contract-test tier's very first run against `GET
+    /identities/{identity_id}`. Covers every lookup-by-externally-supplied-
+    id repository method this fix touched."""
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyIdentityAccessRepository(session)
+
+            assert await repo.get_identity("not-a-uuid") is None
+            assert await repo.get_identity_provider("not-a-uuid") is None
+            assert await repo.get_group("not-a-uuid") is None
+            assert await repo.revoke_scim_token("not-a-uuid") is None
+    finally:
+        await engine.dispose()
