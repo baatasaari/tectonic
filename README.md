@@ -1174,6 +1174,33 @@ found in Multi-tenancy/Billing and Metering), fixed the same
 `_is_valid_uuid`-repository-guard way. All three now have regression
 tests; full account in that module's own README.
 
+**Next: Long-Term Memory's own memory governance foundation** — moving
+from the P0 Phase 1A backlog to Phase 2, per the user's own direction
+this session. The independent architecture assessment named this
+finding directly: "no ... consent/purpose/legal-hold ... currently zero
+coverage." Two real gaps closed. **Legal holds**, the one piece with
+real enforcement teeth: new `core/legal_hold_service.py`
+(`POST /legal-holds`, `.../release`, `GET /legal-holds`), and
+`ForgettingEngine.execute` now checks for an active hold on the target
+scope *before* deleting anything, refusing the whole request (`409`)
+rather than silently skipping held items or deleting anyway — a hold
+that doesn't block deletion isn't a hold. **Consent, enforced at query
+time, not store time**: new `core/consent_service.py`
+(`POST /consent-records`, `.../revoke`, `GET /consent-records`);
+`MemoryItemRecord` gained an optional `purpose` field, and
+`MemoryService.query` excludes an item whose `purpose` has no active
+consent covering exactly `(scope, purpose)` — enforced at read time
+rather than write time because nothing currently calls `POST /items`
+from another module (Long-Term Memory write-back is still a separately
+scoped gap), so gating retrieval gives revocation an immediate, live
+effect with no real caller to break. Both new record types follow the
+same one-row-per-grant, revoked/released-in-place shape this session's
+own Identity and Access `RoleBindingRecord` already established.
+Deliberately not built: purpose-limitation enforcement beyond the
+consent check itself, and a hard consent-at-store gate — reasonable
+next steps once a real `POST /items` caller exists to need them, not
+invented ahead of one. Full account in that module's own README.
+
 ## Modules
 
 ### Module 1: Workflow Engine

@@ -502,6 +502,72 @@ default). Neither is a production credential.
   1 contract test green (internally fuzzes every non-SCIM operation
   this module's real OpenAPI schema declares). Full account in that
   module's own README and root README's own P0 narrative.
+- **P1 (Phase 2) -- DONE (this session).** After PR #12 (contract-test
+  tier), the user redirected from the P0 Phase 1A backlog toward Phase
+  2 and asked to just continue rather than pick a specific slice
+  from a list -- Long-Term Memory's "memory governance" gap was chosen
+  as the most concrete, already-flagged Phase 2 candidate (this
+  session's own §13 repeatedly named it "currently zero coverage", and
+  it directly follows the identity-context-recall work already shipped
+  in Conversational Engine this session). Two real gaps closed, both
+  evidence-based from direct inspection (no consent/purpose/legal-hold
+  concept existed anywhere in `core/domain.py` before this):
+  - **Legal holds -- the one piece with real enforcement teeth**: new
+    `core/legal_hold_service.py`, `POST /legal-holds` /
+    `.../release` / `GET /legal-holds`, backed by a durable
+    `LegalHoldRecord` (one row per hold, released in place).
+    `ForgettingEngine.execute` -- which previously deleted everything
+    matching a subject's scope completely unconditionally, no way to
+    even mark data exempt -- now checks for an active hold first and
+    refuses the whole erasure request (`LegalHoldActiveError` -> `409`)
+    rather than silently skipping held items or deleting anyway.
+  - **Consent, enforced at query time, not store time**: new
+    `core/consent_service.py`, `POST /consent-records` /
+    `.../revoke` / `GET /consent-records`, backed by a durable
+    `ConsentRecord` (same one-row-per-grant, revoked-in-place shape as
+    `LegalHoldRecord` and this session's own Identity and Access
+    `RoleBindingRecord`). `MemoryItemRecord` gained an optional
+    `purpose` field; `MemoryService.query` excludes an item whose
+    `purpose` has no active consent covering exactly `(scope,
+    purpose)` -- deliberately gated at read time, not write time,
+    since nothing currently calls `POST /items` from another module
+    (Long-Term Memory write-back is still separately scoped), so a
+    hard consent-at-store check would have no real caller to affect
+    today; gating retrieval instead gives revocation an immediate,
+    live effect the same way `AuthorizationService.authorize`'s own
+    revocation check is live rather than trusting a stale token.
+  - **Applied a lesson from this session's own earlier work
+    immediately**: `GrantConsentRequest.basis` is typed as the real
+    `ConsentBasis` enum directly, not a bare `str` hand-converted at
+    the route -- the identical sibling bug class found and fixed on
+    Identity and Access's `RegisterIdentityRequest.type` earlier this
+    same session, applied here proactively instead of repeated. Every
+    new endpoint's string fields are `_reject_null_byte`-guarded
+    (ticket #82's pattern) and the new repository lookup-by-id methods
+    (`revoke_consent`, `release_legal_hold`) get the
+    `_is_valid_uuid`-repository-guard pattern proactively too, even
+    though this module has no contract tier yet to have found it the
+    hard way.
+  - **Deliberately not built**: purpose-limitation enforcement beyond
+    the consent check itself (e.g. validating `purpose` against an
+    external taxonomy), and a hard consent-at-store gate -- reasonable
+    next steps once a real `POST /items` caller exists to actually
+    need them.
+  Real Alembic migration (`0002`), manually verified end-to-end against
+  real Postgres (upgrade, downgrade, re-upgrade). Ruff clean; 91 unit
+  tests green (was 61, +30 new: `test_consent_service.py`,
+  `test_legal_hold_service.py` new files, extended
+  `test_forgetting.py`/`test_memory_service.py`/`test_routes_memory.py`
+  coverage for hold enforcement, consent-at-query gating including
+  semantic/vector hits, and every new route including the enum/NUL-byte
+  regression tests); 7 integration tests green against real Postgres
+  (was 3, +4 new, including the non-UUID-id regression). **Not yet
+  committed/pushed at the time this section was last edited during the
+  same pass** -- PR #12 was still open (not yet merged) when this work
+  started, so it was deliberately kept off that branch's next push
+  until PR #12's own fate was clearer, to avoid polluting that PR's
+  diff; check `git log`/`git status` and open PRs before assuming this
+  work's push/PR state.
 - **P1**: Fix Agentic RAG's own Graph DB/Knowledge-Base-symbolic-lookup
   client wire shapes properly (currently sidestepped via
   `hybrid_retrieval_enabled=false` for this slice only) once Knowledge

@@ -5,8 +5,10 @@ from collections.abc import AsyncIterator
 from fastapi import Request
 
 from long_term_memory.app_context import AppContext
+from long_term_memory.core.consent_service import ConsentService
 from long_term_memory.core.consolidation import ConsolidationEngine
 from long_term_memory.core.forgetting import ForgettingEngine
+from long_term_memory.core.legal_hold_service import LegalHoldService
 from long_term_memory.core.memory_service import MemoryService
 from long_term_memory.core.ports import LongTermMemoryRepository
 from long_term_memory.core.reflection import ReflectionLoop
@@ -37,3 +39,11 @@ def build_forgetting_engine(ctx: AppContext, repository: LongTermMemoryRepositor
 
 def build_consolidation_engine(ctx: AppContext, repository: LongTermMemoryRepository) -> ConsolidationEngine:
     return ConsolidationEngine(repository, ctx.settings.consolidation.decay_threshold)
+
+
+def build_consent_service(repository: LongTermMemoryRepository) -> ConsentService:
+    return ConsentService(repository)
+
+
+def build_legal_hold_service(repository: LongTermMemoryRepository) -> LegalHoldService:
+    return LegalHoldService(repository)

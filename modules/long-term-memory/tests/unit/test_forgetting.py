@@ -1,4 +1,6 @@
-from long_term_memory.core.domain import MemoryType
+import pytest
+
+from long_term_memory.core.domain import LegalHoldActiveError, MemoryType
 from long_term_memory.core.forgetting import compute_deletion_proof
 
 
@@ -54,3 +56,42 @@ def test_deletion_proof_differs_for_different_content():
     a = [MemoryItemRecord(id="a", tenant_id="t1", scope="s", memory_type=MemoryType.FACT, content="x")]
     b = [MemoryItemRecord(id="a", tenant_id="t1", scope="s", memory_type=MemoryType.FACT, content="y")]
     assert compute_deletion_proof(a) != compute_deletion_proof(b)
+
+
+# Legal hold enforcement (memory governance foundation): an active hold must
+# refuse the whole erasure request outright, not silently skip held items or
+# silently delete anyway.
+
+
+async def test_erasure_of_a_scope_under_active_legal_hold_is_refused(harness):
+    await harness.memory_service.store(tenant_id="t1", scope="user:alice", memory_type=MemoryType.FACT, content="fact one")
+    await harness.legal_hold_service.place(tenant_id="t1", scope="user:alice", reason="active litigation")
+
+    with pytest.raises(LegalHoldActiveError):
+        await harness.forgetting_engine.execute("t1", "user:alice", "compliance-officer")
+
+    # Nothing was deleted -- the refusal happened before any deletion, not
+    # a partial deletion that then raised.
+    remaining = await harness.repository.list_by_scope("t1", "user:alice")
+    assert len(remaining) == 1
+
+
+async def test_erasure_succeeds_once_the_legal_hold_is_released(harness):
+    await harness.memory_service.store(tenant_id="t1", scope="user:alice", memory_type=MemoryType.FACT, content="fact one")
+    hold = await harness.legal_hold_service.place(tenant_id="t1", scope="user:alice", reason="active litigation")
+
+    with pytest.raises(LegalHoldActiveError):
+        await harness.forgetting_engine.execute("t1", "user:alice", "compliance-officer")
+
+    await harness.legal_hold_service.release(tenant_id="t1", hold_id=hold.id)
+
+    record = await harness.forgetting_engine.execute("t1", "user:alice", "compliance-officer")
+    assert len(record.memory_items_deleted) == 1
+
+
+async def test_erasure_of_a_different_scope_is_unaffected_by_an_unrelated_hold(harness):
+    await harness.memory_service.store(tenant_id="t1", scope="user:bob", memory_type=MemoryType.FACT, content="fact")
+    await harness.legal_hold_service.place(tenant_id="t1", scope="user:alice", reason="active litigation")
+
+    record = await harness.forgetting_engine.execute("t1", "user:bob", "compliance-officer")
+    assert len(record.memory_items_deleted) == 1

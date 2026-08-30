@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from long_term_memory.config import ConsolidationConfig, CrossAgentSharingConfig
+from long_term_memory.core.consent_service import ConsentService
 from long_term_memory.core.consolidation import ConsolidationEngine
 from long_term_memory.core.fakes import (
     InMemoryLongTermMemoryRepository,
@@ -12,6 +13,7 @@ from long_term_memory.core.fakes import (
     StubVectorDBClient,
 )
 from long_term_memory.core.forgetting import ForgettingEngine
+from long_term_memory.core.legal_hold_service import LegalHoldService
 from long_term_memory.core.memory_service import MemoryService
 from long_term_memory.core.reflection import ReflectionLoop
 
@@ -32,6 +34,8 @@ class Harness:
         self.consolidation_engine = ConsolidationEngine(self.repository, self.consolidation_config.decay_threshold)
         self.forgetting_engine = ForgettingEngine(self.repository, self.vector_db, self.graph_db)
         self.reflection_loop = ReflectionLoop(self.repository, self.llm_gateway)
+        self.consent_service = ConsentService(self.repository)
+        self.legal_hold_service = LegalHoldService(self.repository)
 
 
 @pytest.fixture
