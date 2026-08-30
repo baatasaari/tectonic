@@ -39,6 +39,18 @@ from secrets_and_credential_management.schemas.secrets_and_credential_management
 router = APIRouter(prefix="/v1/secrets", tags=["secrets"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _secret_schema(secret) -> SecretSchema:
     return SecretSchema(
         id=secret.id, tenant_id=secret.tenant_id, namespace=secret.namespace, key_name=secret.key_name,
@@ -73,16 +85,16 @@ async def create_secret(
 async def list_secrets(
     tenant_id: str | None = Query(None),
     namespace: str | None = Query(None),
-    status: str | None = Query(None),
+    status: SecretStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     ctx: AppContext = Depends(get_ctx),
     repository: SecretsRepository = Depends(get_repository),
 ) -> SecretListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id, namespace=namespace)
     service = build_secret_registry_service(repository, ctx)
-    status_filter = SecretStatus(status) if status is not None else None
     secrets, total = await service.list_secrets(
-        tenant_id=tenant_id, namespace=namespace, status=status_filter, limit=limit, offset=offset,
+        tenant_id=tenant_id, namespace=namespace, status=status, limit=limit, offset=offset,
     )
     return SecretListResponse(items=[_secret_schema(s) for s in secrets], total=total, limit=limit, offset=offset)
 
@@ -95,6 +107,7 @@ async def list_due_for_rotation(
     ctx: AppContext = Depends(get_ctx),
     repository: SecretsRepository = Depends(get_repository),
 ) -> SecretListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     service = build_rotation_service(repository, ctx)
     secrets, total = await service.list_due_for_rotation(tenant_id=tenant_id, limit=limit, offset=offset)
     return SecretListResponse(items=[_secret_schema(s) for s in secrets], total=total, limit=limit, offset=offset)
@@ -106,6 +119,7 @@ async def get_compliance(
     ctx: AppContext = Depends(get_ctx),
     repository: SecretsRepository = Depends(get_repository),
 ) -> ComplianceReportSchema:
+    _reject_null_byte_query(tenant_id=tenant_id)
     service = build_rotation_service(repository, ctx)
     report = await service.compliance_rate(tenant_id=tenant_id)
     return ComplianceReportSchema(

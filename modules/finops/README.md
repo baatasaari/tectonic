@@ -103,6 +103,19 @@ src/finops/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **NUL bytes/invalid enum values reaching the database or crashing
+  unhandled** (ticket #82's platform-wide sweep, following the same bug
+  a real CI run found on Multi-tenancy's and Billing and Metering's own
+  contract tiers — see either module's own README for the original
+  finding). `GET /cost-reports/{tenant_id}`'s `budget_policy_id` never
+  ran through a NUL-byte validator; fixed with
+  `_reject_null_byte_query()`. Both that route's own `period` query
+  parameter and `POST /budget-policies`'s own body field were typed as
+  a bare `str` and hand-converted to `BudgetPeriod`, raising an
+  unhandled `ValueError` (500) for any non-member string (a NUL byte
+  included) — both now typed `BudgetPeriod` directly, so FastAPI/
+  Pydantic itself rejects an invalid value with a clean 422.
+
 ## Running locally
 
 ```bash

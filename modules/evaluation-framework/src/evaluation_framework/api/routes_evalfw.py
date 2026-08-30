@@ -28,6 +28,24 @@ from evaluation_framework.schemas.evalfw import (
 router = APIRouter(prefix="/v1/evaluation-framework", tags=["evaluation-framework"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter. This module
+    wasn't in the sweep's original module list -- found by re-grepping
+    the whole platform for the same pattern once the sweep was
+    otherwise done: unlike its siblings, its vulnerable parameters
+    (`tenant_id`, `agent_ref`) were plain, un-wrapped `str` function
+    parameters rather than an explicit `Query()` default, which is why
+    the earlier grep for `Query(` missed this file."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _score_schema(s) -> MetricScoreSchema:
     return MetricScoreSchema(id=s.id, metric_name=s.metric_name, score=s.score, threshold=s.threshold, passed=s.passed, created_at=s.created_at)
 
@@ -103,6 +121,7 @@ async def list_scores(
     offset: int = Query(0, ge=0),
     repository: EvaluationFrameworkRepository = Depends(get_repository),
 ) -> MetricScoreListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id, agent_ref=agent_ref)
     scores, total = await repository.list_metric_scores_for_tenant(
         tenant_id, agent_ref=agent_ref, limit=limit, offset=offset,
     )

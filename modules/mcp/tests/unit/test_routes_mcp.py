@@ -112,3 +112,18 @@ def test_list_servers_returns_a_paginated_envelope():
     assert resp.status_code == 200
     assert body["total"] == 3
     assert len(body["items"]) == 2
+
+
+def test_list_servers_rejects_a_null_byte_in_tenant_id_with_a_clean_422():
+    """Ticket #82: a raw `Query()` string never runs through a Pydantic
+    body field's own NUL-byte validator, so this reached the repository
+    (and, against real Postgres, the database itself) raw instead of a
+    clean 422."""
+    app = _app(InMemoryMCPGatewayRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/mcp/servers", params={"tenant_id": "a\x00b"}, headers={"Authorization": f"Bearer {_token()}"},
+        )
+
+    assert resp.status_code == 422

@@ -26,6 +26,18 @@ from sentinel_agents.schemas.sentinel import (
 router = APIRouter(prefix="/v1/sentinel-agents", tags=["sentinel-agents"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _alert_schema(a) -> AlertSchema:
     return AlertSchema(
         id=a.id, alert_type=a.alert_type.value, agent_refs=a.agent_refs, severity=a.severity.value,
@@ -65,6 +77,7 @@ async def list_alerts(
     offset: int = Query(0, ge=0),
     repository: SentinelRepository = Depends(get_repository),
 ) -> AlertListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id, severity=severity)
     alerts, total = await repository.list_alerts(tenant_id, severity, limit=limit, offset=offset)
     return AlertListResponse(items=[_alert_schema(a) for a in alerts], total=total, limit=limit, offset=offset)
 
@@ -75,6 +88,7 @@ async def get_alert(
     tenant_id: str = Query(...),
     repository: SentinelRepository = Depends(get_repository),
 ) -> AlertSchema:
+    _reject_null_byte_query(tenant_id=tenant_id)
     alert = await repository.get_alert(tenant_id, alert_id)
     if alert is None:
         raise HTTPException(status_code=404, detail="alert not found")

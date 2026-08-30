@@ -97,6 +97,24 @@ async def test_list_users_supports_the_username_filter():
     assert body["Resources"][0]["userName"] == "alice@acme.com"
 
 
+async def test_list_users_rejects_a_null_byte_in_filter_with_a_clean_422():
+    """Ticket #82: a raw `Query()` string never runs through a Pydantic
+    body field's own NUL-byte validator, so this reached the repository
+    (and, against real Postgres, the database itself) raw instead of a
+    clean 422."""
+    repository = InMemoryIdentityAccessRepository()
+    token = await _issue_token(repository)
+    app = _app(repository)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/scim/v2/acme/Users", params={"filter": 'userName eq "a\x00b"'}, headers=headers,
+        )
+
+    assert resp.status_code == 422
+
+
 async def test_patch_active_false_deactivates_the_user():
     repository = InMemoryIdentityAccessRepository()
     token = await _issue_token(repository)

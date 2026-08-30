@@ -33,6 +33,18 @@ from agent_marketplace.schemas.agent_marketplace import (
 router = APIRouter(prefix="/v1/agent-marketplace", tags=["agent-marketplace"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _listing_schema(listing) -> ListingSchema:
     return ListingSchema(
         id=listing.id, tenant_id=listing.tenant_id, agent_card_id=listing.agent_card_id, name=listing.name,
@@ -66,13 +78,19 @@ async def submit_listing(
 @router.get("/listings", response_model=ListingListResponse)
 async def search_listings(
     tenant_id: str | None = Query(None),
-    status: str | None = Query(None),
+    status: ListingStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     repository: AgentMarketplaceRepository = Depends(get_repository),
 ) -> ListingListResponse:
+    # `status` typed as ListingStatus | None: FastAPI/Pydantic validates and
+    # coerces it itself, rejecting anything not a real ListingStatus value (a
+    # NUL byte included) with a clean 422 -- this used to accept an arbitrary
+    # str and call ListingStatus(status) by hand, which raised an unhandled
+    # ValueError (500) for any non-member string (ticket #82).
+    _reject_null_byte_query(tenant_id=tenant_id)
     service = build_catalogue_service(repository)
-    parsed_status = ListingStatus(status) if status else ListingStatus.PUBLISHED
+    parsed_status = status or ListingStatus.PUBLISHED
     listings, total = await service.search(tenant_id=tenant_id, status=parsed_status, limit=limit, offset=offset)
     return ListingListResponse(items=[_listing_schema(listing) for listing in listings], total=total, limit=limit, offset=offset)
 

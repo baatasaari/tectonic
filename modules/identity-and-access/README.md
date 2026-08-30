@@ -196,6 +196,22 @@ src/identity_and_access/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **NUL bytes/invalid enum values reaching the database or crashing
+  unhandled** (ticket #82's platform-wide sweep, following the same bug
+  a real CI run found on Multi-tenancy's and Billing and Metering's own
+  contract tiers — see either module's own README for the original
+  finding). `routes_identity_and_access.py`'s `GET /identities`,
+  `/identity-providers`, `/groups` and `/scim-tokens` all took raw
+  `tenant_id`/`provider_id` query parameters with no NUL-byte guard;
+  fixed with `_reject_null_byte_query()`. `/identities`'s own `status`
+  was a bare `str` hand-converted to `IdentityStatus`, raising an
+  unhandled `ValueError` (500) for any non-member string (a NUL byte
+  included) — now typed `IdentityStatus` directly so FastAPI/Pydantic
+  itself rejects an invalid value with a clean 422.
+  `routes_scim.py`'s SCIM `GET /Users`'s `filter` expression is
+  regex-matched for an embedded `userName` value that then reaches the
+  repository unguarded — same fix applied there.
+
 ## Running locally
 
 ```bash

@@ -282,23 +282,54 @@ default). Neither is a production credential.
 - **P0**: None. Nothing is broken or blocking; all touched modules are
   green (including in real GitHub Actions CI, not just this sandbox --
   see the note on `TECTONIC_TEST_POSTGRES_URL`-vs-CI-credentials below).
-- **P1**: A real, platform-wide bug class the new CI job's own first
-  real run surfaced (not reproducible against this sandbox's own local
-  Postgres/Hypothesis-seed, only against a *fresh* Postgres under GitHub
-  Actions' own random fuzzing seed): a raw FastAPI `Query()` string
-  parameter never runs through a Pydantic body field's own NUL-byte
-  validator, so a NUL byte in one reaches Postgres raw and 500s. Fixed
-  in Multi-tenancy and Billing and Metering (the two modules whose own
-  contract tier this surfaced it in for real); a `grep -rn "Query(None)"
-  */src/*/api/routes*.py` across every module shows this same
-  `str | None = Query(None)` pattern in roughly a dozen other modules
-  outside this slice's own scope (a2a, agent-cards, agent-marketplace,
-  auditability, deployment-strategy, identity-and-access, knowledge-base,
-  llmops, observability, promptops, regulatory-compliance,
+- **P1 -- DONE (this session).** The platform-wide NUL-byte-in-a-raw-
+  `Query()`-string-parameter bug class (originally surfaced for real by
+  the new CI job's own first run, against Multi-tenancy's and Billing
+  and Metering's contract tiers) is now fixed everywhere it was found.
+  Swept every module: a2a, agent-cards, agent-marketplace, auditability,
+  deployment-strategy, finops, graph-db, human-oversight,
+  identity-and-access (two route files), knowledge-base, llmops, mcp,
+  multi-modality, observability, promptops, regulatory-compliance,
   sdk-and-developer-portal, secrets-and-credential-management,
-  sentinel-agents, and more) -- each is a latent instance of the same
-  class until it's actually fuzzed by a contract tier. Fixing all of
-  them is real, separately-scoped follow-up work, not done here.
+  sentinel-agents -- each got a `_reject_null_byte_query()` helper
+  applied to every affected route, a regression test, and a README
+  note. The same pass also caught and fixed the sibling bug class (a
+  route hand-converting a raw `str` into an Enum, raising an unhandled
+  `ValueError`/500 instead of a clean 422) wherever it co-occurred:
+  a2a, agent-marketplace, finops, identity-and-access,
+  multi-modality, sdk-and-developer-portal, secrets-and-credential-
+  management, observability, guardrails (guardrails' own instance was a
+  body field, not a query param).
+
+  Re-grepping the whole platform once the originally-scoped module list
+  was done found six more modules with the *same* class of bug hiding
+  in a different shape: a plain, un-wrapped `str` function parameter
+  (no explicit `Query()` default) rather than the `Query(None)` pattern
+  the first grep matched on -- `tenant_id: str,` with no default reads
+  as a required query parameter to FastAPI just the same, but doesn't
+  contain the literal substring `Query(`. Fixed: evaluation-framework
+  (`tenant_id`/`agent_ref`), intent-detection (`tenant_id`),
+  llm-gateway (`tenant_id`; re-running that module's own contract tier
+  after the fix also surfaced a sibling *body*-field NUL-byte gap on
+  `POST /admin/providers|virtual-keys|budget-policies`, fixed with the
+  established `_reject_null_byte` `field_validator` pattern),
+  long-term-memory (`agent_ref`), tool-orchestration (`status`). Left
+  deliberately unfixed: Vector DB's `DELETE /points/{point_id}`'s
+  `tenant_id` and `POST /query`'s `body.tenant_id` build a Qdrant alias
+  string, not a Postgres query parameter -- this bug class is
+  specifically "reaches asyncpg/Postgres unguarded", and Vector DB's
+  `tenant_id` here never does, so it's out of this class's scope (a
+  malformed Qdrant alias is a different, unverified failure mode this
+  sandbox has no Qdrant to reproduce against).
+
+  Every touched module was re-verified after its fix: `ruff check`
+  clean, `pytest tests/unit` green, and `pytest tests/integration`
+  (against this sandbox's real local Postgres) green wherever that tier
+  exists; llm-gateway's `tests/contract` tier (schemathesis) was also
+  re-run and now passes where it previously failed on the body-field
+  gap. Not yet pushed to a real GitHub Actions run at the time this was
+  written -- confirm the next CI run on this branch is green across the
+  whole matrix once these commits land.
 - **P1**: Fix Agentic RAG's own Graph DB/Knowledge-Base-symbolic-lookup
   client wire shapes properly (currently sidestepped via
   `hybrid_retrieval_enabled=false` for this slice only) once Knowledge

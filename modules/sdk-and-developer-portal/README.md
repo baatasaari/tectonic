@@ -80,6 +80,17 @@ src/sdk_and_developer_portal/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **NUL bytes/invalid enum values reaching the database or crashing
+  unhandled** (ticket #82's platform-wide sweep, following the same bug
+  a real CI run found on Multi-tenancy's and Billing and Metering's own
+  contract tiers — see either module's own README for the original
+  finding). `GET /sdks`'s `module_name`/`language` never ran through a
+  NUL-byte validator; fixed with `_reject_null_byte_query()`.
+  `GET /developers`'s own `status` was a bare `str` hand-converted to
+  `DeveloperStatus`, raising an unhandled `ValueError` (500) for any
+  non-member string — now typed `DeveloperStatus` directly so FastAPI/
+  Pydantic itself rejects an invalid value with a clean 422.
+
 ## Running locally
 
 ```bash

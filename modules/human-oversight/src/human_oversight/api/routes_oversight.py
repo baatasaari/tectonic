@@ -31,6 +31,19 @@ from human_oversight.schemas.oversight import (
 router = APIRouter(prefix="/v1/human-oversight", tags=["human-oversight"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter, required or
+    optional alike."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _request_schema(r) -> OversightRequestSchema:
     return OversightRequestSchema(
         id=r.id, tenant_id=r.tenant_id, requesting_module=r.requesting_module, requesting_ref=r.requesting_ref,
@@ -113,6 +126,7 @@ async def list_requests(
     offset: int = Query(0, ge=0),
     repository: HumanOversightRepository = Depends(get_repository),
 ) -> OversightRequestListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id, status=status)
     requests, total = await repository.list_requests(tenant_id, status, limit=limit, offset=offset)
     return OversightRequestListResponse(
         items=[_request_schema(r) for r in requests], total=total, limit=limit, offset=offset,

@@ -90,6 +90,21 @@ def test_discover_returns_a_paginated_envelope():
     assert len(body["items"]) == 2
 
 
+def test_discover_rejects_a_null_byte_in_tenant_id_with_a_clean_422():
+    """Ticket #82: a raw `Query()` string never runs through a Pydantic
+    body field's own NUL-byte validator, so this reached the repository
+    (and, against real Postgres, the database itself) raw instead of a
+    clean 422."""
+    app = _app(InMemoryAgentCardsRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/agent-cards", params={"tenant_id": "a\x00b"}, headers={"Authorization": f"Bearer {_token()}"},
+        )
+
+    assert resp.status_code == 422
+
+
 def test_recompute_trust_score_persists_and_returns_the_breakdown():
     repository = InMemoryAgentCardsRepository()
     evalfw = StubEvaluationFrameworkClient(scores=[{"score": 1.0, "threshold": 1.0}])

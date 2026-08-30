@@ -108,6 +108,23 @@ def test_list_events_returns_a_paginated_envelope():
     assert body["items"][0]["sequence_number"] == 3
 
 
+def test_list_events_rejects_a_null_byte_in_a_query_param_with_a_clean_422():
+    """Ticket #82: a raw `Query()` string never runs through a Pydantic
+    body field's own NUL-byte validator, so this reached the repository
+    (and, against real Postgres, the database itself) raw instead of a
+    clean 422."""
+    app = _app(InMemoryAuditabilityRepository())
+    token = _token("workflow-engine")
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/auditability/events", params={"tenant_id": "t1", "event_type": "a\x00b"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    assert resp.status_code == 422
+
+
 def test_verify_chain_route_reports_a_valid_chain():
     repository = InMemoryAuditabilityRepository()
     app = _app(repository)

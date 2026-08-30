@@ -29,6 +29,23 @@ from llm_gateway.schemas.admin import (
 router = APIRouter(prefix="/v1/llm-gateway/admin", tags=["admin"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw string query parameter never runs through a Pydantic body
+    field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter. This module
+    wasn't in the sweep's original module list -- found by re-grepping
+    the whole platform for the same pattern once the sweep was
+    otherwise done: `tenant_id` below is a plain, un-wrapped `str`
+    function parameter rather than an explicit `Query()` default,
+    which is why the earlier grep for `Query(` missed this file."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 @router.post("/virtual-keys", response_model=VirtualKeyResponse, status_code=201)
 async def create_virtual_key(
     body: CreateVirtualKeyRequest,
@@ -58,6 +75,7 @@ async def list_virtual_keys(
     offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: GatewayRepository = Depends(get_repository),
 ) -> VirtualKeyListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     records, total = await repository.list_virtual_keys(tenant_id, limit=limit, offset=offset)
     return VirtualKeyListResponse(
         items=[

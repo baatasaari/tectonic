@@ -158,6 +158,19 @@ src/human_oversight/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **NUL bytes in raw `Query()` string parameters reaching the database
+  unvalidated** (ticket #82's platform-wide sweep, following the same bug
+  a real CI run found on Multi-tenancy's and Billing and Metering's own
+  contract tiers — see either module's own README for the original
+  finding). `GET /v1/human-oversight/requests`'s `tenant_id` and `status`
+  never ran through a NUL-byte validator; fixed with
+  `_reject_null_byte_query()`. `status` is compared directly against the
+  `status` column rather than parsed into a `RequestStatus` enum, so no
+  enum-retype fix was needed here (unlike some sibling modules). No
+  route-level test file existed for this module before this fix —
+  `tests/unit/test_routes_oversight.py` (new) pins just this regression;
+  comprehensive route coverage remains a real, separately-scoped gap.
+
 ## Running locally
 
 ```bash

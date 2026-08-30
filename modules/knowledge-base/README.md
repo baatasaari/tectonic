@@ -176,6 +176,21 @@ src/knowledge_base/
   route; `_chunk_and_propagate()`'s own payload now also includes
   `tenant_id` (Vector DB's real request requires it).
 
+- **NUL bytes/invalid enum values reaching the database or crashing
+  unhandled** (ticket #82's platform-wide sweep, following the same bug
+  a real CI run found on Multi-tenancy's and Billing and Metering's own
+  contract tiers — see either module's own README for the original
+  finding). `GET /chunks`'s `document_version_id`, `policy_tag` and
+  `tenant_id` never ran through a NUL-byte validator; fixed with
+  `_reject_null_byte_query()`. `POST /documents`'s `source_type` was a
+  bare `str` (multipart `Form()` field) hand-converted to `SourceType`,
+  raising an unhandled `ValueError` (500) for any non-member string —
+  now typed `SourceType` directly so FastAPI/Pydantic itself rejects an
+  invalid value with a clean 422. No route-level test file existed for
+  this module before this fix — `tests/unit/test_routes_documents.py`
+  (new) pins just these two regressions; comprehensive route coverage
+  remains a real, separately-scoped gap.
+
 ## Running locally
 
 ```bash

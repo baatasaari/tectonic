@@ -179,6 +179,24 @@ src/guardrails/
   again by that id, unlike a real, persisted one) — see
   `tests/integration/test_check_route_postgres.py`.
 
+- **NUL bytes/invalid enum values reaching the database or crashing
+  unhandled** (ticket #82's platform-wide sweep, following the same bug
+  a real CI run found on Multi-tenancy's and Billing and Metering's own
+  contract tiers — see either module's own README for the original
+  finding; this module wasn't in that sweep's original module list —
+  found by re-grepping the whole platform for the same pattern once the
+  sweep was otherwise done). `GET /red-team-runs`'s `tenant_id` never
+  ran through a NUL-byte validator; fixed with
+  `_reject_null_byte_query()`. `POST /check`'s own `stage` was a bare
+  `str` on `CheckRequest`, hand-converted to `CheckStage` twice in the
+  route body, raising an unhandled `ValueError` (500) for any
+  non-member string — now typed `CheckStage` directly on the schema so
+  FastAPI/Pydantic itself rejects an invalid value with a clean 422. No
+  route-level test file existed for this module before this fix —
+  `tests/unit/test_routes_guardrails.py` (new) pins just these
+  regressions; comprehensive route coverage remains a real,
+  separately-scoped gap.
+
 ## Running locally
 
 ```bash

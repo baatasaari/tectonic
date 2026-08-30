@@ -183,3 +183,66 @@ def test_list_auth_decisions_for_an_identity():
 
     assert resp.status_code == 200
     assert resp.json()["total"] == 1
+
+
+def test_list_identities_rejects_a_null_byte_in_tenant_id_with_a_clean_422():
+    """Ticket #82: a raw `Query()` string never runs through a Pydantic
+    body field's own NUL-byte validator, so this reached the repository
+    (and, against real Postgres, the database itself) raw instead of a
+    clean 422."""
+    app = _app(InMemoryIdentityAccessRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/identity-access/identities", params={"tenant_id": "a\x00b"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
+def test_list_identities_rejects_a_status_that_is_not_a_real_identity_status():
+    """`status` used to be a bare `str` hand-converted to `IdentityStatus`,
+    raising an unhandled `ValueError` (500) for any non-member string --
+    now typed `IdentityStatus` directly so FastAPI/Pydantic rejects it
+    with a clean 422."""
+    app = _app(InMemoryIdentityAccessRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/identity-access/identities", params={"status": "not-a-real-status"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
+def test_list_identity_providers_rejects_a_null_byte_in_tenant_id_with_a_clean_422():
+    app = _app(InMemoryIdentityAccessRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/identity-access/identity-providers", params={"tenant_id": "a\x00b"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
+def test_list_groups_rejects_a_null_byte_in_tenant_id_with_a_clean_422():
+    app = _app(InMemoryIdentityAccessRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/identity-access/groups", params={"tenant_id": "a\x00b"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
+def test_list_scim_tokens_rejects_a_null_byte_in_tenant_id_with_a_clean_422():
+    app = _app(InMemoryIdentityAccessRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/identity-access/scim-tokens", params={"tenant_id": "a\x00b"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422

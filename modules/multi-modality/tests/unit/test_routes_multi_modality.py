@@ -124,3 +124,33 @@ def test_get_extraction_returns_404_when_missing():
         resp = client.get("/v1/multi-modality/extractions/does-not-exist", headers=_headers())
 
     assert resp.status_code == 404
+
+
+def test_list_extractions_rejects_a_null_byte_in_tenant_id_with_a_clean_422():
+    """Ticket #82: a raw `Query()` string never runs through a Pydantic
+    body field's own NUL-byte validator, so this reached the repository
+    (and, against real Postgres, the database itself) raw instead of a
+    clean 422."""
+    app = _app(InMemoryMultiModalityRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/multi-modality/extractions", params={"tenant_id": "a\x00b"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
+def test_list_extractions_rejects_a_modality_that_is_not_a_real_modality():
+    """`modality` used to be a bare `str` hand-converted to `Modality`,
+    raising an unhandled `ValueError` (500) for any non-member string --
+    now typed `Modality` directly so FastAPI/Pydantic rejects it with a
+    clean 422."""
+    app = _app(InMemoryMultiModalityRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/multi-modality/extractions", params={"modality": "not-a-real-modality"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422

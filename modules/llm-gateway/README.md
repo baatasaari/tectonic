@@ -216,6 +216,25 @@ src/llm_gateway/
   route for a budget policy). Added `POST /admin/providers` and
   `POST /admin/budget-policies`, plus `repository.create_provider_config()`.
 
+- **More of the same NUL-byte class, found once ticket #82's
+  platform-wide sweep re-ran this module's own contract tier.** `GET
+  /admin/virtual-keys`'s `tenant_id` never ran through a NUL-byte
+  validator either — a plain, un-wrapped `str` function parameter
+  rather than an explicit `Query()` default, which is why the sweep's
+  initial grep for `Query(` missed this file; fixed with
+  `_reject_null_byte_query()`. Re-running the contract tier after that
+  fix surfaced a sibling body-field gap this module's earlier NUL-byte
+  fix (above) hadn't covered: `POST /admin/providers`'s
+  `provider_name`/`endpoint`, `POST /admin/virtual-keys`'s
+  `tenant_id`/`budget_policy_ref`/`provider_scope`, and `POST
+  /admin/budget-policies`'s `tenant_id` all reached the database raw;
+  fixed with the same `_reject_null_byte` `field_validator` pattern
+  Multi-tenancy's and Billing and Metering's own schemas already
+  established. No route-level test file existed for `routes_admin.py`
+  before this fix — `tests/unit/test_routes_admin.py` (new) pins these
+  regressions; comprehensive route coverage remains a real,
+  separately-scoped gap.
+
 ## Running locally
 
 ```bash

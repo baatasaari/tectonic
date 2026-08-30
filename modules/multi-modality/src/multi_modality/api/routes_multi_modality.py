@@ -21,6 +21,18 @@ from multi_modality.schemas.multi_modality import (
 router = APIRouter(prefix="/v1/multi-modality", tags=["multi-modality"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _extraction_schema(extraction) -> ExtractionSchema:
     return ExtractionSchema(
         id=extraction.id, tenant_id=extraction.tenant_id, modality=extraction.modality.value,
@@ -53,14 +65,14 @@ async def extract(
 @router.get("/extractions", response_model=ExtractionListResponse)
 async def list_extractions(
     tenant_id: str | None = Query(None),
-    modality: str | None = Query(None),
+    modality: Modality | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     repository: MultiModalityRepository = Depends(get_repository),
 ) -> ExtractionListResponse:
-    modality_filter = Modality(modality) if modality is not None else None
+    _reject_null_byte_query(tenant_id=tenant_id)
     extractions, total = await repository.list_extractions(
-        tenant_id=tenant_id, modality=modality_filter, limit=limit, offset=offset,
+        tenant_id=tenant_id, modality=modality, limit=limit, offset=offset,
     )
     return ExtractionListResponse(
         items=[_extraction_schema(e) for e in extractions], total=total, limit=limit, offset=offset,

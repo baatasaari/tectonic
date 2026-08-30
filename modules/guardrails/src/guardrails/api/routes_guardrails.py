@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from guardrails.api.deps import build_policy_engine, build_red_team_runner, get_ctx, get_repository
 from guardrails.app_context import AppContext
-from guardrails.core.domain import CheckStage, InterventionLogRecord, PolicyProfileRecord, new_id
+from guardrails.core.domain import InterventionLogRecord, PolicyProfileRecord, new_id
 from guardrails.core.ports import GuardrailsRepository
 from guardrails.schemas.checks import (
     BypassIncidentSchema,
@@ -21,6 +21,18 @@ from guardrails.schemas.checks import (
 )
 
 router = APIRouter(prefix="/v1/guardrails", tags=["guardrails"])
+
+
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
 
 
 def _tenant_id(request: Request, ctx: AppContext) -> str:
@@ -81,12 +93,12 @@ async def check(
 
     engine = build_policy_engine(ctx)
     started = time.perf_counter()
-    result = await engine.evaluate(body.text, CheckStage(body.stage), profile, tenant_id, context=body.context)
+    result = await engine.evaluate(body.text, body.stage, profile, tenant_id, context=body.context)
     latency_ms = (time.perf_counter() - started) * 1000
 
     await repository.create_intervention_log(
         InterventionLogRecord(
-            id=new_id(), tenant_id=tenant_id, policy_profile_id=profile.id, stage=CheckStage(body.stage),
+            id=new_id(), tenant_id=tenant_id, policy_profile_id=profile.id, stage=body.stage,
             check_type=",".join(result.checks_run), decision=result.decision,
             violation_category=result.violation_category, latency_ms=latency_ms,
         )
@@ -119,6 +131,7 @@ async def list_red_team_runs(
     offset: int = Query(0, ge=0),
     repository: GuardrailsRepository = Depends(get_repository),
 ) -> RedTeamRunListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     runs, total = await repository.list_red_team_runs(tenant_id, limit=limit, offset=offset)
     schemas = []
     for run in runs:
