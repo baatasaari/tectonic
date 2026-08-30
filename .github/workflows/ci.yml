@@ -128,6 +128,99 @@ jobs:
           TECTONIC_TEST_POSTGRES_URL: postgresql://tectonic_ci:tectonic_ci@localhost:5432/postgres
         run: pytest tests/contract -v
 
+  product-slice-support-agent:
+    # Ticket #82's own real, live product-slice verification
+    # (docs/phase2-product-slice-01-support-agent.md,
+    # tests/product-slices/), wired into CI as its own job rather than
+    # folded into the lint-and-test matrix above: it needs all 15 of this
+    # slice's own real modules running as real processes simultaneously
+    # against a real Postgres, not one module tested in isolation, so it
+    # doesn't fit that job's own per-module shape. Deliberately does not
+    # `needs: lint-and-test` -- that matrix job covers all 34 modules
+    # (most of them outside this slice), and this job does its own fresh
+    # checkout/build/run anyway; running independently lets both start
+    # immediately instead of this one waiting on unrelated modules'
+    # matrix legs. See tests/product-slices/README.md for what this
+    # actually runs and how to run it locally.
+    name: product-slice (support-agent)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tectonic_ci
+          POSTGRES_PASSWORD: tectonic_ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tectonic_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: postgresql-client (usually preinstalled on ubuntu-latest; explicit so a runner-image change can't silently break ensure_databases())
+        run: sudo apt-get update -y && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Build every module's own venv (this slice's own 15 real module processes -- each needs its own isolated .venv, same as running any one of them locally; see scripts/product-slice-stubs/stack.py's own module docstring)
+        run: |
+          for m in identity-and-access multi-tenancy llm-gateway intent-detection knowledge-base \
+                   tool-orchestration guardrails human-oversight billing-and-metering auditability \
+                   observability conversational-engine workflow-engine agentic-rag vector-db; do
+            echo "::group::venv: $m"
+            (cd "modules/$m" && uv venv && uv pip install -e ".[dev]")
+            echo "::endgroup::"
+          done
+
+      - name: Install tests/product-slices' own dependencies (not an installable package -- see its own README)
+        run: |
+          cd tests/product-slices
+          uv venv
+          uv pip install pytest pytest-asyncio httpx fastapi uvicorn \
+            "opentelemetry-api>=1.27" "opentelemetry-sdk>=1.27" \
+            "opentelemetry-instrumentation-fastapi>=0.48b0" "opentelemetry-instrumentation-httpx>=0.48b0"
+
+      - name: Run the support-agent product-slice e2e suite (stands up all 15 modules + a mock external-systems stub itself, seeds a real tenant, runs every scripted conversation, tears the stack back down)
+        env:
+          TECTONIC_STACK_POSTGRES_USER: tectonic_ci
+          TECTONIC_STACK_POSTGRES_PASSWORD: tectonic_ci
+        run: |
+          cd tests/product-slices
+          source .venv/bin/activate
+          pytest -v
+
+      - name: Upload every module's own log on failure (scripts/product-slice-stubs/stack.py's own per-module log files -- the fastest way to see which real module actually failed)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-slice-logs
+          path: /tmp/support-agent-slice-logs/
+          retention-days: 14
+
   sbom-and-sign:
     # Supply-chain gate: a CycloneDX SBOM of each module's real *runtime*
     # dependency set (a clean install of the module alone, deliberately
@@ -235,13 +328,17 @@ jobs:
     # 19 individual matrix-leg names that shift whenever a module is added.
     name: CI
     if: always()
-    needs: [lint-and-test, sbom-and-sign]
+    needs: [lint-and-test, product-slice-support-agent, sbom-and-sign]
     runs-on: ubuntu-latest
     steps:
       - name: Require every module job to have succeeded
         run: |
           if [ "${{ needs.lint-and-test.result }}" != "success" ]; then
             echo "One or more module jobs failed (result: ${{ needs.lint-and-test.result }})."
+            exit 1
+          fi
+          if [ "${{ needs.product-slice-support-agent.result }}" != "success" ]; then
+            echo "The support-agent product-slice job failed (result: ${{ needs.product-slice-support-agent.result }})."
             exit 1
           fi
           # sbom-and-sign only runs on push (see its own `if:`) -- "skipped" is

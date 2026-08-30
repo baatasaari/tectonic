@@ -105,7 +105,7 @@ class MigrationManager:
             new_points = []
             for point in points:
                 content = (point.payload or {}).get("content", "")
-                new_vector = await self._embeddings.embed(content, model=record.target_embedding_model)
+                new_vector = await self._embeddings.embed(content, model=record.target_embedding_model, tenant_id=record.tenant_id)
                 if not target_created:
                     await qdrant_ops.ensure_collection(self._client, record.target_collection, len(new_vector))
                     target_created = True

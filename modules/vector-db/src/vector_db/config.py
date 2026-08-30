@@ -77,6 +77,9 @@ class VectorDbSettings(BaseSettings):
     entitlement_gate_cache_ttl_seconds: float = 30.0
     http_port: int = 8089
     llm_gateway_base_url: str = "http://localhost:8082"
+    # Deliberately deployment-wide, not per-tenant -- see clients/http_clients.py's
+    # HTTPEmbeddingProvider docstring (ticket #82).
+    llm_gateway_virtual_key: str = "vector-db-default"
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
     # every module, so this field's env var name is NOT prefixed like the rest of this

@@ -284,7 +284,8 @@ class ExecutionScheduler:
         )
         if needs_approval:
             approval = await self.human_handler.request_approval(
-                step_execution_id=step_exec.id, context=instance.context, tenant_id=instance.tenant_id
+                step_execution_id=step_exec.id, instance_id=instance.id,
+                context=instance.context, tenant_id=instance.tenant_id,
             )
             step_exec = replace(step_exec, output=outcome.output, confidence_score=outcome.confidence_score)
             await self.repository.update_step_execution(step_exec)

@@ -37,6 +37,23 @@ from long_term_memory.schemas.memory import (
 router = APIRouter(prefix="/v1/long-term-memory", tags=["long-term-memory"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw string query parameter never runs through a Pydantic body
+    field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter. This module
+    wasn't in the sweep's original module list -- found by re-grepping
+    the whole platform for the same pattern once the sweep was
+    otherwise done: `agent_ref` below is a plain, un-wrapped `str`
+    function parameter rather than an explicit `Query()` default,
+    which is why the earlier grep for `Query(` missed this file."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _tenant_id(request: Request, ctx: AppContext) -> str:
     return request.headers.get("X-Tenant-Id", ctx.settings.tenant_id)
 
@@ -104,6 +121,7 @@ async def list_reflections(
     ctx: AppContext = Depends(get_ctx),
     repository: LongTermMemoryRepository = Depends(get_repository),
 ) -> ReflectionEntryListResponse:
+    _reject_null_byte_query(agent_ref=agent_ref)
     loop = build_reflection_loop(ctx, repository)
     entries, total = await loop.list_for_agent(_tenant_id(request, ctx), agent_ref, limit=limit, offset=offset)
     return ReflectionEntryListResponse(

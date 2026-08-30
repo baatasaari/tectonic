@@ -143,6 +143,17 @@ class SQLAlchemyGatewayRepository:
         rows = await self.session.execute(select(models.ProviderConfig))
         return [_provider_to_domain(m) for m in rows.scalars().all()]
 
+    async def create_provider_config(self, record: ProviderConfigRecord) -> ProviderConfigRecord:
+        m = models.ProviderConfig(
+            id=record.id, provider_name=record.provider_name, endpoint=record.endpoint,
+            priority=record.priority, health_status=record.health_status,
+            deprecation_notices=record.deprecation_notices,
+        )
+        self.session.add(m)
+        await self.session.commit()
+        await self.session.refresh(m)
+        return _provider_to_domain(m)
+
     async def update_provider_config(self, record: ProviderConfigRecord) -> ProviderConfigRecord:
         m = await self.session.get(models.ProviderConfig, record.id)
         if m is None:

@@ -5,6 +5,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from finops.core.domain import BudgetPeriod
+
 
 class ReportUsageEventRequest(BaseModel):
     source_module: str
@@ -25,7 +27,13 @@ class UsageEventSchema(BaseModel):
 
 
 class CreateBudgetPolicyRequest(BaseModel):
-    period: str
+    # BudgetPeriod, not str: FastAPI/Pydantic then validates and coerces this
+    # itself, rejecting anything not a real member with a clean 422 -- the
+    # route used to accept an arbitrary str here and call BudgetPeriod(...) by
+    # hand, which raised an unhandled ValueError (500) for any non-member
+    # string (ticket #82, the same fix as this module's own GET
+    # /cost-reports/{tenant_id}?period=... query parameter).
+    period: BudgetPeriod
     limit_amount: float
     alert_threshold_pct: float = 0.8
 

@@ -156,6 +156,30 @@ src/tool_orchestration/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **Plain registration for a known, already-specified tool** (ticket #82)
+  — the only creation path before this (`/synthesise` → `/approve`)
+  always calls LLM Gateway to invent a tool proposal and always requires
+  a Sentinel Agents review, right for an LLM-invented tool but wrong for
+  an admin-known integration (this slice's own `get_order_status`, a
+  real merchant order-status backend nobody needs an LLM to guess the
+  schema of). Added `POST /tools`, registering directly as
+  `active`/`synthesised=False`.
+
+- **NUL bytes in a raw string query parameter reaching the database
+  unvalidated** (ticket #82's platform-wide sweep, following the same bug
+  a real CI run found on Multi-tenancy's and Billing and Metering's own
+  contract tiers — see either module's own README for the original
+  finding; this module wasn't in that sweep's original module list —
+  found by re-grepping the whole platform for the same pattern once the
+  sweep was otherwise done). `GET /tools`'s `status` never ran through
+  a NUL-byte validator — a plain, un-wrapped `str` function parameter
+  rather than an explicit `Query()` default, which is why the earlier
+  grep for `Query(` missed this file; fixed with
+  `_reject_null_byte_query()`. No route-level test file existed for
+  this module before this fix — `tests/unit/test_routes_tools.py`
+  (new) pins just this regression; comprehensive route coverage
+  remains a real, separately-scoped gap.
+
 ## Running locally
 
 ```bash

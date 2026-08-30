@@ -45,6 +45,18 @@ from sdk_and_developer_portal.schemas.sdk_and_developer_portal import (
 router = APIRouter(prefix="/v1/sdk-portal", tags=["sdk-portal"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _developer_schema(developer) -> DeveloperAccountSchema:
     return DeveloperAccountSchema(
         id=developer.id, name=developer.name, email=developer.email, tenant_id=developer.tenant_id,
@@ -81,15 +93,14 @@ async def register_developer(
 
 @router.get("/developers", response_model=DeveloperAccountListResponse)
 async def list_developers(
-    status: str | None = Query(None),
+    status: DeveloperStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     ctx: AppContext = Depends(get_ctx),
     repository: PortalRepository = Depends(get_repository),
 ) -> DeveloperAccountListResponse:
     service = build_developer_account_service(repository, ctx)
-    status_filter = DeveloperStatus(status) if status is not None else None
-    developers, total = await service.list(status=status_filter, limit=limit, offset=offset)
+    developers, total = await service.list(status=status, limit=limit, offset=offset)
     return DeveloperAccountListResponse(
         items=[_developer_schema(d) for d in developers], total=total, limit=limit, offset=offset,
     )
@@ -229,6 +240,7 @@ async def list_sdks(
     ctx: AppContext = Depends(get_ctx),
     repository: PortalRepository = Depends(get_repository),
 ) -> SdkPackageListResponse:
+    _reject_null_byte_query(module_name=module_name, language=language)
     service = build_sdk_generator_service(repository, ctx)
     packages, total = await service.list(module_name=module_name, language=language, limit=limit, offset=offset)
     return SdkPackageListResponse(items=[_sdk_schema(p) for p in packages], total=total, limit=limit, offset=offset)

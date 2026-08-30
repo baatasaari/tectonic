@@ -178,6 +178,17 @@ src/sentinel_agents/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **NUL bytes in raw `Query()` string parameters reaching the database
+  unvalidated** (ticket #82's platform-wide sweep, following the same bug
+  a real CI run found on Multi-tenancy's and Billing and Metering's own
+  contract tiers — see either module's own README for the original
+  finding). `GET /alerts`'s `tenant_id`/`severity` and
+  `GET /alerts/{alert_id}`'s `tenant_id` never ran through a NUL-byte
+  validator; fixed with `_reject_null_byte_query()`. No route-level
+  test file existed for this module before this fix —
+  `tests/unit/test_routes_sentinel.py` (new) pins just this regression;
+  comprehensive route coverage remains a real, separately-scoped gap.
+
 ## Running locally
 
 ```bash

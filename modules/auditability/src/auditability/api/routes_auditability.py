@@ -38,6 +38,19 @@ from auditability.security.jwt_auth import caller_service_name
 router = APIRouter(prefix="/v1/auditability", tags=["auditability"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter, required or
+    optional alike."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _event_schema(e) -> AuditEventSchema:
     return AuditEventSchema(
         id=e.id, tenant_id=e.tenant_id, source_module=e.source_module, event_type=e.event_type,
@@ -85,6 +98,9 @@ async def list_events(
     offset: int = Query(0, ge=0),
     repository: AuditabilityRepository = Depends(get_repository),
 ) -> AuditEventListResponse:
+    _reject_null_byte_query(
+        tenant_id=tenant_id, event_type=event_type, source_module=source_module, control_name=control_name,
+    )
     event_filter = AuditEventFilter(
         tenant_id=tenant_id, event_type=event_type, source_module=source_module, control_name=control_name,
         occurred_after=occurred_after, occurred_before=occurred_before, limit=limit, offset=offset,
@@ -98,6 +114,7 @@ async def verify_chain_route(
     tenant_id: str = Query(...),
     repository: AuditabilityRepository = Depends(get_repository),
 ) -> ChainVerificationResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     events = await repository.list_events_for_chain(tenant_id)
     result = verify_chain(events)
     return ChainVerificationResponse(

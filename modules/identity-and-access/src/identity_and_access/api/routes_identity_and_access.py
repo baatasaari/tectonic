@@ -62,6 +62,18 @@ from identity_and_access.schemas.identity_and_access import (
 router = APIRouter(prefix="/v1/identity-access", tags=["identity-access"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _role_schema(role) -> RoleSchema:
     return RoleSchema(name=role.name, scopes=role.scopes, description=role.description, created_at=role.created_at)
 
@@ -122,14 +134,14 @@ async def register_identity(
 @router.get("/identities", response_model=IdentityListResponse)
 async def list_identities(
     tenant_id: str | None = Query(None),
-    status: str | None = Query(None),
+    status: IdentityStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     repository: IdentityAccessRepository = Depends(get_repository),
 ) -> IdentityListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     service = build_identity_registry_service(repository)
-    status_filter = IdentityStatus(status) if status is not None else None
-    identities, total = await service.list(tenant_id=tenant_id, status=status_filter, limit=limit, offset=offset)
+    identities, total = await service.list(tenant_id=tenant_id, status=status, limit=limit, offset=offset)
     return IdentityListResponse(
         items=[_identity_schema(i) for i in identities], total=total, limit=limit, offset=offset,
     )
@@ -263,6 +275,7 @@ async def list_identity_providers(
     offset: int = Query(0, ge=0),
     repository: IdentityAccessRepository = Depends(get_repository),
 ) -> IdentityProviderListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     service = build_identity_provider_service(repository)
     providers, total = await service.list(tenant_id=tenant_id, limit=limit, offset=offset)
     return IdentityProviderListResponse(
@@ -369,6 +382,7 @@ async def list_groups(
     offset: int = Query(0, ge=0),
     repository: IdentityAccessRepository = Depends(get_repository),
 ) -> GroupListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id, provider_id=provider_id)
     service = build_group_service(repository)
     groups, total = await service.list(tenant_id=tenant_id, provider_id=provider_id, limit=limit, offset=offset)
     return GroupListResponse(items=[_group_schema(g) for g in groups], total=total, limit=limit, offset=offset)
@@ -421,6 +435,7 @@ async def list_scim_tokens(
     offset: int = Query(0, ge=0),
     repository: IdentityAccessRepository = Depends(get_repository),
 ) -> ScimTokenListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     service = build_scim_token_service(repository)
     tokens, total = await service.list(tenant_id=tenant_id, limit=limit, offset=offset)
     return ScimTokenListResponse(items=[_scim_token_schema(t) for t in tokens], total=total, limit=limit, offset=offset)

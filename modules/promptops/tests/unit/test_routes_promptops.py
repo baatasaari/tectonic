@@ -199,3 +199,18 @@ def test_drift_check_endpoint():
 
     assert resp.status_code == 200
     assert resp.json()["drifted"] is False
+
+
+def test_list_prompt_versions_rejects_a_null_byte_in_tenant_id_with_a_clean_422():
+    """Ticket #82: a raw `Query()` string never runs through a Pydantic
+    body field's own NUL-byte validator, so this reached the repository
+    (and, against real Postgres, the database itself) raw instead of a
+    clean 422."""
+    app = _app(InMemoryPromptOpsRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/promptops/prompt-versions", params={"tenant_id": "a\x00b"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422

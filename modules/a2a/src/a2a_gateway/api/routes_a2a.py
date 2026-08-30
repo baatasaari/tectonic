@@ -38,6 +38,19 @@ from a2a_gateway.schemas.a2a import (
 router = APIRouter(prefix="/v1/a2a", tags=["a2a"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator (see e.g. Multi-tenancy's own
+    `_reject_null_byte` in schemas/multi_tenancy.py) -- a real CI run of
+    a sibling module's contract tier (ticket #82) surfaced this exact
+    bug class on a raw query parameter, an `UntranslatableCharacterError`
+    at the database instead of a clean 422. Applied at the top of every
+    route below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _task_schema(task) -> TaskSchema:
     return TaskSchema(
         id=task.id, tenant_id=task.tenant_id, direction=task.direction.value, peer_agent_url=task.peer_agent_url,
@@ -67,13 +80,19 @@ async def delegate(
 @router.get("/tasks", response_model=TaskListResponse)
 async def list_tasks(
     tenant_id: str | None = Query(None),
-    direction: str | None = Query(None),
+    direction: TaskDirection | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     repository: A2AGatewayRepository = Depends(get_repository),
 ) -> TaskListResponse:
-    parsed_direction = TaskDirection(direction) if direction else None
-    tasks, total = await repository.list_tasks(tenant_id=tenant_id, direction=parsed_direction, limit=limit, offset=offset)
+    # `direction` typed as TaskDirection | None: FastAPI/Pydantic validates and
+    # coerces it itself, rejecting anything not a real TaskDirection value (a NUL
+    # byte included) with a clean 422 -- this used to accept an arbitrary str and
+    # call TaskDirection(direction) by hand, which raised an unhandled ValueError
+    # (500) for any non-member string (same class ticket #82 already fixed on
+    # Billing and Metering's own InvoiceStatus filter).
+    _reject_null_byte_query(tenant_id=tenant_id)
+    tasks, total = await repository.list_tasks(tenant_id=tenant_id, direction=direction, limit=limit, offset=offset)
     return TaskListResponse(items=[_task_schema(t) for t in tasks], total=total, limit=limit, offset=offset)
 
 

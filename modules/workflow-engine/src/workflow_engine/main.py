@@ -18,8 +18,10 @@ from workflow_engine.api.routes_definitions import router as definitions_router
 from workflow_engine.api.routes_instances import router as instances_router
 from workflow_engine.app_context import AppContext
 from workflow_engine.clients.http_clients import (
+    HTTPAgenticRAGClient,
     HTTPGuardrailsClient,
     HTTPHumanOversightClient,
+    HTTPIntentDetectionClient,
     HTTPLLMGatewayClient,
     HTTPToolOrchestrationClient,
 )
@@ -51,7 +53,7 @@ def build_app_context(settings: WorkflowEngineSettings) -> tuple[AppContext, Kaf
         event_publisher=event_publisher,
         llm_gateway=HTTPLLMGatewayClient(
             settings.llm_gateway_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
-            ttl_seconds=settings.jwt_ttl_seconds,
+            ttl_seconds=settings.jwt_ttl_seconds, default_virtual_key=settings.llm_gateway_virtual_key,
         ),
         tool_orchestration=HTTPToolOrchestrationClient(
             settings.tool_orchestration_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
@@ -66,6 +68,14 @@ def build_app_context(settings: WorkflowEngineSettings) -> tuple[AppContext, Kaf
             ttl_seconds=settings.jwt_ttl_seconds,
         ),
         symbolic_executor=SymbolicRuleExecutor(),
+        intent_detection=HTTPIntentDetectionClient(
+            settings.intent_detection_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        agentic_rag=HTTPAgenticRAGClient(
+            settings.agentic_rag_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
     )
     return ctx, event_publisher
 
@@ -83,7 +93,24 @@ async def lifespan(app: FastAPI):
         )
 
     ctx, event_publisher = build_app_context(settings)
-    await event_publisher.start()
+    try:
+        await event_publisher.start()
+    except Exception as exc:
+        # A genuine module-level gap surfaced standing this module up as a real
+        # process without a real Kafka broker (ticket #82): this was an
+        # unguarded await, so an unreachable broker crashed the whole app at
+        # startup even though nothing on the synchronous request path needs
+        # Kafka -- the outbox pattern is fire-and-forget by design (see
+        # core/outbox_worker.py's own docstring) and no module in this
+        # platform runs a real Kafka consumer yet. Degrading instead matches
+        # this module's own "safe direction to fail" posture elsewhere
+        # (Postgres/Kafka reported independently and non-fatally in
+        # /healthz): the outbox keeps queuing events durably in Postgres:
+        # OutboxRelayWorker's own per-event try/except already requeues
+        # publish failures for retry (poison-pilled after max_attempts)
+        # without this process ever going down, so a broker that comes back
+        # later drains the backlog with no further code change.
+        logger.warning("kafka_event_publisher_start_failed_degraded", error=str(exc))
     app.state.ctx = ctx
 
     @asynccontextmanager

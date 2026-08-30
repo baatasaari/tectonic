@@ -28,6 +28,18 @@ from deployment_strategy.schemas.deployment_strategy import (
 router = APIRouter(prefix="/v1/deployment-strategy", tags=["deployment-strategy"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _deployment_schema(deployment) -> DeploymentSchema:
     return DeploymentSchema(
         id=deployment.id, tenant_id=deployment.tenant_id, service_name=deployment.service_name,
@@ -61,6 +73,7 @@ async def list_deployments(
     offset: int = Query(0, ge=0),
     repository: DeploymentStrategyRepository = Depends(get_repository),
 ) -> DeploymentListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id, service_name=service_name)
     deployments, total = await repository.list_deployments(
         tenant_id=tenant_id, service_name=service_name, limit=limit, offset=offset,
     )

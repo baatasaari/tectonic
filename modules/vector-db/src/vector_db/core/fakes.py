@@ -21,8 +21,8 @@ class StubEmbeddingProvider:
         self.dimension = dimension
         self.calls: list[dict] = []
 
-    async def embed(self, text: str, *, model: str | None = None) -> list[float]:
-        self.calls.append({"text": text, "model": model})
+    async def embed(self, text: str, *, model: str | None = None, tenant_id: str = "") -> list[float]:
+        self.calls.append({"text": text, "model": model, "tenant_id": tenant_id})
         seed = f"{model or 'default'}:{text}".encode()
         digest = hashlib.sha256(seed).digest()
         return [(digest[i % len(digest)] / 255.0) * 2 - 1 for i in range(self.dimension)]

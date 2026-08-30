@@ -52,6 +52,18 @@ from observability.schemas.observability import (
 router = APIRouter(prefix="/v1/observability", tags=["observability"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _span_schema(span) -> SpanSchema:
     return SpanSchema(
         id=span.id, tenant_id=span.tenant_id, trace_id=span.trace_id, span_id=span.span_id,
@@ -109,6 +121,7 @@ async def reasoning_narrative(
     ctx: AppContext = Depends(get_ctx),
     repository: ObservabilityRepository = Depends(get_repository),
 ) -> ReasoningNarrativeResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     spans = await repository.list_spans_for_trace(tenant_id, trace_id)
     if not spans:
         raise HTTPException(status_code=404, detail=str(TraceNotFoundError(trace_id)))
@@ -124,6 +137,7 @@ async def cost_attribution(
     tenant_id: str = Query(...),
     repository: ObservabilityRepository = Depends(get_repository),
 ) -> CostAttributionResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     spans = await repository.list_spans_for_trace(tenant_id, trace_id)
     if not spans:
         raise HTTPException(status_code=404, detail=str(TraceNotFoundError(trace_id)))
@@ -149,6 +163,7 @@ async def trace_completeness(
     ctx: AppContext = Depends(get_ctx),
     repository: ObservabilityRepository = Depends(get_repository),
 ) -> TraceCompletenessResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     calculator = build_completeness_calculator(ctx, repository)
     result = await calculator.compute(tenant_id)
     return TraceCompletenessResponse(
@@ -167,6 +182,7 @@ async def list_traces(
     offset: int = Query(0, ge=0),
     repository: ObservabilityRepository = Depends(get_repository),
 ) -> TraceListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id, workflow_type=workflow_type)
     summaries, total = await repository.list_trace_summaries(
         tenant_id, workflow_type=workflow_type, limit=limit, offset=offset,
     )
@@ -181,6 +197,7 @@ async def get_trace(
     tenant_id: str = Query(...),
     repository: ObservabilityRepository = Depends(get_repository),
 ) -> TraceDetailResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     spans = await repository.list_spans_for_trace(tenant_id, trace_id)
     if not spans:
         raise HTTPException(status_code=404, detail=str(TraceNotFoundError(trace_id)))
@@ -209,6 +226,7 @@ async def list_slos(
     offset: int = Query(0, ge=0),
     repository: ObservabilityRepository = Depends(get_repository),
 ) -> SLOListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     service = build_slo_service(repository)
     slos, total = await service.list(tenant_id=tenant_id, limit=limit, offset=offset)
     return SLOListResponse(items=[_slo_schema(s) for s in slos], total=total, limit=limit, offset=offset)
@@ -268,6 +286,7 @@ async def list_alert_rules(
     offset: int = Query(0, ge=0),
     repository: ObservabilityRepository = Depends(get_repository),
 ) -> AlertRuleListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     service = build_alerting_service(repository)
     rules, total = await service.list_rules(tenant_id=tenant_id, enabled=enabled, limit=limit, offset=offset)
     return AlertRuleListResponse(items=[_alert_rule_schema(r) for r in rules], total=total, limit=limit, offset=offset)
@@ -315,14 +334,14 @@ async def evaluate_alert_rule(
 @router.get("/alert-events", response_model=AlertEventListResponse)
 async def list_alert_events(
     tenant_id: str | None = Query(None),
-    status: str | None = Query(None),
+    status: AlertStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     repository: ObservabilityRepository = Depends(get_repository),
 ) -> AlertEventListResponse:
-    status_filter = AlertStatus(status) if status is not None else None
+    _reject_null_byte_query(tenant_id=tenant_id)
     events, total = await repository.list_alert_events(
-        tenant_id=tenant_id, status=status_filter, limit=limit, offset=offset,
+        tenant_id=tenant_id, status=status, limit=limit, offset=offset,
     )
     return AlertEventListResponse(
         items=[_alert_event_schema(e) for e in events], total=total, limit=limit, offset=offset,

@@ -22,11 +22,23 @@ class KafkaEventPublisher:
         self._producer: AIOKafkaProducer | None = None
 
     async def start(self) -> None:
-        self._producer = AIOKafkaProducer(
+        # A genuine module-level gap ticket #82 surfaced running this module
+        # for real without a Kafka broker (main.py's own lifespan degrades on
+        # a failed start instead of crashing): this assigned `self._producer`
+        # *before* actually confirming `.start()` succeeded, so a failed
+        # start still left `_producer` pointing at a real-but-never-actually-
+        # started `AIOKafkaProducer` -- not `None`. `publish()`'s own
+        # `if self._producer is None` guard never fired, and calling
+        # `send_and_wait` on that half-initialized producer hung indefinitely
+        # instead of raising immediately -- see Workflow Engine's own
+        # identical fix (clients/kafka_publisher.py) for the full reasoning.
+        # Only assign `self._producer` once `.start()` has actually succeeded.
+        producer = AIOKafkaProducer(
             bootstrap_servers=self._bootstrap_servers,
             value_serializer=lambda v: json.dumps(v).encode("utf-8"),
         )
-        await self._producer.start()
+        await producer.start()
+        self._producer = producer
 
     async def stop(self) -> None:
         if self._producer is not None:

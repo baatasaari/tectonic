@@ -11,6 +11,8 @@ from conversational_engine.core.fakes import (
     StubGuardrailsClient,
     StubHumanOversightClient,
     StubLLMGatewayClient,
+    StubLongTermMemoryClient,
+    StubWorkflowEngineClient,
 )
 from conversational_engine.core.session_manager import SessionManager
 
@@ -25,6 +27,8 @@ class Harness:
         self.observability = InMemoryObservabilityClient()
         self.auditability = InMemoryAuditabilityClient()
         self.settings = kwargs.get("settings") or ConversationalEngineSettings()
+        self.workflow_engine = kwargs.get("workflow_engine") or StubWorkflowEngineClient()
+        self.long_term_memory = kwargs.get("long_term_memory") or StubLongTermMemoryClient()
 
         self.manager = SessionManager(
             repository=self.repository,
@@ -35,6 +39,8 @@ class Harness:
             observability=self.observability,
             auditability=self.auditability,
             settings=self.settings,
+            workflow_engine=self.workflow_engine,
+            long_term_memory=self.long_term_memory,
         )
 
 

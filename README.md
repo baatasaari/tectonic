@@ -992,7 +992,113 @@ scenario that still exercises nearly every module for a real reason
 genuine human-escalation path, and the identity/entitlement/billing/
 audit/tracing governance every one of those needs in production), not
 a contrived one. Building and verifying it end-to-end against real
-running module instances is separate, tracked follow-up work.
+running module instances is ticket #82's own work, now done: all
+three of the design doc's own scripted conversations ("what's your
+return policy?", "where's my order #A1029?", "I want a refund for
+order #A1029, it's $850.") run correctly against 15 real module
+processes plus one small mock stub (an LLM provider and a merchant's
+order-status backend — the only two things genuinely outside this
+platform's own 34 modules), no Docker (this sandbox has none —
+`scripts/product-slice-stubs/stack.py` launches every module as a
+real `uvicorn` process against its own real per-module Postgres
+database instead). The refund scenario's own real escalation reaches
+Human Oversight's real queue and a real reviewer decision resumes the
+conversation correctly; Auditability shows a real, hash-chained event
+trail for it; Billing and Metering shows real, non-zero usage against
+Acme Corp's own seeded pricing plan. `tests/product-slices/` is the
+one net-new automated test this added (`test_support_agent.py`, run
+against a real stack it stands up and tears down itself; see that
+directory's own README for how to run it) plus a standalone,
+platform-wide regression test for the cross-process trace-propagation
+fix Observability's own README already documented but never actually
+had a committed test for (`test_trace_propagation.py`) — proving real
+W3C `traceparent` continuity across a real HTTP hop, not spans
+landing in Observability's own store (no real OTel Collector/Tempo is
+available in this sandbox either, a documented, unclosed gap, not a
+silently skipped one). Wired into CI as its own `product-slice-support-agent`
+job (`.github/workflows/ci.yml`) — a required check like every module's own
+tiers, not optional — separate from the per-module `lint-and-test` matrix
+since it needs all 15 of this slice's own modules running as real
+processes at once.
+
+Standing the slice up for real surfaced a long tail of genuine
+module-level gaps invisible under every module's own stubbed test
+suite — every peer HTTP client this slice's own critical path
+actually exercises had at least one real wire-shape mismatch (LLM
+Gateway, Tool Orchestration, Guardrails, Human Oversight, Intent
+Detection, Agentic RAG's own Vector DB and LLM Gateway clients, Vector
+DB's own LLM Gateway client, Knowledge Base's own Vector DB client),
+each fixed against the real peer's actual route and schema, not
+against another invented shape. Real, not merely wire-shape, bugs
+turned up too: a `KafkaEventPublisher.start()` that left a
+half-initialized producer assigned on a failed connect, hanging
+`publish()` forever instead of failing fast (Workflow Engine and
+Multi-tenancy both carried this); a synthesized default Guardrails
+policy profile using the literal string `"default"` as its id where a
+real UUID column expected one; Billing and Metering's own
+`PricingPlanService.create()` silently re-syncing (not adding to) a
+tenant's Multi-tenancy entitlements to exactly its own plan's resource
+keys, clobbering a wider entitlement grant made moments earlier if the
+plan's own `unit_prices` didn't name every module the tenant needed;
+and several missing admin/provisioning endpoints this slice needed to
+configure real infrastructure end-to-end that no prior caller had ever
+needed (LLM Gateway provider/budget-policy creation, Tool
+Orchestration's own known-tool registration bypassing the
+LLM-synthesis pipeline, Billing's own real HTTP trigger for its
+already-tested `meter_tenant()`, Workflow Engine's own by-name
+definition lookup and symbolic-ruleset configuration, and a real
+Conversational-Engine-to-Workflow-Engine integration that plainly
+didn't exist before — Conversational Engine called LLM Gateway
+directly for every turn, never routing through Workflow Engine's own
+neurosymbolic orchestration the design doc's own sequence diagram
+always assumed). Every fix has its own focused unit test and its own
+module's README entry; nothing here duplicates that detail.
+
+**Platform-wide follow-up to the CI run this ticket's own product-slice
+job triggered**: that job's first real GitHub Actions run found a NUL
+byte in a raw FastAPI `Query()` string parameter reaching Postgres
+unvalidated on Multi-tenancy's and Billing and Metering's own contract
+tiers (never runs through the same NUL-byte validator a Pydantic body
+field gets) — fixed there, then swept across every other module carrying
+the same bug (and the sibling hand-converted-Enum-raising-ValueError/500
+bug wherever it co-occurred): a2a, agent-cards, agent-marketplace,
+auditability, deployment-strategy, evaluation-framework, finops,
+graph-db, guardrails, human-oversight, identity-and-access,
+intent-detection, knowledge-base, llm-gateway, llmops, long-term-memory,
+mcp, multi-modality, observability, promptops, regulatory-compliance,
+sdk-and-developer-portal, secrets-and-credential-management,
+sentinel-agents, tool-orchestration — 24 modules total, each with a
+regression test and its own README note; full account in each module's
+own README and `SESSION_HANDOFF.md`.
+
+**Phase 2's own next vertical slice: Conversational Engine
+completeness**, picked from the independent architecture assessment's
+own §4 module-by-module findings and §7 roadmap (Phase 2's exit bar:
+"one paid-pilot-ready conversational agent with security, evaluation,
+SLO, cost, and privacy evidence") as the first slice to close after
+ticket #82's own support-agent slice proved the happy path. Three real
+gaps closed: **session list/search/export/delete** (this module had
+only `GET /{id}` before — no way to list, search, export, or delete a
+session at all); **cross-session identity continuity actually wired**
+(the LLD's own named differentiator and its own
+`session.cross_channel_continuity` config flag existed, but
+`SessionManager` never received a `LongTermMemoryClient` port instance
+at all — dead wiring, now fixed and called once per turn, best-effort,
+for a session with a `user_ref`); and **every one of this module's peer
+HTTP clients' real wire shape**, fixed for real — standing this module's
+own DIRECT (non-`workflow_routing`) turn-handling path up against real
+running peers for the first time (ticket #82's own product-slice test
+only ever exercised the `workflow_routing` path, which routes through
+Workflow Engine's own already-fixed clients instead) surfaced that every
+client here except `HTTPWorkflowEngineClient` and `HTTPAuditabilityClient`
+was posting an invented request shape and/or reading an invented
+response shape, including this module's own flagship streaming feature
+calling an LLM Gateway route that doesn't exist. Full account, including
+every peer's real route/schema and what this pass deliberately does not
+cover (per-tenant virtual key resolution, Long-Term Memory write-back,
+true token-by-token upstream streaming, voice/WebSocket channel
+adapters, the broader Long-Term Memory "memory governance" gap), in that
+module's own README.
 
 ## Modules
 

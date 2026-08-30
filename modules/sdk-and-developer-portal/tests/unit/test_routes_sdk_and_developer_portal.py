@@ -159,3 +159,33 @@ def test_adoption_endpoints_with_no_activity():
         rate = client.get("/v1/sdk-portal/adoption-rate", headers=_headers()).json()
         assert rate["total_developers"] == 1
         assert rate["adopted_count"] == 0
+
+
+def test_list_developers_rejects_a_status_that_is_not_a_real_developer_status():
+    """`status` used to be a bare `str` hand-converted to `DeveloperStatus`,
+    raising an unhandled `ValueError` (500) for any non-member string --
+    now typed `DeveloperStatus` directly so FastAPI/Pydantic rejects it
+    with a clean 422."""
+    app = _app(InMemoryPortalRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/sdk-portal/developers", params={"status": "not-a-real-status"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
+def test_list_sdks_rejects_a_null_byte_in_module_name_with_a_clean_422():
+    """Ticket #82: a raw `Query()` string never runs through a Pydantic
+    body field's own NUL-byte validator, so this reached the repository
+    (and, against real Postgres, the database itself) raw instead of a
+    clean 422."""
+    app = _app(InMemoryPortalRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/sdk-portal/sdks", params={"module_name": "a\x00b"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422

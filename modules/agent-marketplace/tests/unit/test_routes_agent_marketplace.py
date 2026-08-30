@@ -119,3 +119,34 @@ def test_approving_an_already_published_listing_returns_409():
         resp = client.post(f"/v1/agent-marketplace/listings/{submitted['id']}/approve", json={}, headers=headers)
 
     assert resp.status_code == 409
+
+
+def test_search_listings_rejects_a_null_byte_in_tenant_id_with_a_clean_422():
+    """Ticket #82: a raw `Query()` string never runs through a Pydantic
+    body field's own NUL-byte validator, so this reached the repository
+    (and, against real Postgres, the database itself) raw instead of a
+    clean 422."""
+    app = _app(InMemoryAgentMarketplaceRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/agent-marketplace/listings", params={"tenant_id": "a\x00b"}, headers={"Authorization": f"Bearer {_token()}"},
+        )
+
+    assert resp.status_code == 422
+
+
+def test_search_listings_rejects_a_status_that_is_not_a_real_listing_status():
+    """`status` is now typed `ListingStatus | None` directly, so
+    FastAPI/Pydantic itself rejects anything not a real member (a clean
+    422) instead of this route hand-parsing it and letting an invalid
+    value raise an unhandled ValueError (500)."""
+    app = _app(InMemoryAgentMarketplaceRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/agent-marketplace/listings", params={"status": "not-a-real-status"},
+            headers={"Authorization": f"Bearer {_token()}"},
+        )
+
+    assert resp.status_code == 422

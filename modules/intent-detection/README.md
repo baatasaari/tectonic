@@ -141,6 +141,21 @@ src/intent_detection/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **NUL bytes in a raw string query parameter reaching the database
+  unvalidated** (ticket #82's platform-wide sweep, following the same bug
+  a real CI run found on Multi-tenancy's and Billing and Metering's own
+  contract tiers — see either module's own README for the original
+  finding; this module wasn't in that sweep's original module list —
+  found by re-grepping the whole platform for the same pattern once the
+  sweep was otherwise done). `GET /drift-reports`'s `tenant_id` never
+  ran through a NUL-byte validator — a plain, un-wrapped `str` function
+  parameter rather than an explicit `Query()` default, which is why the
+  earlier grep for `Query(` missed this file; fixed with
+  `_reject_null_byte_query()`. No route-level test file existed for
+  this module before this fix — `tests/unit/test_routes_intents.py`
+  (new) pins just this regression; comprehensive route coverage remains
+  a real, separately-scoped gap.
+
 ## Running locally
 
 ```bash

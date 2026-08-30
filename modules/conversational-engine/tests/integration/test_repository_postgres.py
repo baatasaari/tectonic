@@ -20,6 +20,8 @@ from alembic import command
 from conversational_engine.core.domain import (
     Channel,
     ConversationSessionRecord,
+    HandoffEventRecord,
+    HandoffTriggerReason,
     MessageDirection,
     MessageRecord,
     new_id,
@@ -118,5 +120,113 @@ async def test_conversation_session_round_trips_real_uuid_pk(migrated_url):
             assert fetched is not None
             assert fetched.id == created.id
             assert fetched.channel == Channel.WHATSAPP
+    finally:
+        await engine.dispose()
+
+
+async def test_get_latest_handoff_event_returns_the_most_recent_one_for_the_right_session(migrated_url):
+    """ticket #82: resume_from_workflow's own real-Postgres-backed lookup --
+    a session can accumulate more than one handoff event over its lifetime
+    (e.g. a manual handoff followed later by a workflow escalation), and
+    the most recent one is the one that matters for resuming."""
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyConversationRepository(session)
+            created = await repo.create_session(
+                ConversationSessionRecord(id=new_id(), tenant_id="acme", channel=Channel.WEB, trace_id="trace-3")
+            )
+            other_session = await repo.create_session(
+                ConversationSessionRecord(id=new_id(), tenant_id="acme", channel=Channel.WEB, trace_id="trace-4")
+            )
+
+            assert await repo.get_latest_handoff_event(created.id) is None
+
+            await repo.create_handoff_event(
+                HandoffEventRecord(
+                    id=new_id(), session_id=created.id, trigger_reason=HandoffTriggerReason.EXPLICIT, target="human:t-1"
+                )
+            )
+            await repo.create_handoff_event(
+                HandoffEventRecord(
+                    id=new_id(), session_id=other_session.id, trigger_reason=HandoffTriggerReason.EXPLICIT,
+                    target="human:t-other",
+                )
+            )
+            latest = HandoffEventRecord(
+                id=new_id(), session_id=created.id, trigger_reason=HandoffTriggerReason.WORKFLOW_ESCALATION,
+                target="workflow-instance:wf-1",
+            )
+            await repo.create_handoff_event(latest)
+
+            fetched = await repo.get_latest_handoff_event(created.id)
+            assert fetched is not None
+            assert fetched.id == latest.id
+            assert fetched.trigger_reason == HandoffTriggerReason.WORKFLOW_ESCALATION
+            assert fetched.target == "workflow-instance:wf-1"
+    finally:
+        await engine.dispose()
+
+
+async def test_list_sessions_is_tenant_scoped_filtered_and_paginated_against_real_postgres(migrated_url):
+    """Independent architecture assessment's Phase 2 exit bar
+    ("session list/search"). Proves the real aggregate COUNT + filtered
+    page query neither SQLite's unit-tier fakes nor a single-row test can
+    reliably prove."""
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyConversationRepository(session)
+            tenant = f"acme-{new_id()}"
+            for _ in range(3):
+                await repo.create_session(
+                    ConversationSessionRecord(id=new_id(), tenant_id=tenant, channel=Channel.WEB, trace_id="t")
+                )
+            await repo.create_session(
+                ConversationSessionRecord(
+                    id=new_id(), tenant_id=tenant, channel=Channel.WHATSAPP, trace_id="t", user_ref="user-1",
+                )
+            )
+            await repo.create_session(
+                ConversationSessionRecord(id=new_id(), tenant_id=f"other-{new_id()}", channel=Channel.WEB, trace_id="t")
+            )
+
+            page, total = await repo.list_sessions(tenant, limit=2, offset=0)
+            assert total == 4
+            assert len(page) == 2
+
+            filtered, filtered_total = await repo.list_sessions(tenant, channel="whatsapp", user_ref="user-1")
+            assert filtered_total == 1
+            assert filtered[0].channel == Channel.WHATSAPP
+    finally:
+        await engine.dispose()
+
+
+async def test_delete_session_removes_the_session_and_its_messages_and_handoff_events(migrated_url):
+    """Independent architecture assessment's Phase 2 exit bar ("session...
+    delete"). Proves the explicit ordered cascade (no ON DELETE CASCADE on
+    these FKs — see db/models.py) actually clears every child row against
+    a real Postgres foreign-key constraint, not just an in-memory fake."""
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyConversationRepository(session)
+            created = await repo.create_session(
+                ConversationSessionRecord(id=new_id(), tenant_id="acme", channel=Channel.WEB, trace_id="t")
+            )
+            await repo.append_message(
+                MessageRecord(id=new_id(), session_id=created.id, direction=MessageDirection.INBOUND, content="hi")
+            )
+            await repo.create_handoff_event(
+                HandoffEventRecord(
+                    id=new_id(), session_id=created.id, trigger_reason=HandoffTriggerReason.EXPLICIT, target="human:t-1"
+                )
+            )
+
+            await repo.delete_session(created.id)
+
+            assert await repo.get_session(created.id) is None
+            assert await repo.list_messages(created.id) == []
+            assert await repo.get_latest_handoff_event(created.id) is None
     finally:
         await engine.dispose()

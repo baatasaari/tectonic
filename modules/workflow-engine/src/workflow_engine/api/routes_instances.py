@@ -42,7 +42,21 @@ async def start_instance(
     ctx: AppContext = Depends(get_ctx),
     repository: WorkflowRepository = Depends(get_repository),
 ) -> StartInstanceResponse:
-    definition = await repository.get_definition(body.definition_id)
+    tenant_id = _tenant_id(request, ctx)
+    # `body.definition_id` resolves by name when it isn't a UUID -- see
+    # WorkflowRepository.get_definition_by_name's own docstring (ticket #82)
+    # for why: a caller like Conversational Engine only knows a definition's
+    # stable name at its own deployment time, before the definition (and
+    # its server-generated id) exists yet.
+    try:
+        uuid.UUID(body.definition_id)
+        is_uuid = True
+    except ValueError:
+        is_uuid = False
+    definition = (
+        await repository.get_definition(body.definition_id) if is_uuid
+        else await repository.get_definition_by_name(body.definition_id, tenant_id)
+    )
     if definition is None:
         raise HTTPException(status_code=404, detail="definition not found")
     if body.definition_version is not None and body.definition_version != definition.version:
@@ -55,7 +69,7 @@ async def start_instance(
         id=new_id(),
         definition_id=definition.id,
         definition_version=definition.version,
-        tenant_id=_tenant_id(request, ctx),
+        tenant_id=tenant_id,
         trace_id=trace_id,
         context=dict(body.initial_context),
     )

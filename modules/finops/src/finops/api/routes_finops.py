@@ -27,6 +27,18 @@ from finops.schemas.finops import (
 router = APIRouter(prefix="/v1/finops", tags=["finops"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _policy_schema(policy) -> BudgetPolicySchema:
     return BudgetPolicySchema(
         id=policy.id, tenant_id=policy.tenant_id, period=policy.period.value, limit_amount=policy.limit_amount,
@@ -62,17 +74,23 @@ async def report_usage_event(
 @router.get("/cost-reports/{tenant_id}", response_model=CostReportSchema)
 async def get_cost_report(
     tenant_id: str,
-    period: str = Query(...),
+    period: BudgetPeriod = Query(...),
     budget_policy_id: str | None = Query(None),
     ctx: AppContext = Depends(get_ctx),
     repository: FinOpsRepository = Depends(get_repository),
 ) -> CostReportSchema:
+    # `period` typed as BudgetPeriod directly: FastAPI/Pydantic validates and
+    # coerces it itself, rejecting anything not a real BudgetPeriod value (a NUL
+    # byte included) with a clean 422 -- this used to accept an arbitrary str and
+    # call BudgetPeriod(period) by hand, which raised an unhandled ValueError
+    # (500) for any non-member string (ticket #82).
+    _reject_null_byte_query(tenant_id=tenant_id, budget_policy_id=budget_policy_id)
     budget_policy = await repository.get_budget_policy(budget_policy_id) if budget_policy_id else None
     if budget_policy_id and budget_policy is None:
         raise HTTPException(status_code=404, detail=str(BudgetPolicyNotFoundError(budget_policy_id)))
 
     service = build_usage_aggregation_service(repository, ctx)
-    report = await service.cost_report(tenant_id=tenant_id, period=BudgetPeriod(period), budget_policy=budget_policy)
+    report = await service.cost_report(tenant_id=tenant_id, period=period, budget_policy=budget_policy)
     return CostReportSchema(
         tenant_id=report.tenant_id, period=report.period.value, llm_gateway_spend=report.llm_gateway_spend,
         other_usage_cost=report.other_usage_cost, total_cost=report.total_cost, forecast_amount=report.forecast_amount,
@@ -89,7 +107,7 @@ async def create_budget_policy(
 ) -> BudgetPolicySchema:
     service = build_budget_policy_service(repository)
     policy = await service.create(
-        tenant_id=tenant_id, period=BudgetPeriod(body.period), limit_amount=body.limit_amount,
+        tenant_id=tenant_id, period=body.period, limit_amount=body.limit_amount,
         alert_threshold_pct=body.alert_threshold_pct,
     )
     return _policy_schema(policy)

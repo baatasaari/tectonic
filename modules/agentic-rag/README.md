@@ -137,6 +137,27 @@ src/agentic_rag/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **Real wire shapes for the Vector DB and LLM Gateway clients** (ticket
+  #82's own Phase 2 support-agent slice, standing this module up against
+  real running peers for the first time): `HTTPVectorDBClient.search()`
+  posted an invented `/v1/vector-db/search {query, scope, tenant_id}`
+  shape — Vector DB's real route is `/v1/vector-db/query`, `QueryRequest`'s
+  real fields (`tenant_id`, `text`, `filters`), no `scope` concept.
+  `HTTPLLMGatewayClient.assess_groundedness()`/`.reformulate()` posted to
+  invented `/v1/rag/assess-groundedness`/`/v1/rag/reformulate` paths LLM
+  Gateway never implemented (and never should — those are this module's
+  own business logic, not a generic capability LLM Gateway itself should
+  expose) — fixed to call the real `/v1/llm-gateway/chat/completions`,
+  same pattern as Workflow Engine's own identically-named client class.
+  All three fixes pinned with respx-based wire-shape tests
+  (`tests/unit/test_http_clients_real_wire_shapes.py`). Hybrid retrieval
+  fan-out (Graph DB, Knowledge Base's own symbolic lookup) is disabled
+  by this slice's own deployment config
+  (`retrieval.hybrid_retrieval_enabled=false`) rather than fixed: Graph
+  DB is legitimately out of this slice's scope, and Knowledge Base has
+  no real symbolic-lookup endpoint at all yet — a real, separately-scoped
+  gap, not invented around here.
+
 ## Running locally
 
 ```bash

@@ -34,6 +34,18 @@ from mcp_gateway.schemas.mcp import (
 router = APIRouter(prefix="/v1/mcp", tags=["mcp"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 async def _server_schema(server, repository: MCPGatewayRepository) -> McpServerSchema:
     tools = await repository.list_tools(server.id)
     return McpServerSchema(
@@ -61,6 +73,7 @@ async def list_servers(
     offset: int = Query(0, ge=0),
     repository: MCPGatewayRepository = Depends(get_repository),
 ) -> McpServerListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     service = build_registry_service(repository)
     servers, total = await service.list(tenant_id=tenant_id, limit=limit, offset=offset)
     items = [await _server_schema(s, repository) for s in servers]

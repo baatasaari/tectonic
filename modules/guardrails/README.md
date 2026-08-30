@@ -164,6 +164,39 @@ src/guardrails/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **A real UUID for the synthesized default policy profile** (ticket
+  #82's own Phase 2 support-agent slice, standing this module up against
+  a real running Postgres for the first time for a tenant with no policy
+  profile of its own yet) — `POST /v1/guardrails/check`'s own
+  `_default_profile()` fallback (a real, in-memory, never-persisted
+  stand-in used whenever a tenant hasn't created a profile) used the
+  literal string `"default"` as its `id`. That's harmless against
+  SQLite's own untyped `CHAR(36)` unit-test column, but a genuine
+  `DataError` against a real Postgres UUID column once
+  `create_intervention_log` tried to write it — invisible before because
+  every prior test seeded a real profile first. Fixed to mint a real
+  UUID per call instead (nothing needs to look this ephemeral profile up
+  again by that id, unlike a real, persisted one) — see
+  `tests/integration/test_check_route_postgres.py`.
+
+- **NUL bytes/invalid enum values reaching the database or crashing
+  unhandled** (ticket #82's platform-wide sweep, following the same bug
+  a real CI run found on Multi-tenancy's and Billing and Metering's own
+  contract tiers — see either module's own README for the original
+  finding; this module wasn't in that sweep's original module list —
+  found by re-grepping the whole platform for the same pattern once the
+  sweep was otherwise done). `GET /red-team-runs`'s `tenant_id` never
+  ran through a NUL-byte validator; fixed with
+  `_reject_null_byte_query()`. `POST /check`'s own `stage` was a bare
+  `str` on `CheckRequest`, hand-converted to `CheckStage` twice in the
+  route body, raising an unhandled `ValueError` (500) for any
+  non-member string — now typed `CheckStage` directly on the schema so
+  FastAPI/Pydantic itself rejects an invalid value with a clean 422. No
+  route-level test file existed for this module before this fix —
+  `tests/unit/test_routes_guardrails.py` (new) pins just these
+  regressions; comprehensive route coverage remains a real,
+  separately-scoped gap.
+
 ## Running locally
 
 ```bash

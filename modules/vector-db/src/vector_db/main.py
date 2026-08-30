@@ -53,6 +53,7 @@ def build_app_context(settings: VectorDbSettings, *, qdrant_client: AsyncQdrantC
     embeddings = HTTPEmbeddingProvider(
         settings.llm_gateway_base_url, settings.qdrant.default_embedding_model,
         issuer=settings.service_name, shared_secret=settings.jwt_shared_secret, ttl_seconds=settings.jwt_ttl_seconds,
+        default_virtual_key=settings.llm_gateway_virtual_key,
     )
     # A real, persistent migration repository -- Postgres-backed, not the in-memory
     # fake this module's own production wiring used to default to (independent

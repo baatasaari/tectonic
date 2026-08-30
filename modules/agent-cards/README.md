@@ -107,6 +107,13 @@ src/agent_cards/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **NUL bytes in raw `Query()` string parameters reaching the database
+  unvalidated** (ticket #82's platform-wide sweep, following the same
+  bug a real CI run found on Multi-tenancy's and Billing and Metering's
+  own contract tiers — see either module's own README for the original
+  finding). `GET /agent-cards`'s `tenant_id`/`skill_id` never ran through
+  a NUL-byte validator; fixed with `_reject_null_byte_query()`.
+
 ## Running locally
 
 ```bash

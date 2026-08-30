@@ -26,6 +26,18 @@ from agent_cards.schemas.agent_cards import (
 router = APIRouter(prefix="/v1/agent-cards", tags=["agent-cards"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _card_schema(card, *, is_stale: bool) -> AgentCardSchema:
     return AgentCardSchema(
         id=card.id, tenant_id=card.tenant_id, agent_ref=card.agent_ref, name=card.name, description=card.description,
@@ -60,6 +72,7 @@ async def discover_cards(
     ctx: AppContext = Depends(get_ctx),
     repository: AgentCardsRepository = Depends(get_repository),
 ) -> AgentCardListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id, skill_id=skill_id)
     service = build_discovery_service(repository, ctx)
     results, total = await service.search(tenant_id=tenant_id, skill_id=skill_id, limit=limit, offset=offset)
     items = [_card_schema(card, is_stale=is_stale) for card, is_stale in results]

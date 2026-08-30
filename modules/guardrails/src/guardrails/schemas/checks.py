@@ -5,10 +5,12 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from guardrails.core.domain import CheckStage
+
 
 class CheckRequest(BaseModel):
     text: str
-    stage: str
+    stage: CheckStage
     policy_profile_id: str | None = None
     context: str | None = None  # see policy_engine.py's docstring for why this exists
 

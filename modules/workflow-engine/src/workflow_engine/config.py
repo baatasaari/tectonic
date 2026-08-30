@@ -95,9 +95,17 @@ class WorkflowEngineSettings(BaseSettings):
     entitlement_gate_cache_ttl_seconds: float = 30.0
     http_port: int = 8080
     llm_gateway_base_url: str = "http://localhost:8082"
+    # Deliberately deployment-wide, not per-tenant/per-step -- see
+    # clients/http_clients.py's HTTPLLMGatewayClient docstring (ticket #82).
+    llm_gateway_virtual_key: str = "workflow-engine-default"
     tool_orchestration_base_url: str = "http://localhost:8083"
     guardrails_base_url: str = "http://localhost:8093"
     human_oversight_base_url: str = "http://localhost:8095"
+    # Added for the intent step (ticket #82) -- this module had no Intent
+    # Detection client at all before the Phase 2 support-agent slice.
+    intent_detection_base_url: str = "http://localhost:8084"
+    # Added for the retrieve step (ticket #82) -- likewise no Agentic RAG client before.
+    agentic_rag_base_url: str = "http://localhost:8085"
 
     # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
     # every module, so this field's env var name is NOT prefixed like the rest of this

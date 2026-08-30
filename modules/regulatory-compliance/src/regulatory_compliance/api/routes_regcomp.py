@@ -37,6 +37,18 @@ from regulatory_compliance.schemas.regcomp import (
 router = APIRouter(prefix="/v1/regulatory-compliance", tags=["regulatory-compliance"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _profile_schema(p: FrameworkProfileRecord) -> FrameworkProfileSchema:
     return FrameworkProfileSchema(
         id=p.id, tenant_id=p.tenant_id, framework_name=p.framework_name, version=p.version, enabled=p.enabled,
@@ -73,6 +85,7 @@ async def list_mappings(
     offset: int = Query(0, ge=0),
     repository: RegulatoryComplianceRepository = Depends(get_repository),
 ) -> ControlMappingListResponse:
+    _reject_null_byte_query(control_name=control_name, framework_name=framework_name)
     mappings, total = await repository.list_control_mappings(
         control_name=control_name, framework_name=framework_name, limit=limit, offset=offset,
     )
@@ -131,6 +144,7 @@ async def coverage(
     framework_name: str = Query(...),
     repository: RegulatoryComplianceRepository = Depends(get_repository),
 ) -> CoverageResponse:
+    _reject_null_byte_query(tenant_id=tenant_id, framework_name=framework_name)
     calculator = build_coverage_calculator(repository)
     pct, gaps = await calculator.coverage(tenant_id, framework_name)
     return CoverageResponse(tenant_id=tenant_id, framework_name=framework_name, coverage_percentage=pct, gaps=gaps)
@@ -163,6 +177,7 @@ async def get_evidence_pack(
     include_document: bool = Query(False),
     repository: RegulatoryComplianceRepository = Depends(get_repository),
 ) -> EvidencePackSchema:
+    _reject_null_byte_query(tenant_id=tenant_id)
     record = await repository.get_evidence_pack(tenant_id, pack_id)
     if record is None:
         raise HTTPException(status_code=404, detail=str(EvidencePackNotFoundError(pack_id)))

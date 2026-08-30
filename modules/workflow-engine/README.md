@@ -253,6 +253,35 @@ tests/integration/        Real-Postgres tier via testcontainers (needs Docker)
   Same mechanical rollout to the other 33 modules; see the root
   README's "Platform-kernel hardening" section.
 
+- **Real wire shapes for every peer client, plus the Kafka
+  half-initialized-producer hang** (ticket #82's own Phase 2 support-agent
+  slice — the first time this module ran as a real process against real
+  peers instead of every prior test's own stubs). Every one of the four
+  pre-existing peer clients (LLM Gateway, Tool Orchestration, Guardrails,
+  Human Oversight) posted an invented request shape and/or read an
+  invented response shape that never matched the real peer's actual
+  route/schema — fixed against each peer's real contract, with respx-based
+  wire-shape-pinning tests (`tests/unit/test_http_clients_real_wire_shapes.py`)
+  so a future accidental revert fails immediately. Added `HTTPIntentDetectionClient`/
+  `HTTPAgenticRAGClient` (this module had no client for either before) and
+  new `intent_ref`/`rag_ref`-configured neural steps, additive and fully
+  backward compatible. `POST /definitions` now also registers any
+  `symbolic_rulesets` from the request body (previously there was no way
+  at all, through the real API, to configure a symbolic rule), and
+  `POST /instances` resolves `definition_id` by name when it isn't
+  UUID-shaped (a caller with a stable definition name, like
+  Conversational Engine's own static config, can never know a
+  dynamically-created definition's server-generated UUID otherwise). The
+  actual root cause of a long hang this ticket spent real effort
+  diagnosing: `KafkaEventPublisher.start()` assigned `self._producer`
+  *before* `await self._producer.start()` succeeded, so a failed connect
+  (this sandbox's own permanent no-Kafka condition) left a half-initialized
+  producer in place, defeating `publish()`'s own `is None` fast-fail guard
+  and hanging `send_and_wait()` forever instead — fixed to assign only
+  after a confirmed-successful start, with a regression test
+  (`tests/unit/test_kafka_publisher.py`) proving `publish()` now raises
+  near-instantly instead.
+
 ## Running locally
 
 ```bash

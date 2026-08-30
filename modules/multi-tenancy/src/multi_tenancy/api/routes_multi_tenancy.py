@@ -3,6 +3,20 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own `_reject_null_byte` validator (schemas/
+    multi_tenancy.py) -- a real CI run of this module's own contract
+    tier (ticket #82) surfaced `GET /isolation-probes`'s `target_name`
+    reaching Postgres with a raw NUL byte, an
+    `UntranslatableCharacterError` this module's own schema-level fix
+    was built to prevent everywhere else. Applied at the top of every
+    route below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
 from multi_tenancy.api.deps import (
     build_environment_service,
     build_isolation_probe_service,
@@ -392,6 +406,7 @@ async def list_workspaces(
     ctx: AppContext = Depends(get_ctx),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> WorkspaceListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     service = build_workspace_service(repository, ctx)
     workspaces, total = await service.list(tenant_id=tenant_id, status=status, limit=limit, offset=offset)
     return WorkspaceListResponse(
@@ -501,6 +516,7 @@ async def list_environments(
     ctx: AppContext = Depends(get_ctx),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> EnvironmentListResponse:
+    _reject_null_byte_query(workspace_id=workspace_id)
     service = build_environment_service(repository, ctx)
     environments, total = await service.list(
         workspace_id=workspace_id, status=status, limit=limit, offset=offset,
@@ -702,6 +718,7 @@ async def list_resource_allocations(
     ctx: AppContext = Depends(get_ctx),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> ResourceAllocationListResponse:
+    _reject_null_byte_query(environment_id=environment_id)
     service = build_resource_allocation_service(repository, ctx)
     allocations, total = await service.list(
         environment_id=environment_id, status=status, limit=limit, offset=offset,
@@ -789,6 +806,7 @@ async def list_isolation_probes(
     offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: MultiTenancyRepository = Depends(get_repository),
 ) -> IsolationProbeResultListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id, target_name=target_name)
     results, total = await repository.list_probe_results(
         tenant_id=tenant_id, target_name=target_name, limit=limit, offset=offset,
     )

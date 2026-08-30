@@ -131,6 +131,19 @@ src/secrets_and_credential_management/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **NUL bytes/invalid enum values reaching the database or crashing
+  unhandled** (ticket #82's platform-wide sweep, following the same bug
+  a real CI run found on Multi-tenancy's and Billing and Metering's own
+  contract tiers — see either module's own README for the original
+  finding). `GET ""` (list secrets)'s `tenant_id`/`namespace`,
+  `GET /due-for-rotation`'s `tenant_id`, and `GET /compliance`'s
+  `tenant_id` never ran through a NUL-byte validator; fixed with
+  `_reject_null_byte_query()`. The list route's own `status` was a bare
+  `str` hand-converted to `SecretStatus`, raising an unhandled
+  `ValueError` (500) for any non-member string — now typed
+  `SecretStatus` directly so FastAPI/Pydantic itself rejects an invalid
+  value with a clean 422.
+
 ## Running locally
 
 ```bash

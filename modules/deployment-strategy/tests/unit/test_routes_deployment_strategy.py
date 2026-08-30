@@ -143,3 +143,19 @@ def test_rollback_records_the_reason():
     assert resp.status_code == 200
     assert resp.json()["stage"] == "rolled_back"
     assert resp.json()["rollback_reason"] == "regression"
+
+
+def test_list_deployments_rejects_a_null_byte_in_a_query_param_with_a_clean_422():
+    """Ticket #82: a raw `Query()` string never runs through a Pydantic
+    body field's own NUL-byte validator, so this reached the repository
+    (and, against real Postgres, the database itself) raw instead of a
+    clean 422."""
+    app = _app(InMemoryDeploymentStrategyRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/deployment-strategy/deployments", params={"service_name": "a\x00b"},
+            headers={"Authorization": f"Bearer {_token()}"},
+        )
+
+    assert resp.status_code == 422

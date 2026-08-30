@@ -12,8 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from workflow_engine.config import WorkflowEngineSettings
 from workflow_engine.core.ports import (
+    AgenticRAGClient,
     GuardrailsClient,
     HumanOversightClient,
+    IntentDetectionClient,
     LLMGatewayClient,
     ToolOrchestrationClient,
 )
@@ -31,3 +33,5 @@ class AppContext:
     guardrails: GuardrailsClient
     human_oversight: HumanOversightClient
     symbolic_executor: SymbolicRuleExecutor
+    intent_detection: IntentDetectionClient | None = None
+    agentic_rag: AgenticRAGClient | None = None

@@ -20,7 +20,12 @@ class PromptBuildResult:
 
 class PersonaEngine:
     def build_prompt(
-        self, persona: PersonaConfigRecord, history: list[MessageRecord], message: str
+        self,
+        persona: PersonaConfigRecord,
+        history: list[MessageRecord],
+        message: str,
+        *,
+        identity_context: dict[str, Any] | None = None,
     ) -> PromptBuildResult:
         lowered = message.lower()
         for topic in persona.denied_topics:
@@ -37,4 +42,12 @@ class PersonaEngine:
         }
         if persona.allowed_topics:
             prompt_context["allowed_topics"] = persona.allowed_topics
+        # Cross-session identity continuity (LLD differentiator: "recognises
+        # a returning user... resumes context without re-asking, drawing on
+        # Long-Term Memory"). Only present when the caller actually recalled
+        # something for this user/turn -- an absent key here means "no
+        # relevant memory," not "memory disabled," so a prompt template can
+        # treat its absence and an empty recall the same way.
+        if identity_context:
+            prompt_context["identity_context"] = identity_context
         return PromptBuildResult(denied_topic=None, prompt_context=prompt_context)

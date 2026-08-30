@@ -65,7 +65,19 @@ async def lifespan(app: FastAPI):
         )
 
     ctx, event_publisher = build_app_context(settings)
-    await event_publisher.start()
+    try:
+        await event_publisher.start()
+    except Exception as exc:
+        # See workflow-engine's own main.py (ticket #82) for the full
+        # reasoning: an unguarded await here crashed this module's whole
+        # process at startup whenever Kafka was unreachable, even though the
+        # outbox pattern is fire-and-forget by design and nothing on the
+        # synchronous request path needs Kafka. OutboxRelayWorker's own
+        # per-event try/except already requeues publish failures for retry
+        # without this process going down, so degrading here (log and
+        # continue) rather than crashing lets a broker that arrives later
+        # drain the backlog with no further code change.
+        logger.warning("kafka_event_publisher_start_failed_degraded", error=str(exc))
     app.state.ctx = ctx
 
     @asynccontextmanager

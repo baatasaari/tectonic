@@ -32,6 +32,18 @@ from knowledge_base.schemas.documents import (
 router = APIRouter(prefix="/v1/knowledge-base", tags=["knowledge-base"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _document_schema(d) -> DocumentSchema:
     return DocumentSchema(
         id=d.id, tenant_id=d.tenant_id, title=d.title, source_type=d.source_type.value,
@@ -59,7 +71,7 @@ async def _read_bytes(file: UploadFile | None, content_text: str | None) -> tupl
 async def ingest_document(
     tenant_id: str = Form(...),
     title: str = Form(...),
-    source_type: str = Form("upload"),
+    source_type: SourceType = Form(SourceType.UPLOAD),
     source_ref: str | None = Form(None),
     file: UploadFile | None = File(None),
     content_text: str | None = Form(None),
@@ -68,12 +80,13 @@ async def ingest_document(
     ctx: AppContext = Depends(get_ctx),
     repository: KnowledgeBaseRepository = Depends(get_repository),
 ) -> IngestResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     content, content_type, filename = await _read_bytes(file, content_text)
     tags = json.loads(policy_tags) if policy_tags else []
 
     service = build_ingestion_service(ctx, repository)
     result = await service.ingest_document(
-        tenant_id=tenant_id, title=title, source_type=SourceType(source_type), content=content,
+        tenant_id=tenant_id, title=title, source_type=source_type, content=content,
         content_type=content_type, filename=filename, policy_tags=tags, chunking_strategy=chunking_strategy,
     )
     return IngestResponse(
@@ -134,6 +147,7 @@ async def list_chunks(
     offset: int = Query(0, ge=0),
     repository: KnowledgeBaseRepository = Depends(get_repository),
 ) -> ChunkListResponse:
+    _reject_null_byte_query(document_version_id=document_version_id, policy_tag=policy_tag, tenant_id=tenant_id)
     if document_version_id:
         chunks, total = await repository.list_chunks_by_version(document_version_id, limit=limit, offset=offset)
     elif policy_tag and tenant_id:

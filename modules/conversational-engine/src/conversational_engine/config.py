@@ -32,6 +32,17 @@ class StreamingConfig(BaseModel):
     protocol: Literal["sse", "websocket"] = "sse"
 
 
+class WorkflowRoutingConfig(BaseModel):
+    """Added for the Phase 2 support-agent slice (ticket #82). Default off:
+    every pre-existing turn keeps calling LLM Gateway directly, unchanged.
+    When enabled, handle_turn() creates/drives a real Workflow Engine
+    instance instead — see session_manager.py's own
+    _handle_turn_via_workflow_engine docstring."""
+
+    enabled: bool = False
+    definition_id: str = "support-agent-v1"
+
+
 class TelemetryConfig(BaseModel):
     otlp_endpoint: str = "http://localhost:4317"
     log_level: str = "INFO"
@@ -49,6 +60,7 @@ class ConversationalEngineSettings(BaseSettings):
     handoff: HandoffConfig = HandoffConfig()
     streaming: StreamingConfig = StreamingConfig()
     telemetry: TelemetryConfig = TelemetryConfig()
+    workflow_routing: WorkflowRoutingConfig = WorkflowRoutingConfig()
 
     database_url: str = "postgresql+asyncpg://conversational_engine:conversational_engine@localhost:5432/conversational_engine"
 
@@ -65,6 +77,13 @@ class ConversationalEngineSettings(BaseSettings):
     entitlement_gate_cache_ttl_seconds: float = 30.0
     http_port: int = 8081
     llm_gateway_base_url: str = "http://localhost:8082"
+    # One shared virtual key for every completion this module makes -- see
+    # clients/http_clients.py's own module docstring for why (the same
+    # documented per-tenant-resolution deferral Workflow Engine's own
+    # identical field already established, ticket #82).
+    llm_gateway_virtual_key: str = "conversational-engine-default"
+    # Added for the Phase 2 support-agent slice (ticket #82).
+    workflow_engine_base_url: str = "http://localhost:8080"
     guardrails_base_url: str = "http://localhost:8093"
     long_term_memory_base_url: str = "http://localhost:8092"
     human_oversight_base_url: str = "http://localhost:8095"

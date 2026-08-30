@@ -32,6 +32,18 @@ from llmops.schemas.llmops import (
 router = APIRouter(prefix="/v1/llmops", tags=["llmops"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw `Query()` string parameter never runs through a Pydantic
+    body field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _version_schema(version) -> ModelVersionSchema:
     return ModelVersionSchema(
         id=version.id, tenant_id=version.tenant_id, model_name=version.model_name, version=version.version,
@@ -70,6 +82,7 @@ async def list_model_versions(
     offset: int = Query(0, ge=0),
     repository: LLMOpsRepository = Depends(get_repository),
 ) -> ModelVersionListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id, model_name=model_name)
     service = build_model_registry_service(repository)
     versions, total = await service.list(tenant_id=tenant_id, model_name=model_name, limit=limit, offset=offset)
     return ModelVersionListResponse(items=[_version_schema(v) for v in versions], total=total, limit=limit, offset=offset)
@@ -174,6 +187,7 @@ async def get_active_version(
     ctx: AppContext = Depends(get_ctx),
     repository: LLMOpsRepository = Depends(get_repository),
 ) -> ModelVersionSchema:
+    _reject_null_byte_query(target=target)
     service = build_rollout_service(repository, ctx)
     try:
         version = await service.get_active_version(tenant_id=tenant_id, model_name=model_name, target=target)

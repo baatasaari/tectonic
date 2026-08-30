@@ -190,3 +190,16 @@ def test_usage_records_listed_after_generation():
 
     assert resp.status_code == 200
     assert resp.json()["total"] == 1
+
+
+def test_list_usage_records_rejects_a_null_byte_in_tenant_id_with_a_clean_422():
+    """Ticket #82: a real CI run of this module's own contract tier found
+    this -- `tenant_id`/`period` are raw `Query()` strings, which (unlike
+    a Pydantic body field) never run through a NUL-byte validator, so a
+    NUL byte reached Postgres raw and 500'd instead of a clean 422."""
+    app = _app(InMemoryBillingRepository())
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/billing/usage-records", params={"tenant_id": "a\x00b"}, headers=_headers())
+
+    assert resp.status_code == 422

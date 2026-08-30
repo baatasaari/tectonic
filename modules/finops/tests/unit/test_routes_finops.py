@@ -122,6 +122,51 @@ def test_create_and_get_budget_policy_round_trip():
     assert fetched["limit_amount"] == 500.0
 
 
+def test_cost_report_rejects_a_period_that_is_not_a_real_budget_period():
+    """`period` is now typed `BudgetPeriod` directly, so FastAPI/Pydantic
+    itself rejects anything not a real member (a clean 422, a NUL byte
+    included) instead of this route hand-parsing it and letting an
+    invalid value raise an unhandled ValueError (500)."""
+    app = _app(InMemoryFinOpsRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/finops/cost-reports/acme", params={"period": "not-a-real-period"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
+def test_cost_report_rejects_a_null_byte_in_budget_policy_id_with_a_clean_422():
+    """Ticket #82: a raw `Query()` string never runs through a Pydantic
+    body field's own NUL-byte validator, so this reached the repository
+    (and, against real Postgres, the database itself) raw instead of a
+    clean 422."""
+    app = _app(InMemoryFinOpsRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/finops/cost-reports/acme", params={"period": "monthly", "budget_policy_id": "a\x00b"},
+            headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
+def test_create_budget_policy_rejects_a_period_that_is_not_a_real_budget_period():
+    """Same fix, on the POST /budget-policies body field this time."""
+    app = _app(InMemoryFinOpsRepository())
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/finops/budget-policies",
+            json={"period": "not-a-real-period", "limit_amount": 500.0},
+            headers=_headers(**{"X-Tenant-Id": "acme"}),
+        )
+
+    assert resp.status_code == 422
+
+
 def test_get_budget_policy_returns_404_when_missing():
     app = _app(InMemoryFinOpsRepository())
 

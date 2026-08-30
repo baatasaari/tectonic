@@ -158,6 +158,21 @@ calls mid-operation the way real concurrent DB transactions can.
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **NUL bytes in raw `Query()` string parameters reaching the database
+  unvalidated** (ticket #82's platform-wide sweep, following the same
+  bug a real CI run found on Multi-tenancy's and Billing and Metering's
+  own contract tiers — see either module's own README for the original
+  finding). `GET /events`'s `tenant_id`/`event_type`/`source_module`/
+  `control_name` and `GET /events/verify-chain`'s `tenant_id` (required
+  query params are just as unvalidated as optional ones) never ran
+  through a NUL-byte validator; fixed with `_reject_null_byte_query()`.
+  `POST /events`'s own arbitrary-dict body (`Body(...)`, deliberately
+  not a fixed Pydantic schema — it accepts any module's own event
+  payload) carries the same class of risk in a nested JSONB value, not
+  fixed here — a real, separately-scoped gap since validating an
+  arbitrary nested structure isn't the same small fix as a flat query
+  parameter.
+
 ## Running locally
 
 ```bash

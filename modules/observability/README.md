@@ -225,6 +225,23 @@ src/observability/
   namespace; separate startup/liveness/readiness probe semantics instead
   of two identical probes; and `topologySpreadConstraints` across nodes.
 
+- **NUL bytes/invalid enum values reaching the database or crashing
+  unhandled** (ticket #82's platform-wide sweep, following the same bug
+  a real CI run found on Multi-tenancy's and Billing and Metering's own
+  contract tiers — see either module's own README for the original
+  finding). Every route taking a raw `tenant_id` (and `/traces`'s own
+  `workflow_type`) — `reasoning-narrative`, `cost-attribution`,
+  `trace-completeness`, `traces`/`traces/{trace_id}`, `slos`,
+  `alert-rules`, `alert-events` — never ran through a NUL-byte
+  validator; fixed with `_reject_null_byte_query()`. `/alert-events`'s
+  own `status` was a bare `str` hand-converted to `AlertStatus`, raising
+  an unhandled `ValueError` (500) for any non-member string — now typed
+  `AlertStatus` directly so FastAPI/Pydantic itself rejects an invalid
+  value with a clean 422. No route-level test file existed for this
+  module before this fix — `tests/unit/test_routes_observability.py`
+  (new) pins just these regressions; comprehensive route coverage
+  remains a real, separately-scoped gap.
+
 ## Running locally
 
 ```bash

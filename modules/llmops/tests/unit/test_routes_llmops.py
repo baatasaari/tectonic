@@ -118,3 +118,31 @@ def test_active_version_returns_404_when_nothing_is_active():
         )
 
     assert resp.status_code == 404
+
+
+def test_list_model_versions_rejects_a_null_byte_in_tenant_id_with_a_clean_422():
+    """Ticket #82: a raw `Query()` string never runs through a Pydantic
+    body field's own NUL-byte validator, so this reached the repository
+    (and, against real Postgres, the database itself) raw instead of a
+    clean 422."""
+    app = _app(InMemoryLLMOpsRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/llmops/model-versions", params={"tenant_id": "a\x00b"},
+            headers={"Authorization": f"Bearer {_token()}"},
+        )
+
+    assert resp.status_code == 422
+
+
+def test_active_version_rejects_a_null_byte_in_target_with_a_clean_422():
+    app = _app(InMemoryLLMOpsRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/llmops/models/chat-default/active", params={"target": "a\x00b"},
+            headers={"Authorization": f"Bearer {_token()}"},
+        )
+
+    assert resp.status_code == 422
