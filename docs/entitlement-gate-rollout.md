@@ -12,6 +12,80 @@ the platform's other 27 selectable modules — the same shape this
 platform already used to roll `ServiceAuthMiddleware` out to every
 module from one first implementation.
 
+**Status: the base rollout below is complete.** All 28 selectable
+modules (Agent Cards plus the 27 listed under "Which modules this
+applies to") carry `security/entitlement_gate.py` and wire it into
+`main.py`, confirmed by direct inspection — the "remaining 27" framing
+further down predates that completion and is kept as-is below only as
+the original mechanical checklist (still accurate as *documentation of
+what each module's copy looks like*, just not as a live TODO list
+anymore). See "Bounded-staleness cache upgrade" below for the one
+change that is genuinely still in progress today: the base rollout gave
+every module an unconditional-fail-open version of this middleware,
+and that version is now being superseded, module by module, by a
+bounded-staleness one.
+
+## Bounded-staleness cache upgrade (2026-08-30)
+
+The base rollout's `EntitlementGateMiddleware` failed open, unconditionally
+and indefinitely, on any Multi-tenancy outage — a prolonged outage
+silently and permanently disabled entitlement enforcement for as long as
+it lasted, with no way for an operator to see it happening. The
+independent architecture assessment flagged this as a P0 Phase 1A
+closure item; it is not the same gap as the base rollout above and is
+tracked separately here.
+
+The fix (reference implementation now in **Agent Cards** and
+**Conversational Engine** — two modules, deliberately, since this
+touches genuinely shared, security-relevant logic and a second
+implementation is cheap insurance that the first wasn't accidentally
+module-specific):
+
+- The middleware now distinguishes a decision it has itself **verified**
+  via a real, successful Multi-tenancy call from one it is merely
+  **caching**. A verified decision is served immediately within
+  `cache_ttl_seconds` (unchanged from before), and — new — is *still*
+  served for up to `entitlement_gate_max_staleness_seconds` after that if
+  Multi-tenancy becomes unreachable, rather than the previous cache
+  simply going stale and the code path falling through to a blind
+  "allow".
+- Once no verified decision is available within that bounded window (a
+  cold cache with Multi-tenancy already down, or an outage that has
+  outlasted the staleness bound), the request is now **denied** —
+  `402`, "entitlement service unavailable and no recent verified
+  decision cached". This is the one real behaviour change: fail-open is
+  now bounded in time and grounded in a real prior decision, not
+  unconditional.
+- Each cached decision is HMAC-signed (the same shared secret already
+  used for service-to-service JWTs) so a corrupted or forged cache entry
+  is never trusted as verified.
+- Two new Prometheus counters (`entitlement_gate_stale_served_total`,
+  `entitlement_gate_fail_closed_total`, labelled by `module`) make both
+  outcomes of a real outage observable — previously neither was, since
+  the old version's fail-open was silent beyond a log line.
+- New config field: `entitlement_gate_max_staleness_seconds` (default
+  `300.0`), alongside the existing `entitlement_gate_cache_ttl_seconds`.
+
+**Not yet done:** the other 26 modules under "Which modules this
+applies to" below still carry the base rollout's unconditional-fail-open
+version of `entitlement_gate.py`. Porting this upgrade to them is
+mechanical (copy the file + test file, add the one config field, pass
+`max_staleness_seconds=settings.entitlement_gate_max_staleness_seconds`
+at the `main.py` call site — the identical diff between Agent Cards'
+and Conversational Engine's copies) but is explicitly out of scope for
+this pass, consistent with this platform's own "reference implementation
+in one or two modules first" convention (the same shape the base
+rollout below, and `ServiceAuthMiddleware` before it, were done in).
+
+**Also not yet done, a related but distinct gap:** `QuotaEnforcementService`
+consumers (LLM Gateway's `requests_per_minute` check, Vector DB's
+`vector_count` check, both via `HTTPMultiTenancyClient`) still fail open
+unconditionally on any Multi-tenancy error, the same pre-upgrade posture
+this file's middleware used to have. The bounded-staleness pattern above
+is the template for fixing that too, but the two call sites are shaped
+differently (a quota check, not a binary gate) and were not touched in
+this pass.
+
 Read this alongside:
 
 - Multi-tenancy's README ("Per-tenant module entitlements: the
@@ -78,12 +152,16 @@ module already deviates, since the two middlewares share the same
    name updated. Nothing else in the file is module-specific — it reads
    `module_name` as a constructor argument, not a hardcoded string.
 
-2. **Add two config fields**, next to the module's existing peer
+2. **Add config fields**, next to the module's existing peer
    `_base_url` settings in `config.py`:
 
    ```python
    multi_tenancy_base_url: str = "http://localhost:8109"
    entitlement_gate_cache_ttl_seconds: float = 30.0
+   # Only present in modules that have taken the bounded-staleness cache
+   # upgrade (see that section above) -- Agent Cards and Conversational
+   # Engine today, not yet the other 26 modules.
+   entitlement_gate_max_staleness_seconds: float = 300.0
    ```
 
 3. **Wire it into `main.py`**, immediately before the existing

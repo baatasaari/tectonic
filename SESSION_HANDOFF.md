@@ -357,9 +357,42 @@ default). Neither is a production credential.
   README and root README's own Phase 2 section. Ruff clean, 85 unit +
   6 integration tests green (2 new integration tests, 1 new unit file
   for wire shapes, 1 new unit file for routes -- this module had NO
-  route-level test file before this). Committed locally; not yet
-  pushed/PR'd at the time this was written -- confirm before starting
-  new work.
+  route-level test file before this). **Merged**: this, plus ticket #82
+  and the NUL-byte sweep above, all shipped in PR #9
+  (`claude/practical-wozniak-l1723c-rw7pp0` -> `claude/practical-wozniak-l1723c`,
+  merge commit `52a339d`, CI confirmed green on the merge commit). The
+  designated branch was then reset to the new merged tip before starting
+  the next item below, per this platform's "a merged PR's branch starts
+  fresh from the current default branch" convention.
+- **P0 -- DONE (this session).** Independent architecture assessment's
+  own P0 Phase 1A closure item, user-selected: `EntitlementGateMiddleware`
+  used to fail open *unconditionally and indefinitely* on any
+  Multi-tenancy outage -- fixed with a bounded-staleness, HMAC-signed
+  decision cache, as a reference implementation in **Agent Cards**
+  (the platform's existing reference module for this middleware) and
+  **Conversational Engine**. A verified decision is still served for up
+  to `entitlement_gate_max_staleness_seconds` (default 300s) after
+  Multi-tenancy becomes unreachable; past that window (or with no
+  verified decision cached at all) the request now fails **closed**
+  (`402`) instead of silently allowing. Two new Prometheus counters
+  (`entitlement_gate_stale_served_total`, `entitlement_gate_fail_closed_total`)
+  make both outcomes observable. Full design in
+  `docs/entitlement-gate-rollout.md`'s new "Bounded-staleness cache
+  upgrade" section, which also corrects that doc's stale "27 modules
+  still need the base rollout" framing -- direct inspection confirmed
+  all 28 selectable modules already carry the base (fail-open) version
+  of this middleware; the base rollout itself is done, only this
+  bounded-staleness upgrade is not yet ported everywhere. Explicitly
+  NOT done in this pass: porting the upgrade to the other 26 modules
+  (mechanical, tracked in that doc), and the same fail-open gap in
+  `QuotaEnforcementService`'s consumers (LLM Gateway's
+  `requests_per_minute` check, Vector DB's `vector_count` check) --
+  related but distinct, a quota check rather than a binary gate, not
+  touched here. Ruff clean, all unit tests green in both modules
+  (conversational-engine 89, agent-cards 61), including 6 new tests per
+  module covering the stale-serve window, the fail-closed boundary, a
+  denied decision staying denied when served stale, and a forged cache
+  signature being rejected.
 - **P1**: Fix Agentic RAG's own Graph DB/Knowledge-Base-symbolic-lookup
   client wire shapes properly (currently sidestepped via
   `hybrid_retrieval_enabled=false` for this slice only) once Knowledge
@@ -372,26 +405,67 @@ default). Neither is a production credential.
 
 ## 13. Recommended Next Task
 
-No single next ticket is mandated by this session — the platform-wide
-NUL-byte sweep and Conversational Engine completeness (both this
-session's own work) are done. The user now drives Phase 2 from the
-independent architecture assessment directly (see §1 note below on
-finding it again) rather than from the design doc alone. Ask the user
-which of the assessment's own named Phase 2 candidates comes next —
-memory governance (Long-Term Memory's consent/purpose/legal-hold gap,
-currently zero coverage), the evaluation-gated release path (wiring
-Evaluation Framework's own `/gate` as an actual blocking check before
-PromptOps publish / LLMOps canary promotion), or PromptOps' own full
-review/approve/publish lifecycle — were the three options offered
-alongside Conversational Engine completeness and not picked this
-session, per §12's own P1 entry above.
+**Two assessment documents exist now, reviewing two different commits --
+read this carefully before trusting either one's "current state" claims.**
+(1) The original assessment (26 Aug 2026, commit `1c5639d`, scored 41/100)
+defined the overall Phase 0-5 roadmap. (2) A reassessment (30 Aug 2026,
+commit `f60c2ff`, scored 50/100) reviewed `f60c2ff` believing it to be
+"current head" -- it was actually the branch's OLD fork point, predating
+ticket #82, the NUL-byte sweep, and Conversational Engine completeness
+entirely, all of which existed only on the then-open PR #9. PR #9 is now
+merged (see §12), so the branch state the reassessment thought it was
+reviewing now roughly matches reality again -- but its own §5/§6
+module-by-module scores and "has not started"-type claims about
+already-completed work should still be treated with that history in
+mind, not re-litigated as if they were fresh.
 
-**Finding the assessment again**: it is NOT checked into this repo (only
-summarized in commit messages/READMEs from earlier sessions) and was not
-attached as a file — the user pasted its full text directly into the
-conversation. If a future session needs it again and doesn't have it in
-context, ask the user to paste it again rather than trying to
-reconstruct it from README prose.
+Neither assessment document is checked into this repo (only summarized in
+commit messages/READMEs) and neither was attached as a file — the user
+pasted both directly into the conversation. If a future session needs
+either one again and doesn't have it in context, ask the user to paste it
+again rather than trying to reconstruct it from README prose.
+
+**This session's own work**: closed one of the reassessment's P0 Phase 1A
+items, user-selected from four options — the `EntitlementGateMiddleware`
+bounded-staleness cache (§12's newest P0 entry above). Not yet
+committed/pushed at the time this section was last edited during the
+same pass — check `git log`/`git status` on
+`claude/practical-wozniak-l1723c-rw7pp0` before assuming it is or isn't
+on `origin` yet.
+
+**Remaining P0 Phase 1A closure items from the reassessment's own
+backlog, not yet started** (the other three options offered alongside
+the one picked this session):
+
+- IAM v2 foundation (memberships, tenant roles, role bindings) —
+  Identity and Access module.
+- Contract-test tier (schemathesis/Hypothesis, per
+  `modules/multi-tenancy/tests/contract/conftest.py`'s established
+  harness fixes) rolled out to the remaining ~29 modules that don't have
+  it yet.
+- Provisioning-saga/resource-allocation reconciliation.
+- Universal operation-level authorization; a real external access
+  gateway; event-backbone consumer/inbox pattern; image supply-chain
+  build/scan/sign/admission gates; branch-protection required-status-
+  check configuration (no GitHub MCP tool found for this in this
+  session — likely needs manual repo-settings configuration or a
+  different tool).
+
+**Also queued, from the entitlement-gate work itself** (see
+`docs/entitlement-gate-rollout.md`): port the bounded-staleness upgrade
+from Agent Cards/Conversational Engine to the other 26 modules
+(mechanical); apply the same bounded-staleness pattern to
+`QuotaEnforcementService`'s fail-open consumers (LLM Gateway, Vector DB)
+— a related but distinct gap, a quota check rather than a binary gate.
+
+**Still-open Phase 2 candidates from the earlier assessment, not picked
+yet**: memory governance (Long-Term Memory's consent/purpose/legal-hold
+gap, currently zero coverage), the evaluation-gated release path (wiring
+Evaluation Framework's own `/gate` as an actual blocking check before
+PromptOps publish / LLMOps canary promotion), PromptOps' own full
+review/approve/publish lifecycle. Ask the user which comes next rather
+than assuming — this session's pattern has been to offer options via
+`AskUserQuestion` and let the user pick.
 
 ## 14. Important Context for Next Claude Session
 

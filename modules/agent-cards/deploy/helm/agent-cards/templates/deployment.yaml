@@ -65,6 +65,8 @@ spec:
               value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: AGENT_CARDS_ENTITLEMENT_GATE_CACHE_TTL_SECONDS
               value: {{ .Values.config.entitlementGateCacheTtlSeconds | quote }}
+            - name: AGENT_CARDS_ENTITLEMENT_GATE_MAX_STALENESS_SECONDS
+              value: {{ .Values.config.entitlementGateMaxStalenessSeconds | quote }}
             {{- if .Values.database.existingSecret }}
             - name: AGENT_CARDS_DATABASE_URL
               valueFrom:
