@@ -48,9 +48,48 @@ class SessionDetail(BaseModel):
     status: str
     persona_config_ref: str
     trace_id: str
+    user_ref: str | None = None
     created_at: datetime
     last_activity_at: datetime
     messages: list[MessageSummary] = []
+
+
+class SessionSummary(BaseModel):
+    id: str
+    tenant_id: str
+    channel: str
+    status: str
+    persona_config_ref: str
+    user_ref: str | None = None
+    created_at: datetime
+    last_activity_at: datetime
+
+
+class SessionListResponse(BaseModel):
+    items: list[SessionSummary]
+    total: int
+    limit: int
+    offset: int
+
+
+class HandoffEventSummary(BaseModel):
+    id: str
+    trigger_reason: str
+    target: str
+    created_at: datetime
+
+
+class SessionExport(BaseModel):
+    """Full transcript bundle for one session — the independent architecture
+    assessment's Phase 2 exit bar ("session list/search/export/delete").
+    Everything this module itself holds about the session in one document;
+    it does not reach into Long-Term Memory or Auditability for their own
+    records of it — see those modules' own export/evidence surfaces for
+    that."""
+
+    session: SessionDetail
+    handoff_events: list[HandoffEventSummary] = []
+    exported_at: datetime
 
 
 class HandoffRequest(BaseModel):

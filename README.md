@@ -1054,6 +1054,52 @@ neurosymbolic orchestration the design doc's own sequence diagram
 always assumed). Every fix has its own focused unit test and its own
 module's README entry; nothing here duplicates that detail.
 
+**Platform-wide follow-up to the CI run this ticket's own product-slice
+job triggered**: that job's first real GitHub Actions run found a NUL
+byte in a raw FastAPI `Query()` string parameter reaching Postgres
+unvalidated on Multi-tenancy's and Billing and Metering's own contract
+tiers (never runs through the same NUL-byte validator a Pydantic body
+field gets) — fixed there, then swept across every other module carrying
+the same bug (and the sibling hand-converted-Enum-raising-ValueError/500
+bug wherever it co-occurred): a2a, agent-cards, agent-marketplace,
+auditability, deployment-strategy, evaluation-framework, finops,
+graph-db, guardrails, human-oversight, identity-and-access,
+intent-detection, knowledge-base, llm-gateway, llmops, long-term-memory,
+mcp, multi-modality, observability, promptops, regulatory-compliance,
+sdk-and-developer-portal, secrets-and-credential-management,
+sentinel-agents, tool-orchestration — 24 modules total, each with a
+regression test and its own README note; full account in each module's
+own README and `SESSION_HANDOFF.md`.
+
+**Phase 2's own next vertical slice: Conversational Engine
+completeness**, picked from the independent architecture assessment's
+own §4 module-by-module findings and §7 roadmap (Phase 2's exit bar:
+"one paid-pilot-ready conversational agent with security, evaluation,
+SLO, cost, and privacy evidence") as the first slice to close after
+ticket #82's own support-agent slice proved the happy path. Three real
+gaps closed: **session list/search/export/delete** (this module had
+only `GET /{id}` before — no way to list, search, export, or delete a
+session at all); **cross-session identity continuity actually wired**
+(the LLD's own named differentiator and its own
+`session.cross_channel_continuity` config flag existed, but
+`SessionManager` never received a `LongTermMemoryClient` port instance
+at all — dead wiring, now fixed and called once per turn, best-effort,
+for a session with a `user_ref`); and **every one of this module's peer
+HTTP clients' real wire shape**, fixed for real — standing this module's
+own DIRECT (non-`workflow_routing`) turn-handling path up against real
+running peers for the first time (ticket #82's own product-slice test
+only ever exercised the `workflow_routing` path, which routes through
+Workflow Engine's own already-fixed clients instead) surfaced that every
+client here except `HTTPWorkflowEngineClient` and `HTTPAuditabilityClient`
+was posting an invented request shape and/or reading an invented
+response shape, including this module's own flagship streaming feature
+calling an LLM Gateway route that doesn't exist. Full account, including
+every peer's real route/schema and what this pass deliberately does not
+cover (per-tenant virtual key resolution, Long-Term Memory write-back,
+true token-by-token upstream streaming, voice/WebSocket channel
+adapters, the broader Long-Term Memory "memory governance" gap), in that
+module's own README.
+
 ## Modules
 
 ### Module 1: Workflow Engine

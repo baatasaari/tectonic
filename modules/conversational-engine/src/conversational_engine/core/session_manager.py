@@ -32,6 +32,7 @@ from conversational_engine.core.ports import (
     GuardrailsClient,
     HumanOversightClient,
     LLMGatewayClient,
+    LongTermMemoryClient,
     ObservabilityClient,
     SessionStateStore,
     WorkflowEngineClient,
@@ -93,6 +94,7 @@ class SessionManager:
         auditability: AuditabilityClient,
         settings: ConversationalEngineSettings,
         workflow_engine: WorkflowEngineClient | None = None,
+        long_term_memory: LongTermMemoryClient | None = None,
     ) -> None:
         self.repository = repository
         self.state_store = state_store
@@ -103,6 +105,7 @@ class SessionManager:
         self.auditability = auditability
         self.settings = settings
         self.workflow_engine = workflow_engine
+        self.long_term_memory = long_term_memory
         self.emotion_detector = EmotionUrgencyDetector(llm_gateway)
         self.persona_engine = PersonaEngine()
         self.refusal_composer = RefusalComposer()
@@ -151,7 +154,8 @@ class SessionManager:
         state = await self.state_store.get(session.id) or {}
         consecutive_refusals = int(state.get("consecutive_refusals", 0))
 
-        build_result = self.persona_engine.build_prompt(persona, history, message_content)
+        identity_context = await self._recall_identity_context(session, message_content)
+        build_result = self.persona_engine.build_prompt(persona, history, message_content, identity_context=identity_context)
         if build_result.denied_topic is not None:
             outbound, refusal_category = await self._refuse(
                 session, "denied_topic", build_result.denied_topic
@@ -363,6 +367,33 @@ class SessionManager:
         return TurnResult(
             outbound_message=outbound, refused=False, refusal_category=None, emotion_score=0.0, handoff_event=None,
         )
+
+    async def _recall_identity_context(
+        self, session: ConversationSessionRecord, message_content: str
+    ) -> dict | None:
+        """Cross-session identity continuity (LLD differentiator; LLD's own
+        `session.cross_channel_continuity` config flag, previously declared
+        but never actually read anywhere in this module). Only attempted for
+        a session that actually identifies a returning user
+        (`session.user_ref` set) — an anonymous session has no identity to
+        recall against. Best-effort and fail-open, the same posture every
+        other optional peer call in this module already takes: a Long-Term
+        Memory outage must never be the reason a turn fails, it should just
+        mean this turn proceeds without cross-session context, same as a
+        first-time user."""
+        if (
+            self.long_term_memory is None
+            or not self.settings.session.cross_channel_continuity
+            or not session.user_ref
+        ):
+            return None
+        try:
+            return await self.long_term_memory.recall_identity_context(
+                user_ref=session.user_ref, tenant_id=session.tenant_id, query=message_content,
+            )
+        except Exception as exc:  # a peer outage must never fail the turn -- see docstring
+            logger.warning("identity_context_recall_failed", session_id=session.id, error=str(exc))
+            return None
 
     async def _refuse(
         self, session: ConversationSessionRecord, category: str, detail: str

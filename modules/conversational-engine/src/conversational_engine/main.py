@@ -42,7 +42,7 @@ def build_app_context(settings: ConversationalEngineSettings) -> AppContext:
         redis=Redis.from_url(settings.redis_url),
         llm_gateway=HTTPLLMGatewayClient(
             settings.llm_gateway_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
-            ttl_seconds=settings.jwt_ttl_seconds,
+            ttl_seconds=settings.jwt_ttl_seconds, default_virtual_key=settings.llm_gateway_virtual_key,
         ),
         guardrails=HTTPGuardrailsClient(
             settings.guardrails_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,

@@ -1,7 +1,7 @@
 """SQLAlchemy-backed implementation of ConversationRepository (LLD §3.1)."""
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from conversational_engine.core.domain import (
@@ -98,6 +98,42 @@ class SQLAlchemyConversationRepository:
         await self.session.refresh(m)
         return _session_to_domain(m)
 
+    async def list_sessions(
+        self, tenant_id: str, *, status: str | None = None, channel: str | None = None,
+        user_ref: str | None = None, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[ConversationSessionRecord], int]:
+        filters = [models.ConversationSession.tenant_id == tenant_id]
+        if status is not None:
+            filters.append(models.ConversationSession.status == status)
+        if channel is not None:
+            filters.append(models.ConversationSession.channel == channel)
+        if user_ref is not None:
+            filters.append(models.ConversationSession.user_ref == user_ref)
+
+        count_stmt = select(func.count(models.ConversationSession.id)).where(*filters)
+        total = (await self.session.execute(count_stmt)).scalar_one()
+
+        stmt = (
+            select(models.ConversationSession)
+            .where(*filters)
+            .order_by(models.ConversationSession.created_at.desc(), models.ConversationSession.id)
+            .limit(limit)
+            .offset(offset)
+        )
+        rows = await self.session.execute(stmt)
+        return [_session_to_domain(m) for m in rows.scalars().all()], total
+
+    async def delete_session(self, session_id: str) -> None:
+        # No ON DELETE CASCADE on the messages/handoff_events FKs (db/models.py) --
+        # explicit ordered deletes in one transaction instead, the same pattern
+        # this platform's other cascading deletes already use.
+        await self.session.execute(delete(models.Message).where(models.Message.session_id == session_id))
+        await self.session.execute(delete(models.HandoffEvent).where(models.HandoffEvent.session_id == session_id))
+        await self.session.execute(
+            delete(models.ConversationSession).where(models.ConversationSession.id == session_id)
+        )
+        await self.session.commit()
+
     async def append_message(self, record: MessageRecord) -> MessageRecord:
         m = models.Message(
             id=record.id,
@@ -136,6 +172,14 @@ class SQLAlchemyConversationRepository:
         )
         m = row.scalar_one_or_none()
         return _handoff_to_domain(m) if m is not None else None
+
+    async def list_handoff_events(self, session_id: str) -> list[HandoffEventRecord]:
+        rows = await self.session.execute(
+            select(models.HandoffEvent)
+            .where(models.HandoffEvent.session_id == session_id)
+            .order_by(models.HandoffEvent.created_at)
+        )
+        return [_handoff_to_domain(m) for m in rows.scalars().all()]
 
     async def get_persona_config(self, persona_config_ref: str, tenant_id: str) -> PersonaConfigRecord | None:
         m = await self.session.get(models.PersonaConfig, persona_config_ref)

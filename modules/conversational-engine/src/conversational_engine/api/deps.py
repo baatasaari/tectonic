@@ -32,4 +32,5 @@ def build_session_manager(ctx: AppContext, repository: ConversationRepository) -
         auditability=ctx.auditability,
         settings=ctx.settings,
         workflow_engine=ctx.workflow_engine,
+        long_term_memory=ctx.long_term_memory,
     )

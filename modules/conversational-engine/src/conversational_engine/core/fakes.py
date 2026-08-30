@@ -39,6 +39,28 @@ class InMemoryConversationRepository:
         self.sessions[record.id] = copy.deepcopy(record)
         return copy.deepcopy(record)
 
+    async def list_sessions(
+        self, tenant_id: str, *, status: str | None = None, channel: str | None = None,
+        user_ref: str | None = None, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[ConversationSessionRecord], int]:
+        results = [
+            s for s in self.sessions.values()
+            if s.tenant_id == tenant_id
+            and (status is None or s.status.value == status)
+            and (channel is None or s.channel.value == channel)
+            and (user_ref is None or s.user_ref == user_ref)
+        ]
+        # Matches the SQL repository's ORDER BY created_at DESC, id ASC.
+        results = sorted(results, key=lambda s: s.id)
+        results = sorted(results, key=lambda s: s.created_at, reverse=True)
+        sliced = [copy.deepcopy(s) for s in results[offset : offset + limit]]
+        return sliced, len(results)
+
+    async def delete_session(self, session_id: str) -> None:
+        self.sessions.pop(session_id, None)
+        self.messages.pop(session_id, None)
+        self.handoff_events = [e for e in self.handoff_events if e.session_id != session_id]
+
     async def append_message(self, record: MessageRecord) -> MessageRecord:
         self.messages.setdefault(record.session_id, []).append(copy.deepcopy(record))
         return copy.deepcopy(record)
@@ -53,6 +75,9 @@ class InMemoryConversationRepository:
     async def get_latest_handoff_event(self, session_id: str) -> HandoffEventRecord | None:
         matches = [e for e in self.handoff_events if e.session_id == session_id]
         return copy.deepcopy(matches[-1]) if matches else None
+
+    async def list_handoff_events(self, session_id: str) -> list[HandoffEventRecord]:
+        return [copy.deepcopy(e) for e in self.handoff_events if e.session_id == session_id]
 
     async def get_persona_config(self, persona_config_ref: str, tenant_id: str) -> PersonaConfigRecord | None:
         rec = self.personas.get((tenant_id, persona_config_ref)) or self.personas.get(("*", persona_config_ref))
@@ -143,8 +168,15 @@ class StubGuardrailsClient:
 
 
 class StubLongTermMemoryClient:
-    async def recall_identity_context(self, *, user_ref: str, tenant_id: str) -> dict[str, Any] | None:
-        return None
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self.result: dict[str, Any] | None = None
+
+    async def recall_identity_context(
+        self, *, user_ref: str, tenant_id: str, query: str = "", top_k: int = 5,
+    ) -> dict[str, Any] | None:
+        self.calls.append({"user_ref": user_ref, "tenant_id": tenant_id, "query": query, "top_k": top_k})
+        return copy.deepcopy(self.result) if self.result is not None else None
 
 
 class StubHumanOversightClient:

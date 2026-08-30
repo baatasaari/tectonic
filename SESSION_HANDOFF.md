@@ -327,9 +327,39 @@ default). Neither is a production credential.
   (against this sandbox's real local Postgres) green wherever that tier
   exists; llm-gateway's `tests/contract` tier (schemathesis) was also
   re-run and now passes where it previously failed on the body-field
-  gap. Not yet pushed to a real GitHub Actions run at the time this was
-  written -- confirm the next CI run on this branch is green across the
-  whole matrix once these commits land.
+  gap. Pushed and confirmed green on a real GitHub Actions run (run
+  `33303324479`/`33308091217`, commit `55628d3`); PR #9 opened
+  (`claude/practical-wozniak-l1723c-rw7pp0` -> `claude/practical-wozniak-l1723c`).
+- **P1 -- DONE (this session).** Phase 2's own first post-#82 vertical
+  slice, per the independent architecture assessment now on file in full
+  (§1-12; see `docs/` -- ask the user for it again if a future session
+  can't find it, it isn't checked into the repo): **Conversational
+  Engine completeness**. Three real gaps closed, all evidence-based
+  (grepped/read the actual code, not inferred from filenames, per the
+  assessment's own §10 master-prompt methodology): (1) session
+  list/search/export/delete -- only `GET /{id}` existed before; (2)
+  cross-session identity continuity actually wired -- `SessionManager`
+  never received a `LongTermMemoryClient` port instance at all despite
+  the LLD's own named differentiator and config flag for it, dead
+  wiring, now fixed and called once per turn (best-effort, fail-open);
+  (3) every one of this module's own peer HTTP clients' real wire
+  shape -- standing this module's own DIRECT (non-`workflow_routing`)
+  turn-handling path up against real peers for the first time (ticket
+  #82's own product-slice test only ever exercised the
+  `workflow_routing` path) surfaced that every client here except
+  `HTTPWorkflowEngineClient`/`HTTPAuditabilityClient` was calling an
+  invented endpoint -- including this module's own flagship streaming
+  feature calling an LLM Gateway route that doesn't exist at all. Full
+  account (every peer's real route/schema, and what's deliberately still
+  open: per-tenant virtual key resolution, Long-Term Memory write-back,
+  true upstream token streaming, voice/WebSocket channels, the broader
+  Long-Term Memory "memory governance" gap) in that module's own
+  README and root README's own Phase 2 section. Ruff clean, 85 unit +
+  6 integration tests green (2 new integration tests, 1 new unit file
+  for wire shapes, 1 new unit file for routes -- this module had NO
+  route-level test file before this). Committed locally; not yet
+  pushed/PR'd at the time this was written -- confirm before starting
+  new work.
 - **P1**: Fix Agentic RAG's own Graph DB/Knowledge-Base-symbolic-lookup
   client wire shapes properly (currently sidestepped via
   `hybrid_retrieval_enabled=false` for this slice only) once Knowledge
@@ -342,12 +372,26 @@ default). Neither is a production credential.
 
 ## 13. Recommended Next Task
 
-No single next ticket is mandated by this session — ticket #82 (the prior
-handoff's own "Recommended Next Task") is done. Pick from §12's backlog, or
-ask the user what Phase 2 product slice comes next (the design doc's own
-module-role table names SDK/Developer Portal and a second, differently-shaped
-scenario as natural candidates for a slice #2, per root README's "What this
-slice deliberately does not cover" section).
+No single next ticket is mandated by this session — the platform-wide
+NUL-byte sweep and Conversational Engine completeness (both this
+session's own work) are done. The user now drives Phase 2 from the
+independent architecture assessment directly (see §1 note below on
+finding it again) rather than from the design doc alone. Ask the user
+which of the assessment's own named Phase 2 candidates comes next —
+memory governance (Long-Term Memory's consent/purpose/legal-hold gap,
+currently zero coverage), the evaluation-gated release path (wiring
+Evaluation Framework's own `/gate` as an actual blocking check before
+PromptOps publish / LLMOps canary promotion), or PromptOps' own full
+review/approve/publish lifecycle — were the three options offered
+alongside Conversational Engine completeness and not picked this
+session, per §12's own P1 entry above.
+
+**Finding the assessment again**: it is NOT checked into this repo (only
+summarized in commit messages/READMEs from earlier sessions) and was not
+attached as a file — the user pasted its full text directly into the
+conversation. If a future session needs it again and doesn't have it in
+context, ask the user to paste it again rather than trying to
+reconstruct it from README prose.
 
 ## 14. Important Context for Next Claude Session
 

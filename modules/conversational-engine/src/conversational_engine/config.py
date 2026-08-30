@@ -77,6 +77,11 @@ class ConversationalEngineSettings(BaseSettings):
     entitlement_gate_cache_ttl_seconds: float = 30.0
     http_port: int = 8081
     llm_gateway_base_url: str = "http://localhost:8082"
+    # One shared virtual key for every completion this module makes -- see
+    # clients/http_clients.py's own module docstring for why (the same
+    # documented per-tenant-resolution deferral Workflow Engine's own
+    # identical field already established, ticket #82).
+    llm_gateway_virtual_key: str = "conversational-engine-default"
     # Added for the Phase 2 support-agent slice (ticket #82).
     workflow_engine_base_url: str = "http://localhost:8080"
     guardrails_base_url: str = "http://localhost:8093"

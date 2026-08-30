@@ -29,7 +29,7 @@ src/conversational_engine/
   clients/                 Redis hot-state store, HTTP clients for the 4 external modules
   security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate, real OpenAPI security scheme declarations
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
-  api/                       FastAPI routers — sessions, turn (SSE or JSON), handoff, close
+  api/                       FastAPI routers — sessions (create/get/list/export/delete), turn (SSE or JSON), resume, handoff, close
   schemas/                    Pydantic request/response models
 ```
 
@@ -164,6 +164,136 @@ src/conversational_engine/
   session. A no-op call (still paused, or a session never routed through
   Workflow Engine at all) is a `409`, not an error. Needed one small
   repository addition, `get_latest_handoff_event()`.
+
+- **Session list/search/export/delete, and every peer client's real wire
+  shape fixed for real** (the independent architecture assessment's Phase 2
+  exit bar — "one paid-pilot-ready conversational agent with security,
+  evaluation, SLO, cost, and privacy evidence" — picked as the first
+  Phase 2 vertical slice to complete after ticket #82's own support-agent
+  slice proved the happy path).
+
+  **Session list/search/export/delete** — this module had only
+  `GET /{id}`; no way to list, search, export, or delete a session at all.
+  Added `GET /sessions` (tenant-scoped, filterable by `status`/`channel`/
+  `user_ref`, paginated — `_reject_null_byte_query()` applied per ticket
+  #82's own platform-wide sweep, since this is a newly-added route of the
+  same shape every other module's own list/search routes already carry
+  that guard on), `GET /sessions/{id}/export` (this module's own full
+  transcript bundle: session detail + every message + every handoff
+  event), and `DELETE /sessions/{id}` (idempotent hard delete, cascading
+  to messages/handoff events — no `ON DELETE CASCADE` on those FKs, so the
+  repository does the ordered delete explicitly, same pattern this
+  platform's other cascading deletes already use). Scoped deliberately to
+  this module's own records: a cross-platform privacy erasure (propagating
+  to Long-Term Memory, Auditability, etc.) is Long-Term Memory's own
+  separately-scoped `POST /erasure-requests` job, not reinvented here.
+
+  **Cross-session identity continuity wired for real.** The LLD's own
+  named differentiator ("recognises a returning user... resumes context
+  without re-asking, drawing on Long-Term Memory") and its own
+  `session.cross_channel_continuity` config flag existed, but
+  `SessionManager` never received a `LongTermMemoryClient` port instance
+  at all — the client was constructed in `main.py`'s `AppContext` and then
+  never passed to `SessionManager`, dead wiring. Fixed: `SessionManager`
+  now takes `long_term_memory` and calls it once per turn for a session
+  with a `user_ref` (best-effort, fail-open — a Long-Term Memory outage
+  must never fail a turn, same posture as every other optional peer call
+  here), keyed by the CURRENT message as the query (not a blind
+  "everything about this user" dump — see the client's own docstring for
+  why), merging the result into `PersonaEngine.build_prompt`'s own
+  `identity_context`.
+
+  **Every peer client's real wire shape, fixed for real.** Standing this
+  module's own DIRECT turn-handling path (`workflow_routing.enabled=false`,
+  the default) up against real running peers for the first time surfaced
+  that every client here except `HTTPWorkflowEngineClient` (already fixed
+  in #82) and `HTTPAuditabilityClient` (already correct) was posting an
+  invented path/body and/or reading an invented response shape — the exact
+  same bug class ticket #82 found and fixed platform-wide in every OTHER
+  module's peer clients, just never exercised on THIS module's own direct
+  path since the ticket #82 product-slice test only ever exercised the
+  `workflow_routing` path (which routes through Workflow Engine's own
+  already-fixed clients instead). Fixed, each against its peer's real
+  route/schema (see `clients/http_clients.py`'s own per-client docstrings
+  for the full account):
+  - `HTTPLLMGatewayClient.stream_complete` called an invented
+    `/v1/completions/stream` — LLM Gateway has no streaming completions
+    route at all, only the single-response `/v1/llm-gateway/chat/completions`
+    (LLD §3.3). Fixed to call the real endpoint (needing
+    `X-Virtual-Key`/`X-Tenant-Id` headers this module previously never
+    sent at all — new `llm_gateway_virtual_key` setting, the identical
+    documented per-tenant-resolution deferral Workflow Engine's own
+    client already established) and relay its one full response as a
+    single SSE chunk. This module's own SSE contract to ITS OWN callers
+    is unaffected and still real; what's honest is only that the upstream
+    hop to LLM Gateway isn't actually token-by-token, since LLM Gateway
+    itself has no streaming route to relay from yet — a real perceived-
+    streaming improvement needs LLM Gateway to grow one first, separately
+    scoped.
+  - `HTTPLLMGatewayClient.classify` called an invented `/v1/classify` —
+    LLM Gateway has no classification endpoint. Fixed to ask the real
+    `/chat/completions` for a JSON classification instead of inventing
+    dedicated LLM Gateway surface; a non-JSON response degrades to an
+    empty result, same as the existing "no refinement available" path
+    `core/emotion.py`'s own caller already handles.
+  - `HTTPGuardrailsClient.check` posted an invented `{content,
+    policy_profile, tenant_id}` body and read an invented `{allowed,
+    detail}` response. Fixed to the real `{text, stage}` body +
+    `X-Tenant-Id` header / `{decision, violation_category, checks_run}`
+    response — the identical real shape Workflow Engine's own
+    `HTTPGuardrailsClient` already established for this exact port
+    contract (ticket #82).
+  - `HTTPHumanOversightClient.request_handoff` posted to an invented
+    `/v1/oversight/handoff-request` and read an invented
+    `human_oversight_ref_id` field. Fixed to the real
+    `POST /v1/human-oversight/requests` / `{id}` response — again the
+    identical real shape Workflow Engine's own client already
+    established.
+  - `HTTPLongTermMemoryClient.recall_identity_context` called an invented
+    `GET /v1/memory/identity` — Long-Term Memory's real, and only,
+    retrieval surface is `POST /v1/long-term-memory/query` (a
+    scope+query-ranked search, not a fetch-by-user-id). Fixed, scoped to
+    `user:{user_ref}` by convention (nothing else in this platform writes
+    memories under that scope yet — this module's own job is to recall,
+    not to author, those memories; a real write path is real,
+    separately-scoped follow-up work, the same posture the assessment's
+    own "memory governance" gap already names as open).
+  - `HTTPObservabilityClient.emit` posted an invented `/v1/observability/events`
+    with a raw business-event dict. Observability's real, and only,
+    ingestion surface is `POST /v1/observability/ingest` (a trace_id plus
+    OTel-shaped spans) — this module's own real trace pipeline already
+    runs independently via OTel auto-instrumentation
+    (`configure_tracing`), so this bespoke push both used the wrong shape
+    AND duplicated a pipeline that already worked. Adapted rather than
+    removed: each event becomes one real, zero-duration span carrying the
+    full event as its `attributes`, so the call now succeeds and the
+    event data stays queryable there.
+
+  New `tests/unit/test_http_clients_real_wire_shapes.py` (respx-mocked,
+  the same reference pattern Workflow Engine's own identically-named file
+  already established) pins every fixed client's real wire contract so a
+  future accidental revert fails immediately. New
+  `tests/unit/test_routes_sessions.py` — no route-level test file existed
+  for this module before this fix at all (every prior test exercised
+  `SessionManager` directly, bypassing FastAPI); now covers every route,
+  new and pre-existing, through a real app. `tests/integration/
+  test_repository_postgres.py` gained real-Postgres coverage for
+  `list_sessions`' aggregate COUNT + filtered page query and
+  `delete_session`'s explicit cascade. `tests/unit/test_session_manager.py`
+  gained identity-context-recall coverage (recalled for a returning user,
+  not attempted for an anonymous one, fails open on a Long-Term Memory
+  outage, and respects `cross_channel_continuity=false`).
+
+  What this pass deliberately does NOT cover, per the assessment's own
+  scoping: real per-tenant LLM Gateway virtual key resolution (one shared
+  key today, same as Workflow Engine's own deferral); Long-Term Memory
+  ever being WRITTEN to from a real conversation (this module only
+  recalls); true token-by-token streaming from LLM Gateway (it has no
+  streaming route yet); voice/WebSocket channel adapters (the LLD's own
+  stack table names WebSocket for voice — this pass didn't touch channel
+  adapters at all); and the broader "memory governance" gap (consent,
+  purpose limitation, legal hold — that's Long-Term Memory's own module,
+  a separate Phase 2 slice candidate, not attempted here).
 
 ## Running locally
 
