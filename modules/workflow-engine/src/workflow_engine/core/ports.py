@@ -14,6 +14,7 @@ from typing import Any, Protocol
 
 from workflow_engine.core.domain import (
     ApprovalRequestRecord,
+    EventOutboxRecord,
     ReplanEventRecord,
     StepExecutionRecord,
     WorkflowDefinitionRecord,
@@ -23,6 +24,19 @@ from workflow_engine.core.domain import (
 
 class WorkflowRepository(Protocol):
     async def get_definition(self, definition_id: str) -> WorkflowDefinitionRecord | None: ...
+
+    async def get_definition_by_name(self, name: str, tenant_id: str) -> WorkflowDefinitionRecord | None:
+        """Returns the highest-version definition matching `name` for this
+        tenant, or None. Added for ticket #82 (Phase 2 support-agent slice):
+        every caller of `POST /instances` before this had to already know a
+        definition's server-generated UUID `id` -- fine for this module's
+        own admin/test tooling, but Conversational Engine's own
+        `settings.workflow_routing.definition_id` is a fixed deployment-time
+        config value (a stable name like "support-agent-v1"), set before
+        the definition it names has even been created and thus before its
+        id is known. `POST /instances` resolves by name when the given
+        value isn't a UUID (see routes_instances.py)."""
+        ...
 
     async def create_definition(self, record: WorkflowDefinitionRecord) -> WorkflowDefinitionRecord: ...
 
@@ -34,11 +48,23 @@ class WorkflowRepository(Protocol):
 
     async def update_instance(self, record: WorkflowInstanceRecord) -> WorkflowInstanceRecord: ...
 
+    async def update_instance_and_enqueue_event(
+        self, record: WorkflowInstanceRecord, *, topic: str, envelope: dict[str, Any],
+    ) -> WorkflowInstanceRecord:
+        """Atomically updates the instance AND enqueues its accompanying
+        CloudEvents envelope into `event_outbox`, one DB commit -- see
+        `EventOutboxRecord`'s own docstring for why this, not
+        `update_instance` + a separate direct publish, is what backs
+        the three top-level instance-lifecycle events."""
+        ...
+
     async def create_step_execution(self, record: StepExecutionRecord) -> StepExecutionRecord: ...
 
     async def update_step_execution(self, record: StepExecutionRecord) -> StepExecutionRecord: ...
 
-    async def list_step_executions(self, instance_id: str) -> list[StepExecutionRecord]: ...
+    async def list_step_executions(
+        self, instance_id: str, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[StepExecutionRecord], int]: ...
 
     async def get_step_execution(self, step_execution_id: str) -> StepExecutionRecord | None: ...
 
@@ -49,6 +75,32 @@ class WorkflowRepository(Protocol):
     async def update_approval_request(self, record: ApprovalRequestRecord) -> ApprovalRequestRecord: ...
 
     async def create_replan_event(self, record: ReplanEventRecord) -> ReplanEventRecord: ...
+
+    # --- Event outbox relay (core/outbox_worker.py) ---
+
+    async def claim_next_outbox_event(self, worker_id: str, lease_seconds: int) -> EventOutboxRecord | None:
+        """`SELECT ... FOR UPDATE SKIP LOCKED` in the SQL implementation --
+        the same claim shape `claim_next_evidence_pack` (Regulatory
+        Compliance) already established for this platform's durable
+        background jobs, so multiple worker processes/pods can poll
+        this table concurrently with no double-claim."""
+        ...
+
+    async def mark_outbox_event_published(self, event_id: str) -> None: ...
+
+    async def requeue_outbox_event_for_retry(self, event_id: str, *, error: str) -> None: ...
+
+    async def fail_exhausted_outbox_events(self, max_attempts: int) -> int:
+        """The poison-pill guard: an event that has failed `max_attempts`
+        times in a row stops being retried and is marked `failed` for
+        good, rather than being reclaimed forever."""
+        ...
+
+    async def force_expire_stale_outbox_leases(self) -> int:
+        """The startup recovery sweep: force-expires every currently-held
+        lease, so anything left mid-flight by a now-dead previous worker
+        instance is reclaimed on the very next poll tick."""
+        ...
 
 
 class EventPublisher(Protocol):
@@ -65,9 +117,32 @@ class LLMGatewayClient(Protocol):
         ...
 
 
+class IntentDetectionClient(Protocol):
+    """Port to the Intent Detection module (Module 5). Added for the Phase 2
+    support-agent product slice (ticket #82): this module had no client for
+    Intent Detection at all before this, even though the slice's own design
+    doc's sequence diagram always assumed one — the intent step is a real
+    new call, not a change to how symbolic/neural/human steps already work."""
+
+    async def classify(self, *, message: str, tenant_id: str) -> tuple[str, float]:
+        """Returns (top_intent_name, confidence)."""
+        ...
+
+
+class AgenticRAGClient(Protocol):
+    """Port to the Agentic RAG module (Module 6). Added for the retrieve step
+    (ticket #82); this module had no client for Agentic RAG at all before
+    the Phase 2 support-agent slice."""
+
+    async def retrieve(self, *, query: str, tenant_id: str) -> dict[str, Any]:
+        """Returns Agentic RAG's real RetrieveResponse as a dict
+        (synthesized_context/groundedness_score/outcome/...)."""
+        ...
+
+
 class ToolOrchestrationClient(Protocol):
     async def invoke(
-        self, *, tool_ref: str, arguments: dict[str, Any], tenant_id: str, trace_id: str
+        self, *, tool_ref: str, arguments: dict[str, Any], agent_ref: str, tenant_id: str, trace_id: str
     ) -> dict[str, Any]: ...
 
 
@@ -81,7 +156,14 @@ class GuardrailsClient(Protocol):
 
 class HumanOversightClient(Protocol):
     async def request_approval(
-        self, *, approval_request_id: str, step_execution_id: str, context: dict[str, Any], tenant_id: str
+        self, *, approval_request_id: str, step_execution_id: str, instance_id: str,
+        context: dict[str, Any], tenant_id: str,
     ) -> str:
-        """Registers the request with Human Oversight, returns its external ref id."""
+        """Registers the request with Human Oversight, returns its external ref id.
+        `instance_id` was added for ticket #82 (Phase 2 support-agent slice):
+        Human Oversight's own real decision-callback dispatcher resumes a
+        workflow-engine-originated request via
+        `"{instance_id}:{approval_request_id}"` as `requesting_ref` (see
+        Human Oversight's clients/http_clients.py docstring) -- without it,
+        this module had no way to identify which instance to resume."""
         ...

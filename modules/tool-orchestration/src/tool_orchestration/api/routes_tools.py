@@ -1,7 +1,7 @@
 """`/v1/tool-orchestration/*` routes (LLD §3.3, §3.5)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from tool_orchestration.api.deps import (
     build_orchestration_service,
@@ -14,9 +14,11 @@ from tool_orchestration.core.domain import (
     CircuitOpenError,
     SynthesisRejectedError,
     ToolCallError,
+    ToolDefinitionRecord,
     ToolNotActiveError,
     ToolNotFoundError,
     ToolStatus,
+    new_id,
 )
 from tool_orchestration.core.ports import ToolRepository
 from tool_orchestration.schemas.tools import (
@@ -24,31 +26,57 @@ from tool_orchestration.schemas.tools import (
     ApproveToolResponse,
     InvokeToolRequest,
     InvokeToolResponse,
+    RegisterToolRequest,
+    RegisterToolResponse,
     ReliabilityScoreSummary,
     SynthesiseToolRequest,
     ToolDefinitionDetail,
+    ToolDefinitionListResponse,
     ToolDefinitionSummary,
 )
 
 router = APIRouter(prefix="/v1/tool-orchestration", tags=["tools"])
 
 
+def _reject_null_byte_query(**params: str | None) -> None:
+    """A raw string query parameter never runs through a Pydantic body
+    field's own NUL-byte validator -- a real CI run of a sibling
+    module's contract tier (ticket #82) surfaced this exact bug class
+    on a raw query parameter, an `UntranslatableCharacterError` at the
+    database instead of a clean 422. Applied at the top of every route
+    below taking a free-text (non-enum) query parameter. This module
+    wasn't in the sweep's original module list -- found by re-grepping
+    the whole platform for the same pattern once the sweep was
+    otherwise done: `status` below is a plain, un-wrapped `str`
+    function parameter rather than an explicit `Query()` default,
+    which is why the earlier grep for `Query(` missed this file."""
+    for name, value in params.items():
+        if value is not None and "\x00" in value:
+            raise HTTPException(status_code=422, detail=f"{name} must not contain a NUL byte")
+
+
 def _tenant_id(request: Request, ctx: AppContext) -> str:
     return request.headers.get("X-Tenant-Id", ctx.settings.tenant_id)
 
 
-@router.get("/tools", response_model=list[ToolDefinitionSummary])
+@router.get("/tools", response_model=ToolDefinitionListResponse)
 async def list_tools(
     request: Request,
     status: str | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     ctx: AppContext = Depends(get_ctx),
     repository: ToolRepository = Depends(get_repository),
-) -> list[ToolDefinitionSummary]:
-    tools = await repository.list_tool_definitions(_tenant_id(request, ctx), status)
-    return [
-        ToolDefinitionSummary(id=t.id, name=t.name, mcp_server_ref=t.mcp_server_ref, status=t.status.value, synthesised=t.synthesised)
-        for t in tools
-    ]
+) -> ToolDefinitionListResponse:
+    _reject_null_byte_query(status=status)
+    tools, total = await repository.list_tool_definitions(_tenant_id(request, ctx), status, limit=limit, offset=offset)
+    return ToolDefinitionListResponse(
+        items=[
+            ToolDefinitionSummary(id=t.id, name=t.name, mcp_server_ref=t.mcp_server_ref, status=t.status.value, synthesised=t.synthesised)
+            for t in tools
+        ],
+        total=total, limit=limit, offset=offset,
+    )
 
 
 @router.get("/tools/{tool_id}", response_model=ToolDefinitionDetail)
@@ -99,6 +127,29 @@ async def invoke(
 
     return InvokeToolResponse(
         result=outcome.output, status=outcome.status.value, retry_count=outcome.retry_count, latency_ms=outcome.latency_ms
+    )
+
+
+@router.post("/tools", response_model=RegisterToolResponse, status_code=201)
+async def register_tool(
+    body: RegisterToolRequest,
+    request: Request,
+    ctx: AppContext = Depends(get_ctx),
+    repository: ToolRepository = Depends(get_repository),
+) -> RegisterToolResponse:
+    """Registers a known, already-specified tool directly as `active` --
+    see schemas/tools.py's RegisterToolRequest docstring (ticket #82) for
+    why this is distinct from the guarded `/synthesise` -> `/approve`
+    pipeline, which is for LLM-invented tools, not admin-known ones."""
+    tenant_id = _tenant_id(request, ctx)
+    record = ToolDefinitionRecord(
+        id=new_id(), tenant_id=tenant_id, name=body.name, mcp_server_ref=body.mcp_server_ref,
+        schema=body.schema_, status=ToolStatus.ACTIVE, synthesised=False,
+    )
+    record = await repository.create_tool_definition(record)
+    return RegisterToolResponse(
+        id=record.id, name=record.name, mcp_server_ref=record.mcp_server_ref,
+        status=record.status.value, synthesised=record.synthesised,
     )
 
 

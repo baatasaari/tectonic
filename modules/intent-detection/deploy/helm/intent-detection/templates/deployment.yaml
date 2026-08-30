@@ -17,16 +17,36 @@ spec:
         app.kubernetes.io/name: intent-detection
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      serviceAccountName: {{ .Release.Name }}-intent-detection
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.topologySpreadConstraints.maxSkew }}
+          topologyKey: {{ .Values.topologySpreadConstraints.topologyKey }}
+          whenUnsatisfiable: {{ .Values.topologySpreadConstraints.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: intent-detection
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: intent-detection
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           ports:
             - name: http
               containerPort: 8084
           env:
             - name: INTENT_DETECTION_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: INTENT_DETECTION_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: INTENT_DETECTION_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: INTENT_DETECTION_TELEMETRY__OTLP_ENDPOINT
@@ -35,10 +55,8 @@ spec:
               value: {{ .Values.config.confidenceThreshold | quote }}
             - name: INTENT_DETECTION_DRIFT_MONITORING__ENABLED
               value: {{ .Values.config.driftMonitoringEnabled | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: INTENT_DETECTION_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: INTENT_DETECTION_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: INTENT_DETECTION_DATABASE_URL
               valueFrom:
@@ -51,7 +69,15 @@ spec:
             {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

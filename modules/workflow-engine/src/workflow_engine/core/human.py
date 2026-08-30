@@ -19,7 +19,7 @@ class HumanApprovalHandler:
         self.human_oversight = human_oversight
 
     async def request_approval(
-        self, *, step_execution_id: str, context: dict, tenant_id: str
+        self, *, step_execution_id: str, instance_id: str, context: dict, tenant_id: str
     ) -> ApprovalRequestRecord:
         record = ApprovalRequestRecord(id=new_id(), step_execution_id=step_execution_id)
         record = await self.repository.create_approval_request(record)
@@ -27,6 +27,7 @@ class HumanApprovalHandler:
         ref_id = await self.human_oversight.request_approval(
             approval_request_id=record.id,
             step_execution_id=step_execution_id,
+            instance_id=instance_id,
             context=context,
             tenant_id=tenant_id,
         )

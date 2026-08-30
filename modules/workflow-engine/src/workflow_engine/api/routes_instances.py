@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from workflow_engine.api.deps import build_scheduler, get_ctx, get_repository
 from workflow_engine.app_context import AppContext
@@ -23,6 +23,7 @@ from workflow_engine.schemas.instances import (
     StartInstanceRequest,
     StartInstanceResponse,
     StatusResponse,
+    StepExecutionListResponse,
     StepExecutionSummary,
     TerminateRequest,
 )
@@ -41,7 +42,21 @@ async def start_instance(
     ctx: AppContext = Depends(get_ctx),
     repository: WorkflowRepository = Depends(get_repository),
 ) -> StartInstanceResponse:
-    definition = await repository.get_definition(body.definition_id)
+    tenant_id = _tenant_id(request, ctx)
+    # `body.definition_id` resolves by name when it isn't a UUID -- see
+    # WorkflowRepository.get_definition_by_name's own docstring (ticket #82)
+    # for why: a caller like Conversational Engine only knows a definition's
+    # stable name at its own deployment time, before the definition (and
+    # its server-generated id) exists yet.
+    try:
+        uuid.UUID(body.definition_id)
+        is_uuid = True
+    except ValueError:
+        is_uuid = False
+    definition = (
+        await repository.get_definition(body.definition_id) if is_uuid
+        else await repository.get_definition_by_name(body.definition_id, tenant_id)
+    )
     if definition is None:
         raise HTTPException(status_code=404, detail="definition not found")
     if body.definition_version is not None and body.definition_version != definition.version:
@@ -54,7 +69,7 @@ async def start_instance(
         id=new_id(),
         definition_id=definition.id,
         definition_version=definition.version,
-        tenant_id=_tenant_id(request, ctx),
+        tenant_id=tenant_id,
         trace_id=trace_id,
         context=dict(body.initial_context),
     )
@@ -74,7 +89,10 @@ async def get_instance(
     instance = await repository.get_instance(instance_id)
     if instance is None:
         raise HTTPException(status_code=404, detail="instance not found")
-    steps = await repository.list_step_executions(instance_id)
+    # `InstanceDetail.steps` is the complete step list for this one instance, not the
+    # paginated `/steps` resource — limit=10_000 is an effectively-unbounded internal page
+    # size (one instance's step count is bounded by its workflow graph).
+    steps, _total = await repository.list_step_executions(instance_id, limit=10_000)
     return InstanceDetail(
         id=instance.id,
         definition_id=instance.definition_id,
@@ -90,13 +108,22 @@ async def get_instance(
     )
 
 
-@router.get("/{instance_id}/steps", response_model=list[StepExecutionSummary])
+@router.get("/{instance_id}/steps", response_model=StepExecutionListResponse)
 async def list_steps(
     instance_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    # An unbounded offset is schema-valid for a bare `int` but overflows Postgres's
+    # `bigint` column deep inside asyncpg instead of a clean 422 -- the same fix
+    # Billing and Metering's/Multi-tenancy's/LLM Gateway's own `offset` query
+    # parameters already established, applied here proactively (this module's own
+    # contract-test tier hadn't happened to fuzz this exact value yet).
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: WorkflowRepository = Depends(get_repository),
-) -> list[StepExecutionSummary]:
-    steps = await repository.list_step_executions(instance_id)
-    return [_step_summary(s) for s in steps]
+) -> StepExecutionListResponse:
+    steps, total = await repository.list_step_executions(instance_id, limit=limit, offset=offset)
+    return StepExecutionListResponse(
+        items=[_step_summary(s) for s in steps], total=total, limit=limit, offset=offset,
+    )
 
 
 @router.post("/{instance_id}/pause", response_model=StatusResponse)

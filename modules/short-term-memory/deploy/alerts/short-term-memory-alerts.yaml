@@ -1,0 +1,23 @@
+# Prometheus Alertmanager rule definitions for the Short-Term Memory
+# module (LLD §Level 4 "Alerting").
+groups:
+  - name: short-term-memory
+    rules:
+      - alert: STMOverflowRateHigh
+        expr: |
+          sum(rate(stm_overflow_events_total[1h])) by (tenant_id)
+            /
+          sum(rate(stm_appends_total[1h])) by (tenant_id)
+          > 0.5
+        labels:
+          severity: info
+        annotations:
+          summary: "Overflow rate for tenant {{ $labels.tenant_id }} significantly exceeds expected baseline"
+          description: "May indicate the token budget is too small for typical conversations."
+
+      - alert: STMSummarisationLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(stm_summarisation_duration_seconds_bucket[5m])) by (le, tenant_id)) > 1
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 summarisation latency for tenant {{ $labels.tenant_id }} above 1s"

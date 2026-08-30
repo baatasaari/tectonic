@@ -27,12 +27,15 @@ src/agentic_rag/
     rag_service.py                     Persists the loop's request/hops/result
   db/                      SQLAlchemy 2.0 async models + repository
   clients/                 HTTP clients for Vector DB / Graph DB / Knowledge Base / LLM Gateway
+  security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate, real OpenAPI security scheme declarations
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/                       FastAPI routers — retrieve, request detail
   schemas/                    Pydantic request/response models
 ```
 
 ## Design notes vs. the LLD
+
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
 
 - **Retrieve-Critique-Reformulate Loop.** The LLD assigns this to an ADK
   2.0 Workflow Runtime loop node. `core/retrieval_loop.py` implements the
@@ -53,6 +56,107 @@ src/agentic_rag/
   clearing the groundedness threshold, the result returned is the
   best-scoring hop seen, not the last one tried — a partial answer with
   provenance beats silently returning the weakest attempt.
+- **Postgres integration tests** — the repository layer is now also tested
+  against a real Postgres (`tests/integration/`, opt-in via
+  `TECTONIC_TEST_POSTGRES_URL` or Docker+testcontainers), covering nested
+  JSONB round-tripping of `retrieved_items`/`provenance_chain` and real UUID
+  primary keys that SQLite's unit-tier fakes can't reliably prove. See
+  `tests/integration/conftest.py` for how the Postgres instance is obtained.
+  This tier's presence prompted a platform-wide sweep of every module's
+  `db/models.py` for the same class of bug: `Mapped[datetime]` columns missing
+  `DateTime(timezone=True)` despite the Alembic migration already defining
+  them as timestamptz and the domain layer's defaults being tz-aware —
+  invisible under SQLite, but a real correctness bug against Postgres once a
+  domain default (or an explicit value) is written. Found and fixed here too.
+
+- **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
+  the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
+  regardless of how many pods are running — at this module's own
+  `deploy/helm/agentic-rag/values.yaml` `autoscaling.maxReplicas: 20`,
+  that's up to 300 connections to this module's own Postgres
+  instance from this module alone at full autoscale, with no one having
+  deliberately decided that number. `db/session.py`'s `make_engine` now
+  passes explicit, configurable `pool_size=5` /
+  `max_overflow=2` (`db_pool_size`/`db_max_overflow`
+  Settings, env-overridable) sized so this module's own steady-state
+  total stays at ~100 connections and its full-burst total at ~150,
+  even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
+  connections behind a cloud LB/proxy's own idle-connection timeout —
+  a real, independent gap, not just a replica-count one.
+
+- **Service-to-service JWT auth.** Before this, no module authenticated
+  any of its inbound HTTP calls — any process able to reach a module's
+  port could call it, and every outbound call this module makes carried
+  no credential at all. `security/jwt_auth.py` adds shared-signing-key
+  (HS256) bearer auth: `ServiceAuthMiddleware` verifies every inbound
+  request's `Authorization: Bearer <JWT>` against this module's own
+  `service_name` as the required audience (except `/healthz` and
+  `/metrics` — Kubernetes probes and Prometheus scraping carry no auth
+  token); `ServiceBearerAuth` (an `httpx.Auth` flow) mints a fresh,
+  short-lived (5 min default) token scoped via the `aud` claim to the
+  *specific* peer being called on every outbound request each of
+  `HTTPVectorDBClient`, `HTTPGraphDBClient`, `HTTPKnowledgeBaseClient` and
+  `HTTPLLMGatewayClient` makes — a token minted to call one peer is
+  rejected if replayed against a different one. The shared secret
+  (`TECTONIC_JWT_SHARED_SECRET`, one Kubernetes Secret referenced by
+  every module's Helm chart under this same literal env var name, not a
+  per-module-prefixed one) defaults to an obviously-insecure placeholder
+  for zero-config local dev/tests; `main.py` logs a startup warning if
+  it's still active. This is service-to-service auth for inter-module
+  calls, not the platform's external-facing user-auth story — a real API
+  gateway/OAuth layer in front of the platform's own entry points is a
+  separate, larger concern, out of scope here.
+
+- **Enforces its own subscription entitlement via `EntitlementGateMiddleware`**
+  (`security/entitlement_gate.py`) — see Agent Cards' README and the rollout
+  playbook doc (`docs/entitlement-gate-rollout.md`) for the shared reference
+  implementation. Layered after `ServiceAuthMiddleware` (authenticate, then
+  entitle), it calls Multi-tenancy's real `GET /tenants/{id}/gate?module=agentic-rag`,
+  denying with `402 Payment Required` when the tenant's subscription doesn't
+  include this module. It **fails open** if Multi-tenancy is unreachable — a
+  deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
+  posture.
+
+- **Its generated OpenAPI document declares the real auth it enforces**
+  (`security/openapi_security.py`) — see Workflow Engine's README and the
+  independent architecture assessment's §3.6 for the shared reference
+  implementation and full reasoning. `ServiceAuthMiddleware` is plain
+  Starlette middleware, invisible to FastAPI's automatic OpenAPI
+  generation, so this module's spec previously declared no
+  `securitySchemes` at all; `configure_openapi_security` fixes that,
+  reusing `jwt_auth.py`'s own `_EXCLUDED_PATHS` as the one source of
+  truth for which paths are genuinely unauthenticated.
+
+- **Kubernetes hardening** (`deploy/helm/`; independent architecture
+  assessment §3.7) — see Workflow Engine's README for the full reasoning
+  and reference implementation. A dedicated ServiceAccount with no
+  auto-mounted API token (this module never calls the Kubernetes API);
+  pod/container `securityContext` (non-root, read-only root filesystem
+  with a small `/tmp` `emptyDir`, all capabilities dropped, a seccomp
+  profile); a `NetworkPolicy` restricting ingress to this module's own
+  namespace; separate startup/liveness/readiness probe semantics instead
+  of two identical probes; and `topologySpreadConstraints` across nodes.
+
+- **Real wire shapes for the Vector DB and LLM Gateway clients** (ticket
+  #82's own Phase 2 support-agent slice, standing this module up against
+  real running peers for the first time): `HTTPVectorDBClient.search()`
+  posted an invented `/v1/vector-db/search {query, scope, tenant_id}`
+  shape — Vector DB's real route is `/v1/vector-db/query`, `QueryRequest`'s
+  real fields (`tenant_id`, `text`, `filters`), no `scope` concept.
+  `HTTPLLMGatewayClient.assess_groundedness()`/`.reformulate()` posted to
+  invented `/v1/rag/assess-groundedness`/`/v1/rag/reformulate` paths LLM
+  Gateway never implemented (and never should — those are this module's
+  own business logic, not a generic capability LLM Gateway itself should
+  expose) — fixed to call the real `/v1/llm-gateway/chat/completions`,
+  same pattern as Workflow Engine's own identically-named client class.
+  All three fixes pinned with respx-based wire-shape tests
+  (`tests/unit/test_http_clients_real_wire_shapes.py`). Hybrid retrieval
+  fan-out (Graph DB, Knowledge Base's own symbolic lookup) is disabled
+  by this slice's own deployment config
+  (`retrieval.hybrid_retrieval_enabled=false`) rather than fixed: Graph
+  DB is legitimately out of this slice's scope, and Knowledge Base has
+  no real symbolic-lookup endpoint at all yet — a real, separately-scoped
+  gap, not invented around here.
 
 ## Running locally
 

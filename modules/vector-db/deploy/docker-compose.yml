@@ -1,8 +1,11 @@
 # Deployability and Testability Contract: this module runs and tests fully
 # with LLM Gateway stubbed (canned embeddings). This compose file runs a
-# real self-hosted Qdrant server (the LLD's chosen production topology);
-# the module's own unit tests instead use Qdrant's embedded in-memory mode
-# and need no server at all.
+# real self-hosted Qdrant server (the LLD's chosen production topology) --
+# the vector data plane itself -- plus a real Postgres for this module's own
+# migration bookkeeping (core/domain.py's MigrationRecord; see the module
+# README for why that's a separate concern from Qdrant). The module's own
+# unit tests instead use Qdrant's embedded in-memory mode and need no server
+# at all for either.
 name: vector-db
 
 services:
@@ -16,20 +19,49 @@ services:
       timeout: 5s
       retries: 10
 
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: vector_db
+      POSTGRES_PASSWORD: vector_db
+      POSTGRES_DB: vector_db
+    ports:
+      - "5464:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vector_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   dependency-stub:
     build: ../stubs/dependency-stub
     ports:
       - "9110:9110"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      VECTOR_DB_DATABASE_URL: postgresql+asyncpg://vector_db:vector_db@postgres:5432/vector_db
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   vector-db:
     build: ..
     ports:
       - "8089:8089"
     environment:
+      VECTOR_DB_DATABASE_URL: postgresql+asyncpg://vector_db:vector_db@postgres:5432/vector_db
       VECTOR_DB_QDRANT__URL: http://qdrant:6333
-      VECTOR_DB_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9110
+      VECTOR_DB_LLM_GATEWAY_BASE_URL: http://dependency-stub:9110
+      VECTOR_DB_MULTI_TENANCY_BASE_URL: http://dependency-stub:9110
     depends_on:
       qdrant:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
       dependency-stub:
         condition: service_started
+      migrate:
+        condition: service_completed_successfully

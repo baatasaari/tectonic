@@ -1,0 +1,20 @@
+{
+  "tier": "starter",
+  "tenant_name": "Starter Test Co",
+  "description": "Entry tier: the minimum useful agent -- a workflow, a conversation surface, one model gateway, one safety net. No memory, no retrieval, no governance beyond guardrails.",
+  "billing": {
+    "plan_name": "Starter",
+    "unit_prices": {
+      "workflow-engine": 120,
+      "conversational-engine": 90,
+      "llm-gateway": 150,
+      "guardrails": 130,
+      "llm.cost_usd": 0.02
+    }
+  },
+  "admin_identity": {
+    "name": "Starter Test Co Admin",
+    "type": "user",
+    "role_names": ["tenant-admin"]
+  }
+}

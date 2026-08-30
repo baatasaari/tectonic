@@ -23,7 +23,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6381:6379"
+      - "6382:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -51,7 +51,10 @@ services:
     environment:
       TOOL_ORCHESTRATION_DATABASE_URL: postgresql+asyncpg://tool_orchestration:tool_orchestration@postgres:5432/tool_orchestration
       TOOL_ORCHESTRATION_REDIS_URL: redis://redis:6379/0
-      TOOL_ORCHESTRATION_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9104
+      TOOL_ORCHESTRATION_LLM_GATEWAY_BASE_URL: http://dependency-stub:9104
+      TOOL_ORCHESTRATION_GUARDRAILS_BASE_URL: http://dependency-stub:9104
+      TOOL_ORCHESTRATION_SENTINEL_AGENTS_BASE_URL: http://dependency-stub:9104
+      TOOL_ORCHESTRATION_MULTI_TENANCY_BASE_URL: http://dependency-stub:9104
     depends_on:
       postgres:
         condition: service_healthy

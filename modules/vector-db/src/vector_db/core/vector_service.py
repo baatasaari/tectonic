@@ -13,8 +13,14 @@ from qdrant_client import AsyncQdrantClient, models
 
 from vector_db.config import IsolationConfig, QueryConfig
 from vector_db.core import qdrant_ops, sparse_encoder
-from vector_db.core.domain import PointNotFoundError, ScoredPointResult, new_id
-from vector_db.core.ports import EmbeddingProvider
+from vector_db.core.domain import (
+    EmbeddingDimensionMismatchError,
+    PointNotFoundError,
+    QuotaExceededError,
+    ScoredPointResult,
+    new_id,
+)
+from vector_db.core.ports import EmbeddingProvider, MultiTenancyQuotaClient
 from vector_db.core.qdrant_ops import DENSE_VECTOR_NAME, SPARSE_VECTOR_NAME
 
 
@@ -27,6 +33,7 @@ class VectorService:
         isolation: IsolationConfig,
         query_config: QueryConfig,
         default_embedding_model: str,
+        multi_tenancy: MultiTenancyQuotaClient | None = None,
     ) -> None:
         self._client = client
         self._embeddings = embeddings
@@ -34,13 +41,31 @@ class VectorService:
         self._isolation = isolation
         self._query_config = query_config
         self._default_model = default_embedding_model
+        self._multi_tenancy = multi_tenancy
 
     def _alias(self, tenant_id: str) -> str:
         return qdrant_ops.alias_for_tenant(self._base_alias, self._isolation.tenancy_model, tenant_id)
 
+    async def _verify_dimension(self, physical: str, dense_dim: int) -> None:
+        """Every physical collection fixes its dense vector size at
+        creation -- Qdrant's own real API rejects a request whose
+        vector doesn't match (an upsert during indexing, or a query
+        vector at read time), but the embedded local test client
+        instead crashes with a raw, unhandled exception deep inside
+        its own numpy-based implementation on either path (found by
+        this module's own OpenAPI contract-test tier), so this is
+        checked explicitly on both `index_point` and `query` rather
+        than left to whatever the client happens to do with a
+        mismatch."""
+        info = await self._client.get_collection(physical)
+        existing_dim = info.config.params.vectors[DENSE_VECTOR_NAME].size
+        if existing_dim != dense_dim:
+            raise EmbeddingDimensionMismatchError(expected=existing_dim, got=dense_dim)
+
     async def _ensure_initial_collection(self, alias: str, dense_dim: int) -> str:
         physical = await qdrant_ops.resolve_alias(self._client, alias)
         if physical is not None:
+            await self._verify_dimension(physical, dense_dim)
             return physical
         physical = f"{alias}__v1"
         await qdrant_ops.ensure_collection(self._client, physical, dense_dim)
@@ -53,17 +78,37 @@ class VectorService:
         )
         return physical
 
+    async def _current_vector_count(self, physical: str, tenant_id: str) -> float:
+        """The real, live count of points this tenant currently has
+        indexed -- this module's own source of truth for the
+        `vector_count` capacity-shaped resource class, supplied as
+        `current_usage` to Multi-tenancy's stateless ceiling check (see
+        `ports.MultiTenancyQuotaClient`'s own docstring for why this
+        module, not Multi-tenancy, owns this count)."""
+        filter_tenant = tenant_id if self._isolation.tenancy_model == "shared_collection_with_filter" else None
+        count_filter = qdrant_ops.build_filter(filter_tenant, None)
+        result = await self._client.count(physical, count_filter=count_filter, exact=True)
+        return float(result.count)
+
     async def index_point(
         self, *, tenant_id: str, source_module: str, source_ref: str, content: str | None = None,
         vector: list[float] | None = None, payload_extra: dict[str, Any] | None = None,
         embedding_model_version: str | None = None,
     ) -> str:
         model = embedding_model_version or self._default_model
-        dense = vector if vector is not None else await self._embeddings.embed(content or "", model=model)
+        dense = vector if vector is not None else await self._embeddings.embed(content or "", model=model, tenant_id=tenant_id)
         sparse = sparse_encoder.encode(content or "")
 
         alias = self._alias(tenant_id)
         physical = await self._ensure_initial_collection(alias, len(dense))
+
+        if self._multi_tenancy is not None:
+            current_usage = await self._current_vector_count(physical, tenant_id)
+            allowed, reason = await self._multi_tenancy.check_quota(
+                tenant_id=tenant_id, resource_class="vector_count", current_usage=current_usage,
+            )
+            if not allowed:
+                raise QuotaExceededError(reason or "vector_count quota exceeded")
 
         point_id = new_id()
         payload = {
@@ -103,7 +148,8 @@ class VectorService:
 
         limit = top_k or self._query_config.default_top_k
         use_hybrid = self._query_config.hybrid_search_default if hybrid is None else hybrid
-        dense = vector if vector is not None else await self._embeddings.embed(text or "")
+        dense = vector if vector is not None else await self._embeddings.embed(text or "", tenant_id=tenant_id)
+        await self._verify_dimension(physical, len(dense))
         filter_tenant = tenant_id if self._isolation.tenancy_model == "shared_collection_with_filter" else None
         qdrant_filter = qdrant_ops.build_filter(filter_tenant, filters)
 

@@ -1,0 +1,44 @@
+{
+  "tier": "enterprise",
+  "tenant_name": "Enterprise Test Co",
+  "description": "All 28 selectable modules -- every category in the platform's own module table (Orchestration and Runtime, Intelligence, Data, Memory, Governance and Safety, Quality and Trust, Interoperability, Operations, Modality). The 6 Platform Base modules (Multi-tenancy, Identity and Access, Auditability, Billing and Metering, Secrets and Credential Management, SDK and Developer Portal) are always-on infrastructure, never a line item here.",
+  "billing": {
+    "plan_name": "Enterprise",
+    "unit_prices": {
+      "workflow-engine": 120,
+      "conversational-engine": 90,
+      "llm-gateway": 150,
+      "tool-orchestration": 80,
+      "intent-detection": 60,
+      "agentic-rag": 140,
+      "context-engineering": 70,
+      "data-source-plugins": 90,
+      "knowledge-base": 110,
+      "vector-db": 130,
+      "graph-db": 100,
+      "short-term-memory": 50,
+      "long-term-memory": 90,
+      "guardrails": 130,
+      "sentinel-agents": 150,
+      "human-oversight": 80,
+      "regulatory-compliance": 180,
+      "evaluation-framework": 90,
+      "observability": 100,
+      "mcp": 70,
+      "a2a": 80,
+      "agent-cards": 50,
+      "agent-marketplace": 60,
+      "llmops": 100,
+      "finops": 90,
+      "deployment-strategy": 100,
+      "promptops": 70,
+      "multi-modality": 120,
+      "llm.cost_usd": 0.015
+    }
+  },
+  "admin_identity": {
+    "name": "Enterprise Test Co Admin",
+    "type": "user",
+    "role_names": ["tenant-admin"]
+  }
+}

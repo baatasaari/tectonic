@@ -37,6 +37,39 @@ class MigrationNotFoundError(Exception):
         super().__init__(f"migration not found: {migration_id}")
 
 
+class QuotaExceededError(Exception):
+    """Raised when Multi-tenancy's real `vector_count` quota check denies
+    an `index_point` call (independent architecture assessment §5.2 /
+    §3.4 point 5) -- a genuine, tenant-configured capacity limit on how
+    many vectors this tenant may have indexed. Maps to a real
+    `429 Too Many Requests`."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+class EmbeddingDimensionMismatchError(Exception):
+    """Raised when `index_point` is given (directly, or via
+    `embedding_model_version`) a dense vector whose dimensionality
+    doesn't match the tenant's already-established collection -- every
+    physical Qdrant collection fixes its vector size at creation, so a
+    later point of a different dimensionality is never valid, real
+    input, not a transient condition. Left unguarded, Qdrant's own real
+    API rejects the mismatched upsert but the embedded local test
+    client (`qdrant_client.local`) instead silently corrupts that
+    collection's internal state, corrupting later unrelated reads too
+    -- found by this module's own OpenAPI contract-test tier. Maps to
+    a real `422 Unprocessable Entity`."""
+
+    def __init__(self, *, expected: int, got: int) -> None:
+        super().__init__(
+            f"embedding dimension mismatch: this tenant's collection is {expected}-dimensional, got {got}"
+        )
+        self.expected = expected
+        self.got = got
+
+
 @dataclass
 class SparseVectorData:
     indices: list[int] = field(default_factory=list)

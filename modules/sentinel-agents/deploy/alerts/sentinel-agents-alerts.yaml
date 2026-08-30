@@ -1,0 +1,26 @@
+# Prometheus Alertmanager rule definitions for the Sentinel Agents module
+# (LLD §Level 4 "Alerting" — "meta: alerts about the alerting system itself").
+groups:
+  - name: sentinel-agents
+    rules:
+      - alert: SentinelDetectionLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(sentinel_detection_latency_seconds_bucket[5m])) by (le, tenant_id)) > 0.5
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 detection latency for tenant {{ $labels.tenant_id }} exceeds the 500ms design target"
+
+      - alert: SentinelFalsePositiveRateHigh
+        expr: sentinel_false_positive_rate > 0.3
+        labels:
+          severity: warning
+        annotations:
+          summary: "False positive rate for tenant {{ $labels.tenant_id }} exceeds tolerance over 7 days"
+          description: "Tune baselining sensitivity."
+
+      - alert: SentinelEventConsumerLag
+        expr: up{job="sentinel-agents"} == 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Sentinel Agents event ingestion unavailable — detection is running on stale data"

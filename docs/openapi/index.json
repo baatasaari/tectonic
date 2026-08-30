@@ -1,0 +1,692 @@
+[
+  {
+    "module": "workflow-engine",
+    "category": "Orchestration and Runtime",
+    "port": 8080,
+    "title": "Workflow Engine",
+    "description": "Tectonic Agentic AI Platform — Module 1: executes agent workflows as DAGs/graphs with neurosymbolic step routing and confidence-gated autonomy.",
+    "version": "0.1.0",
+    "path_count": 12,
+    "operation_count": 12,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/workflow-engine/definitions",
+      "/v1/workflow-engine/definitions/{definition_id}",
+      "/v1/workflow-engine/definitions/{definition_id}/publish",
+      "/v1/workflow-engine/instances",
+      "/v1/workflow-engine/instances/{instance_id}",
+      "/v1/workflow-engine/instances/{instance_id}/approvals/{approval_id}/callback",
+      "/v1/workflow-engine/instances/{instance_id}/pause",
+      "/v1/workflow-engine/instances/{instance_id}/resume",
+      "/v1/workflow-engine/instances/{instance_id}/steps",
+      "/v1/workflow-engine/instances/{instance_id}/terminate"
+    ]
+  },
+  {
+    "module": "conversational-engine",
+    "category": "Orchestration and Runtime",
+    "port": 8081,
+    "title": "Conversational Engine",
+    "description": "Tectonic Agentic AI Platform — Module 2: multi-turn dialogue management with persona control, channel adaptation, and emotional/urgency-aware handoff.",
+    "version": "0.1.0",
+    "path_count": 7,
+    "operation_count": 7,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/conversational-engine/sessions",
+      "/v1/conversational-engine/sessions/{session_id}",
+      "/v1/conversational-engine/sessions/{session_id}/close",
+      "/v1/conversational-engine/sessions/{session_id}/handoff",
+      "/v1/conversational-engine/sessions/{session_id}/messages"
+    ]
+  },
+  {
+    "module": "llm-gateway",
+    "category": "Orchestration and Runtime",
+    "port": 8082,
+    "title": "LLM Gateway",
+    "description": "Tectonic Agentic AI Platform — Module 3: the only module permitted to call model providers directly. Quality-aware routing, semantic caching, cost governance, failover.",
+    "version": "0.1.0",
+    "path_count": 7,
+    "operation_count": 8,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/llm-gateway/admin/budgets/{budget_policy_id}",
+      "/v1/llm-gateway/admin/providers",
+      "/v1/llm-gateway/admin/virtual-keys",
+      "/v1/llm-gateway/chat/completions",
+      "/v1/llm-gateway/embeddings"
+    ]
+  },
+  {
+    "module": "tool-orchestration",
+    "category": "Orchestration and Runtime",
+    "port": 8083,
+    "title": "Tool Orchestration",
+    "description": "Tectonic Agentic AI Platform — Module 4: discovery, invocation, retry, circuit-breaking and reliability-scored routing for every agent-to-tool call.",
+    "version": "0.1.0",
+    "path_count": 7,
+    "operation_count": 7,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/tool-orchestration/invoke",
+      "/v1/tool-orchestration/synthesise",
+      "/v1/tool-orchestration/tools",
+      "/v1/tool-orchestration/tools/{tool_id}",
+      "/v1/tool-orchestration/tools/{tool_id}/approve"
+    ]
+  },
+  {
+    "module": "intent-detection",
+    "category": "Intelligence Layer",
+    "port": 8084,
+    "title": "Intent Detection",
+    "description": "Tectonic Agentic AI Platform — Module 5: classifies input into intents, decomposes compositional multi-goal utterances, and monitors intent drift.",
+    "version": "0.1.0",
+    "path_count": 6,
+    "operation_count": 6,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/intent-detection/classify",
+      "/v1/intent-detection/drift-reports",
+      "/v1/intent-detection/taxonomies",
+      "/v1/intent-detection/taxonomies/{taxonomy_id}/activate"
+    ]
+  },
+  {
+    "module": "agentic-rag",
+    "category": "Intelligence Layer",
+    "port": 8085,
+    "title": "Agentic RAG",
+    "description": "Tectonic Agentic AI Platform — Module 6: multi-hop, self-correcting retrieval that reformulates queries, checks groundedness and re-retrieves when needed.",
+    "version": "0.1.0",
+    "path_count": 4,
+    "operation_count": 4,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/agentic-rag/requests/{request_id}",
+      "/v1/agentic-rag/retrieve"
+    ]
+  },
+  {
+    "module": "context-engineering",
+    "category": "Intelligence Layer",
+    "port": 8086,
+    "title": "Context Engineering",
+    "description": "Tectonic Agentic AI Platform — Module 7: assembles, compresses and prunes context within token budget using ontology constraints.",
+    "version": "0.1.0",
+    "path_count": 5,
+    "operation_count": 5,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/context-engineering/assemble",
+      "/v1/context-engineering/ontologies",
+      "/v1/context-engineering/weights/{task_type}"
+    ]
+  },
+  {
+    "module": "data-source-plugins",
+    "category": "Data Layer",
+    "port": 8087,
+    "title": "Data Source Plugins",
+    "description": "Tectonic Agentic AI Platform — Module 8: connectivity to external data systems with schema drift auto-adaptation and data quality scoring.",
+    "version": "0.1.0",
+    "path_count": 8,
+    "operation_count": 8,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/data-source-plugins/connectors",
+      "/v1/data-source-plugins/connectors/{connector_id}",
+      "/v1/data-source-plugins/connectors/{connector_id}/drift-incidents",
+      "/v1/data-source-plugins/connectors/{connector_id}/quality",
+      "/v1/data-source-plugins/connectors/{connector_id}/query",
+      "/v1/data-source-plugins/connectors/{connector_id}/sync"
+    ]
+  },
+  {
+    "module": "knowledge-base",
+    "category": "Data Layer",
+    "port": 8088,
+    "title": "Knowledge Base",
+    "description": "Tectonic Agentic AI Platform — Module 9: ingests, chunks, versions and manages source-of-truth documents feeding Agentic RAG.",
+    "version": "0.1.0",
+    "path_count": 7,
+    "operation_count": 7,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/knowledge-base/chunks",
+      "/v1/knowledge-base/documents",
+      "/v1/knowledge-base/documents/{document_id}",
+      "/v1/knowledge-base/documents/{document_id}/review",
+      "/v1/knowledge-base/documents/{document_id}/versions"
+    ]
+  },
+  {
+    "module": "vector-db",
+    "category": "Data Layer",
+    "port": 8089,
+    "title": "Vector DB",
+    "description": "Tectonic Agentic AI Platform — Module 10: hybrid dense-sparse embedding storage with automatic embedding model migration, backed by Qdrant.",
+    "version": "0.1.0",
+    "path_count": 7,
+    "operation_count": 7,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/vector-db/migrations",
+      "/v1/vector-db/migrations/{migration_id}",
+      "/v1/vector-db/points",
+      "/v1/vector-db/points/{point_id}",
+      "/v1/vector-db/query"
+    ]
+  },
+  {
+    "module": "graph-db",
+    "category": "Data Layer",
+    "port": 8090,
+    "title": "Graph DB",
+    "description": "Tectonic Agentic AI Platform — Module 11: temporal, causally-typed entity/relationship storage for graph-based reasoning and memory.",
+    "version": "0.1.0",
+    "path_count": 6,
+    "operation_count": 6,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/graph-db/edges",
+      "/v1/graph-db/nodes",
+      "/v1/graph-db/nodes/{node_id}/neighbours",
+      "/v1/graph-db/query"
+    ]
+  },
+  {
+    "module": "short-term-memory",
+    "category": "Memory",
+    "port": 8091,
+    "title": "Short-Term Memory",
+    "description": "Tectonic Agentic AI Platform — Module 12: token-budgeted session buffer with salience-weighted retention.",
+    "version": "0.1.0",
+    "path_count": 4,
+    "operation_count": 5,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/short-term-memory/sessions/{session_id}",
+      "/v1/short-term-memory/sessions/{session_id}/messages"
+    ]
+  },
+  {
+    "module": "long-term-memory",
+    "category": "Memory",
+    "port": 8092,
+    "title": "Long-Term Memory",
+    "description": "Tectonic Agentic AI Platform — Module 13: durable, cross-session hybrid memory store with consolidation, forgetting and self-reflection.",
+    "version": "0.1.0",
+    "path_count": 8,
+    "operation_count": 9,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/long-term-memory/consolidation-runs",
+      "/v1/long-term-memory/erasure-requests",
+      "/v1/long-term-memory/erasure-requests/{deletion_id}",
+      "/v1/long-term-memory/items",
+      "/v1/long-term-memory/query",
+      "/v1/long-term-memory/reflections"
+    ]
+  },
+  {
+    "module": "guardrails",
+    "category": "Governance and Safety",
+    "port": 8093,
+    "title": "Guardrails",
+    "description": "Tectonic Agentic AI Platform — Module 14: dual-stage input/output policy enforcement for every LLM Gateway call.",
+    "version": "0.1.0",
+    "path_count": 6,
+    "operation_count": 6,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/guardrails/check",
+      "/v1/guardrails/policy-profiles",
+      "/v1/guardrails/red-team-runs",
+      "/v1/guardrails/red-team-runs/trigger"
+    ]
+  },
+  {
+    "module": "sentinel-agents",
+    "category": "Governance and Safety",
+    "port": 8094,
+    "title": "Sentinel Agents",
+    "description": "Tectonic Agentic AI Platform — Module 15: runtime agents monitoring other agents, with per-agent behavioural baselining and swarm-level anomaly detection.",
+    "version": "0.1.0",
+    "path_count": 7,
+    "operation_count": 7,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/sentinel-agents/alerts",
+      "/v1/sentinel-agents/alerts/{alert_id}",
+      "/v1/sentinel-agents/baselines/{agent_ref}",
+      "/v1/sentinel-agents/config",
+      "/v1/sentinel-agents/events"
+    ]
+  },
+  {
+    "module": "human-oversight",
+    "category": "Governance and Safety",
+    "port": 8095,
+    "title": "Human Oversight",
+    "description": "Tectonic Agentic AI Platform — Module 16: designed-in approval queues, override logging, escalation routing per EU AI Act Article 14.",
+    "version": "0.1.0",
+    "path_count": 6,
+    "operation_count": 7,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/human-oversight/requests",
+      "/v1/human-oversight/requests/{request_id}",
+      "/v1/human-oversight/requests/{request_id}/claim",
+      "/v1/human-oversight/requests/{request_id}/decide"
+    ]
+  },
+  {
+    "module": "regulatory-compliance",
+    "category": "Governance and Safety",
+    "port": 8096,
+    "title": "Regulatory and Compliance",
+    "description": "Tectonic Agentic AI Platform — Module 17: crosswalk engine mapping controls once to EU AI Act, NIST AI RMF, ISO 42001 and DORA, with living regulatory feed.",
+    "version": "0.1.0",
+    "path_count": 9,
+    "operation_count": 9,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/regulatory-compliance/control-events",
+      "/v1/regulatory-compliance/coverage",
+      "/v1/regulatory-compliance/evidence-packs",
+      "/v1/regulatory-compliance/evidence-packs/{pack_id}",
+      "/v1/regulatory-compliance/framework-profiles",
+      "/v1/regulatory-compliance/mappings",
+      "/v1/regulatory-compliance/mappings/publish"
+    ]
+  },
+  {
+    "module": "evaluation-framework",
+    "category": "Quality and Trust",
+    "port": 8097,
+    "title": "Evaluation Framework",
+    "description": "Tectonic Agentic AI Platform — Module 18: faithfulness, coherence and tool-trace scoring, as both a CI/CD gate and continuous production evaluation.",
+    "version": "0.1.0",
+    "path_count": 7,
+    "operation_count": 7,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/evaluation-framework/domain-packs",
+      "/v1/evaluation-framework/evaluate",
+      "/v1/evaluation-framework/gate",
+      "/v1/evaluation-framework/sample",
+      "/v1/evaluation-framework/scores"
+    ]
+  },
+  {
+    "module": "observability",
+    "category": "Quality and Trust",
+    "port": 8098,
+    "title": "Observability",
+    "description": "Tectonic Agentic AI Platform — Module 19: the platform-wide sink for trace/span/metric/log data, with reasoning-trace narrative reconstruction and cost-attributed tracing.",
+    "version": "0.1.0",
+    "path_count": 6,
+    "operation_count": 6,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/observability/cost-attribution/{trace_id}",
+      "/v1/observability/ingest",
+      "/v1/observability/reasoning-narrative/{trace_id}",
+      "/v1/observability/trace-completeness"
+    ]
+  },
+  {
+    "module": "auditability",
+    "category": "Quality and Trust",
+    "port": 8099,
+    "title": "Auditability",
+    "description": "Tectonic Agentic AI Platform — Module 20: immutable, hash-chained event log with tamper-evidence, audit-pack export and natural-language query.",
+    "version": "0.1.0",
+    "path_count": 7,
+    "operation_count": 8,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/auditability/audit-packs",
+      "/v1/auditability/audit-packs/{pack_id}",
+      "/v1/auditability/events",
+      "/v1/auditability/events/verify-chain",
+      "/v1/auditability/query"
+    ]
+  },
+  {
+    "module": "mcp",
+    "category": "Interoperability",
+    "port": 8100,
+    "title": "MCP",
+    "description": "Tectonic Agentic AI Platform — Module 21: standardised agent-to-tool/data interface over JSON-RPC, with an internal server marketplace and per-tenant/per-tool access policy.",
+    "version": "0.1.0",
+    "path_count": 7,
+    "operation_count": 8,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/mcp/servers",
+      "/v1/mcp/servers/{server_id}",
+      "/v1/mcp/servers/{server_id}/access-policy",
+      "/v1/mcp/servers/{server_id}/rpc",
+      "/v1/mcp/servers/{server_id}/sync"
+    ]
+  },
+  {
+    "module": "a2a",
+    "category": "Interoperability",
+    "port": 8101,
+    "title": "A2A",
+    "description": "Tectonic Agentic AI Platform — Module 22: standardised agent-to-agent delegation and capability negotiation, cross-vendor federation over the A2A protocol.",
+    "version": "0.1.0",
+    "path_count": 9,
+    "operation_count": 9,
+    "paths": [
+      "/.well-known/agent.json",
+      "/healthz",
+      "/metrics",
+      "/v1/a2a/access-policies/{caller_agent_id}",
+      "/v1/a2a/delegate",
+      "/v1/a2a/rpc",
+      "/v1/a2a/tasks",
+      "/v1/a2a/tasks/{task_id}",
+      "/v1/a2a/tasks/{task_id}/cancel"
+    ]
+  },
+  {
+    "module": "agent-cards",
+    "category": "Interoperability",
+    "port": 8102,
+    "title": "Agent Cards",
+    "description": "Tectonic Agentic AI Platform — Module 23: trust-scored, machine-readable capability manifests for discovery.",
+    "version": "0.1.0",
+    "path_count": 5,
+    "operation_count": 7,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/agent-cards",
+      "/v1/agent-cards/{card_id}",
+      "/v1/agent-cards/{card_id}/recompute-trust-score"
+    ]
+  },
+  {
+    "module": "agent-marketplace",
+    "category": "Interoperability",
+    "port": 8103,
+    "title": "Agent Marketplace",
+    "description": "Tectonic Agentic AI Platform — Module 24: internal catalogue of built agents with governance, reuse tracking and (future) external monetisation.",
+    "version": "0.1.0",
+    "path_count": 10,
+    "operation_count": 11,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/agent-marketplace/listings",
+      "/v1/agent-marketplace/listings/{listing_id}",
+      "/v1/agent-marketplace/listings/{listing_id}/approve",
+      "/v1/agent-marketplace/listings/{listing_id}/deprecate",
+      "/v1/agent-marketplace/listings/{listing_id}/record-usage",
+      "/v1/agent-marketplace/listings/{listing_id}/reject",
+      "/v1/agent-marketplace/listings/{listing_id}/reuse-metrics",
+      "/v1/agent-marketplace/listings/{listing_id}/sync"
+    ]
+  },
+  {
+    "module": "llmops",
+    "category": "Operations",
+    "port": 8104,
+    "title": "LLMOps",
+    "description": "Tectonic Agentic AI Platform — Module 25: model registry, versioning, staged rollout and automatic canary evaluation gated by real Evaluation Framework scores.",
+    "version": "0.1.0",
+    "path_count": 10,
+    "operation_count": 11,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/llmops/deployments",
+      "/v1/llmops/deployments/{deployment_id}",
+      "/v1/llmops/deployments/{deployment_id}/canary-gate",
+      "/v1/llmops/deployments/{deployment_id}/promote",
+      "/v1/llmops/deployments/{deployment_id}/rollback",
+      "/v1/llmops/model-versions",
+      "/v1/llmops/model-versions/{model_version_id}",
+      "/v1/llmops/models/{model_name}/active"
+    ]
+  },
+  {
+    "module": "finops",
+    "category": "Operations",
+    "port": 8105,
+    "title": "FinOps",
+    "description": "Tectonic Agentic AI Platform — Module 26: tenant cost reporting, budget policies and a bounded autonomous cost-optimisation agent, built on LLM Gateway's real spend data.",
+    "version": "0.1.0",
+    "path_count": 8,
+    "operation_count": 8,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/finops/budget-policies",
+      "/v1/finops/budget-policies/{budget_policy_id}",
+      "/v1/finops/budget-policies/{budget_policy_id}/actions",
+      "/v1/finops/budget-policies/{budget_policy_id}/evaluate",
+      "/v1/finops/cost-reports/{tenant_id}",
+      "/v1/finops/usage-events"
+    ]
+  },
+  {
+    "module": "deployment-strategy",
+    "category": "Operations",
+    "port": 8106,
+    "title": "Deployment Strategy",
+    "description": "Tectonic Agentic AI Platform — Module 27: cloud-agnostic packaging with agent-aware canary analysis, gated by real Evaluation Framework and FinOps signals.",
+    "version": "0.1.0",
+    "path_count": 8,
+    "operation_count": 9,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/deployment-strategy/deployments",
+      "/v1/deployment-strategy/deployments/{deployment_id}",
+      "/v1/deployment-strategy/deployments/{deployment_id}/canary-health",
+      "/v1/deployment-strategy/deployments/{deployment_id}/promote",
+      "/v1/deployment-strategy/deployments/{deployment_id}/rollback",
+      "/v1/deployment-strategy/services/{service_name}/active"
+    ]
+  },
+  {
+    "module": "multi-modality",
+    "category": "Modality",
+    "port": 8107,
+    "title": "Multi-modality",
+    "description": "Tectonic Agentic AI Platform — Module 28: text, voice, image and document extraction unified behind one interface, with a real cross-modal groundedness gate via Guardrails.",
+    "version": "0.1.0",
+    "path_count": 4,
+    "operation_count": 5,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/multi-modality/extractions",
+      "/v1/multi-modality/extractions/{extraction_id}"
+    ]
+  },
+  {
+    "module": "promptops",
+    "category": "Foundations",
+    "port": 8108,
+    "title": "PromptOps",
+    "description": "Tectonic Agentic AI Platform — Module 29: prompt versioning, statistically-gated A/B testing, drift detection, and a bounded reflection-based optimiser.",
+    "version": "0.1.0",
+    "path_count": 11,
+    "operation_count": 12,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/promptops/ab-tests",
+      "/v1/promptops/ab-tests/{ab_test_id}",
+      "/v1/promptops/ab-tests/{ab_test_id}/conclude",
+      "/v1/promptops/ab-tests/{ab_test_id}/result",
+      "/v1/promptops/prompt-versions",
+      "/v1/promptops/prompt-versions/{prompt_version_id}",
+      "/v1/promptops/prompt-versions/{prompt_version_id}/drift-check",
+      "/v1/promptops/prompt-versions/{prompt_version_id}/reflect",
+      "/v1/promptops/prompts/{prompt_name}/active"
+    ]
+  },
+  {
+    "module": "multi-tenancy",
+    "category": "Foundations",
+    "port": 8109,
+    "title": "Multi-tenancy",
+    "description": "Tectonic Agentic AI Platform — Module 30: tenant registry and lifecycle, plus a real, executable isolation probe against every platform module's shared tenant-scoped list contract.",
+    "version": "0.1.0",
+    "path_count": 31,
+    "operation_count": 39,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/multi-tenancy/environments",
+      "/v1/multi-tenancy/environments/{environment_id}",
+      "/v1/multi-tenancy/environments/{environment_id}/delete",
+      "/v1/multi-tenancy/environments/{environment_id}/reactivate",
+      "/v1/multi-tenancy/environments/{environment_id}/suspend",
+      "/v1/multi-tenancy/isolation-probes",
+      "/v1/multi-tenancy/organisations",
+      "/v1/multi-tenancy/organisations/{organisation_id}",
+      "/v1/multi-tenancy/organisations/{organisation_id}/delete",
+      "/v1/multi-tenancy/organisations/{organisation_id}/reactivate",
+      "/v1/multi-tenancy/organisations/{organisation_id}/suspend",
+      "/v1/multi-tenancy/resource-allocations",
+      "/v1/multi-tenancy/resource-allocations/{allocation_id}",
+      "/v1/multi-tenancy/resource-allocations/{allocation_id}/approve",
+      "/v1/multi-tenancy/resource-allocations/{allocation_id}/reject",
+      "/v1/multi-tenancy/tenants",
+      "/v1/multi-tenancy/tenants/{tenant_id}",
+      "/v1/multi-tenancy/tenants/{tenant_id}/delete",
+      "/v1/multi-tenancy/tenants/{tenant_id}/entitlements",
+      "/v1/multi-tenancy/tenants/{tenant_id}/gate",
+      "/v1/multi-tenancy/tenants/{tenant_id}/quota-set",
+      "/v1/multi-tenancy/tenants/{tenant_id}/quota/check",
+      "/v1/multi-tenancy/tenants/{tenant_id}/reactivate",
+      "/v1/multi-tenancy/tenants/{tenant_id}/suspend",
+      "/v1/multi-tenancy/workspaces",
+      "/v1/multi-tenancy/workspaces/{workspace_id}",
+      "/v1/multi-tenancy/workspaces/{workspace_id}/delete",
+      "/v1/multi-tenancy/workspaces/{workspace_id}/reactivate",
+      "/v1/multi-tenancy/workspaces/{workspace_id}/suspend"
+    ]
+  },
+  {
+    "module": "identity-and-access",
+    "category": "Foundations",
+    "port": 8110,
+    "title": "Identity and Access",
+    "description": "Tectonic Agentic AI Platform — Module 31: zero-trust identity registry, role/scope-based tokens, and a live authorize gate whose revocation checks take effect immediately.",
+    "version": "0.1.0",
+    "path_count": 10,
+    "operation_count": 12,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/identity-access/authorize",
+      "/v1/identity-access/identities",
+      "/v1/identity-access/identities/{identity_id}",
+      "/v1/identity-access/identities/{identity_id}/auth-decisions",
+      "/v1/identity-access/identities/{identity_id}/reinstate",
+      "/v1/identity-access/identities/{identity_id}/revoke",
+      "/v1/identity-access/roles",
+      "/v1/identity-access/tokens"
+    ]
+  },
+  {
+    "module": "secrets-and-credential-management",
+    "category": "Foundations",
+    "port": 8111,
+    "title": "Secrets and Credential Management",
+    "description": "Tectonic Agentic AI Platform — Module 32: a per-tenant secret vault, encrypted at rest, retrieved only through a real zero-trust authorization gate, with tracked rotation compliance.",
+    "version": "0.1.0",
+    "path_count": 10,
+    "operation_count": 11,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/secrets",
+      "/v1/secrets/compliance",
+      "/v1/secrets/due-for-rotation",
+      "/v1/secrets/{secret_id}",
+      "/v1/secrets/{secret_id}/access-log",
+      "/v1/secrets/{secret_id}/retrieve",
+      "/v1/secrets/{secret_id}/revoke",
+      "/v1/secrets/{secret_id}/rotate"
+    ]
+  },
+  {
+    "module": "billing-and-metering",
+    "category": "Foundations",
+    "port": 8112,
+    "title": "Billing and Metering",
+    "description": "Tectonic Agentic AI Platform — Module 33: turns real per-tenant usage signals from FinOps and Auditability into metered usage records and invoices.",
+    "version": "0.1.0",
+    "path_count": 9,
+    "operation_count": 10,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/billing/invoices",
+      "/v1/billing/invoices/generate",
+      "/v1/billing/invoices/{invoice_id}",
+      "/v1/billing/invoices/{invoice_id}/finalize",
+      "/v1/billing/pricing-plans",
+      "/v1/billing/pricing-plans/{plan_id}",
+      "/v1/billing/usage-records"
+    ]
+  },
+  {
+    "module": "sdk-and-developer-portal",
+    "category": "Foundations",
+    "port": 8113,
+    "title": "SDK and Developer Portal",
+    "description": "Tectonic Agentic AI Platform — Module 34: real sandbox provisioning (Identity and Access + Multi-tenancy), SDKs generated from every peer's real OpenAPI spec, and adoption metrics computed from real Auditability history.",
+    "version": "0.1.0",
+    "path_count": 14,
+    "operation_count": 15,
+    "paths": [
+      "/healthz",
+      "/metrics",
+      "/v1/sdk-portal/adoption-rate",
+      "/v1/sdk-portal/catalog",
+      "/v1/sdk-portal/catalog/sync",
+      "/v1/sdk-portal/catalog/{module_name}",
+      "/v1/sdk-portal/developers",
+      "/v1/sdk-portal/developers/{developer_id}",
+      "/v1/sdk-portal/developers/{developer_id}/adoption",
+      "/v1/sdk-portal/developers/{developer_id}/revoke",
+      "/v1/sdk-portal/developers/{developer_id}/token",
+      "/v1/sdk-portal/sdks",
+      "/v1/sdk-portal/sdks/generate",
+      "/v1/sdk-portal/sdks/{package_id}"
+    ]
+  }
+]

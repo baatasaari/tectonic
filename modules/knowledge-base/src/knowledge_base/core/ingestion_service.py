@@ -72,6 +72,7 @@ class IngestionService:
                 {
                     "chunk_id": c.id, "content": c.content, "policy_tags": c.policy_tags,
                     "document_id": document.id, "document_version_id": version.id,
+                    "tenant_id": document.tenant_id,
                 }
                 for c in chunk_records
             ]
@@ -119,8 +120,8 @@ class IngestionService:
         content_hash = version_manager.content_hash(content)
         duplicate = await self._repository.find_version_by_content_hash(document_id, content_hash)
         if duplicate is not None:
-            existing_chunks = await self._repository.list_chunks_by_version(duplicate.id)
-            return IngestionResult(document=document, version=duplicate, chunk_count=len(existing_chunks))
+            _, chunk_count = await self._repository.list_chunks_by_version(duplicate.id)
+            return IngestionResult(document=document, version=duplicate, chunk_count=chunk_count)
 
         existing_versions = await self._repository.list_versions(document_id)
         blob_ref = await self._blob_storage.put(content)

@@ -33,8 +33,13 @@ class InMemoryGatewayRepository:
         rec = self.virtual_keys.get(virtual_key_id)
         return copy.deepcopy(rec) if rec else None
 
-    async def list_virtual_keys(self, tenant_id: str) -> list[VirtualKeyRecord]:
-        return [copy.deepcopy(v) for v in self.virtual_keys.values() if v.tenant_id == tenant_id]
+    async def list_virtual_keys(
+        self, tenant_id: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[VirtualKeyRecord], int]:
+        matching = [v for v in self.virtual_keys.values() if v.tenant_id == tenant_id]
+        matching.sort(key=lambda v: v.created_at, reverse=True)
+        sliced = [copy.deepcopy(v) for v in matching[offset : offset + limit]]
+        return sliced, len(matching)
 
     async def get_budget_policy(self, budget_policy_id: str) -> BudgetPolicyRecord | None:
         rec = self.budget_policies.get(budget_policy_id)
@@ -57,12 +62,31 @@ class InMemoryGatewayRepository:
     async def list_provider_configs(self) -> list[ProviderConfigRecord]:
         return [copy.deepcopy(p) for p in self.provider_configs.values()]
 
+    async def create_provider_config(self, record: ProviderConfigRecord) -> ProviderConfigRecord:
+        self.provider_configs[record.id] = copy.deepcopy(record)
+        return copy.deepcopy(record)
+
     async def update_provider_config(self, record: ProviderConfigRecord) -> ProviderConfigRecord:
         self.provider_configs[record.id] = copy.deepcopy(record)
         return copy.deepcopy(record)
 
     def seed_provider(self, provider: ProviderConfigRecord) -> None:
         self.provider_configs[provider.id] = provider
+
+
+class StubMultiTenancyQuotaClient:
+    """Deterministic quota-check outcome for LLMGatewayService tests --
+    `HTTPMultiTenancyClient` (clients/multi_tenancy_client.py) is the
+    real thing, exercised separately with a respx-mocked transport."""
+
+    def __init__(self, *, allowed: bool = True, reason: str = "") -> None:
+        self.allowed = allowed
+        self.reason = reason
+        self.calls: list[dict[str, Any]] = []
+
+    async def check_quota(self, *, tenant_id: str, resource_class: str, amount: float = 1.0) -> tuple[bool, str]:
+        self.calls.append({"tenant_id": tenant_id, "resource_class": resource_class, "amount": amount})
+        return self.allowed, self.reason
 
 
 class FakeQualityScoreProvider:

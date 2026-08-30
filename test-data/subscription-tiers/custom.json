@@ -1,0 +1,29 @@
+{
+  "tier": "custom",
+  "tenant_name": "Custom Test Co (Regulated Industry)",
+  "description": "A hand-assembled plan outside the three presets -- what the cost calculator's 'start from scratch' path produces: a compliance-heavy combination (Guardrails, Sentinel Agents, Human Oversight, Regulatory and Compliance) layered onto a retrieval-capable core, for a regulated-industry buyer who needs governance depth more than breadth.",
+  "billing": {
+    "plan_name": "Custom -- Regulated Industry",
+    "unit_prices": {
+      "workflow-engine": 120,
+      "conversational-engine": 90,
+      "llm-gateway": 150,
+      "agentic-rag": 140,
+      "knowledge-base": 110,
+      "vector-db": 130,
+      "long-term-memory": 90,
+      "guardrails": 130,
+      "sentinel-agents": 150,
+      "human-oversight": 80,
+      "regulatory-compliance": 180,
+      "evaluation-framework": 90,
+      "observability": 100,
+      "llm.cost_usd": 0.025
+    }
+  },
+  "admin_identity": {
+    "name": "Custom Test Co Admin",
+    "type": "user",
+    "role_names": ["tenant-admin"]
+  }
+}

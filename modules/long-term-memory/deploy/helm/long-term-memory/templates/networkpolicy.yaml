@@ -1,0 +1,52 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-long-term-memory
+  labels:
+    app.kubernetes.io/name: long-term-memory
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: long-term-memory
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Real, restrictive default: only pods in this module's own namespace may
+    # reach it -- covers both peer-to-peer calls (this platform's modules
+    # address each other by short DNS name, which only resolves within one
+    # namespace) and same-namespace Prometheus scraping. A Prometheus
+    # deployed in a different namespace needs its own additional allow rule
+    # -- see the module README.
+    - from:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+  egress:
+    # DNS is always required to resolve any peer's service name at all.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Every real peer this module calls lives in the same namespace (the
+    # same short-DNS-name convention as the ingress rule above).
+    - to:
+        - podSelector: {}
+    {{- if .Values.networkPolicy.allowExternalEgress }}
+    # Open by default: this chart can't know from here which modules
+    # genuinely need real external egress (LLM Gateway calling model
+    # providers, an OTel collector outside the namespace, etc.) and which
+    # don't -- set to false for a real per-module lockdown once that's been
+    # audited. See the module README for what this deliberately leaves open.
+    - {}
+    {{- end }}
+{{- end }}

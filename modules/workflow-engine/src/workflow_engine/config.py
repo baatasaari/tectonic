@@ -77,15 +77,46 @@ class WorkflowEngineSettings(BaseSettings):
     # Infra connection settings — not part of the tenant-facing YAML schema,
     # supplied via environment in every deployment target (Helm, compose, CI).
     database_url: str = "postgresql+asyncpg://workflow_engine:workflow_engine@localhost:5432/workflow_engine"
+    # Pool sized against this module's own Helm chart (deploy/helm/workflow-engine/values.yaml):
+    # maxReplicas=10, targeting <=100 steady-state / <=150 burst connections to
+    # this module's own Postgres instance platform-wide at full autoscale.
+    db_pool_size: int = 10
+    db_max_overflow: int = 5
+    db_pool_timeout_seconds: int = 30
+    db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     kafka_bootstrap_servers: str = "localhost:9092"
+    # Event outbox relay worker (core/outbox_worker.py) -- same tuning knobs, and same
+    # defaults' rationale, as Regulatory Compliance's evidence-pack worker.
+    outbox_worker_poll_interval_seconds: float = 1.0
+    outbox_worker_lease_seconds: int = 60
+    outbox_worker_max_attempts: int = 5
     service_name: str = "workflow-engine"
+    multi_tenancy_base_url: str = "http://localhost:8109"
+    entitlement_gate_cache_ttl_seconds: float = 30.0
     http_port: int = 8080
-    # Base URL for LLM Gateway / Tool Orchestration / Guardrails / Human
-    # Oversight when none of those modules is deployed yet — points at the
-    # dependency-stub service from deploy/docker-compose.yml (LLD's
-    # Deployability and Testability Contract). Override per-dependency once
-    # each real module exists.
-    dependency_stub_base_url: str = "http://localhost:9100"
+    llm_gateway_base_url: str = "http://localhost:8082"
+    # Deliberately deployment-wide, not per-tenant/per-step -- see
+    # clients/http_clients.py's HTTPLLMGatewayClient docstring (ticket #82).
+    llm_gateway_virtual_key: str = "workflow-engine-default"
+    tool_orchestration_base_url: str = "http://localhost:8083"
+    guardrails_base_url: str = "http://localhost:8093"
+    human_oversight_base_url: str = "http://localhost:8095"
+    # Added for the intent step (ticket #82) -- this module had no Intent
+    # Detection client at all before the Phase 2 support-agent slice.
+    intent_detection_base_url: str = "http://localhost:8084"
+    # Added for the retrieve step (ticket #82) -- likewise no Agentic RAG client before.
+    agentic_rag_base_url: str = "http://localhost:8085"
+
+    # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
+    # every module, so this field's env var name is NOT prefixed like the rest of this
+    # settings class: every module's Helm chart injects the same Kubernetes Secret under
+    # this same literal env var name. The default is an insecure, obviously-a-placeholder
+    # value so local dev/tests work with zero config; main.py logs a startup warning if
+    # it's still active.
+    jwt_shared_secret: str = Field(
+        default="dev-insecure-shared-secret-change-me", validation_alias="TECTONIC_JWT_SHARED_SECRET",
+    )
+    jwt_ttl_seconds: int = 300
 
     # Hot-reloadable field names, for the config API to validate against.
     HOT_RELOADABLE_PATHS: tuple[str, ...] = (

@@ -17,16 +17,36 @@ spec:
         app.kubernetes.io/name: vector-db
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      serviceAccountName: {{ .Release.Name }}-vector-db
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.topologySpreadConstraints.maxSkew }}
+          topologyKey: {{ .Values.topologySpreadConstraints.topologyKey }}
+          whenUnsatisfiable: {{ .Values.topologySpreadConstraints.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: vector-db
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: vector-db
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           ports:
             - name: http
               containerPort: 8089
           env:
             - name: VECTOR_DB_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: VECTOR_DB_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: VECTOR_DB_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: VECTOR_DB_TELEMETRY__OTLP_ENDPOINT
@@ -39,17 +59,35 @@ spec:
               value: {{ .Values.config.tenancyModel | quote }}
             - name: VECTOR_DB_QDRANT__URL
               value: {{ .Values.qdrant.url | quote }}
+            - name: VECTOR_DB_QDRANT__EMBEDDED_IN_MEMORY
+              value: {{ .Values.qdrant.embeddedInMemory | quote }}
             - name: VECTOR_DB_QDRANT__COLLECTION_ALIAS
               value: {{ .Values.qdrant.collectionAlias | quote }}
             - name: VECTOR_DB_QDRANT__DEFAULT_EMBEDDING_MODEL
               value: {{ .Values.qdrant.defaultEmbeddingModel | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: VECTOR_DB_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
+            - name: VECTOR_DB_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
+            {{- if .Values.database.existingSecret }}
+            - name: VECTOR_DB_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: VECTOR_DB_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
             {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

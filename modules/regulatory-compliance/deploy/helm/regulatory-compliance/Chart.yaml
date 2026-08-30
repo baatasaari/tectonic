@@ -1,0 +1,6 @@
+apiVersion: v2
+name: regulatory-compliance
+description: Tectonic Agentic AI Platform — Module 17: Regulatory and Compliance
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

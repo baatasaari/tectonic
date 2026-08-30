@@ -1,0 +1,540 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Intent Detection",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 5: classifies input into intents, decomposes compositional multi-goal utterances, and monitors intent drift.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/intent-detection/classify": {
+      "post": {
+        "tags": [
+          "intent-detection"
+        ],
+        "summary": "Classify",
+        "operationId": "classify_v1_intent_detection_classify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassifyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassifyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/intent-detection/taxonomies": {
+      "post": {
+        "tags": [
+          "intent-detection"
+        ],
+        "summary": "Create Taxonomy",
+        "operationId": "create_taxonomy_v1_intent_detection_taxonomies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaxonomyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomySummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/intent-detection/taxonomies/{taxonomy_id}/activate": {
+      "post": {
+        "tags": [
+          "intent-detection"
+        ],
+        "summary": "Activate Taxonomy",
+        "operationId": "activate_taxonomy_v1_intent_detection_taxonomies__taxonomy_id__activate_post",
+        "parameters": [
+          {
+            "name": "taxonomy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Taxonomy Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivateTaxonomyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/intent-detection/drift-reports": {
+      "get": {
+        "tags": [
+          "intent-detection"
+        ],
+        "summary": "List Drift Reports",
+        "operationId": "list_drift_reports_v1_intent_detection_drift_reports_get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "date_range",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Reserved for future filtering; not yet enforced",
+              "title": "Date Range"
+            },
+            "description": "Reserved for future filtering; not yet enforced"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DriftReportListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Healthz",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Metrics",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ActivateTaxonomyResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ActivateTaxonomyResponse"
+      },
+      "ClassifyRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "taxonomy_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taxonomy Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "ClassifyRequest"
+      },
+      "ClassifyResponse": {
+        "properties": {
+          "intents": {
+            "items": {
+              "$ref": "#/components/schemas/DetectedIntentSchema"
+            },
+            "type": "array",
+            "title": "Intents"
+          },
+          "fallback_used": {
+            "type": "boolean",
+            "title": "Fallback Used"
+          },
+          "taxonomy_version": {
+            "type": "integer",
+            "title": "Taxonomy Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "intents",
+          "fallback_used",
+          "taxonomy_version"
+        ],
+        "title": "ClassifyResponse"
+      },
+      "CreateTaxonomyRequest": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "intents": {
+            "items": {
+              "$ref": "#/components/schemas/IntentDefinitionSchema"
+            },
+            "type": "array",
+            "title": "Intents"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "intents"
+        ],
+        "title": "CreateTaxonomyRequest"
+      },
+      "DetectedIntentSchema": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "confidence"
+        ],
+        "title": "DetectedIntentSchema"
+      },
+      "DriftReportListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DriftReportSchema"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "DriftReportListResponse"
+      },
+      "DriftReportSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "taxonomy_version": {
+            "type": "integer",
+            "title": "Taxonomy Version"
+          },
+          "drift_score": {
+            "type": "number",
+            "title": "Drift Score"
+          },
+          "flagged_intents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Flagged Intents"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "taxonomy_version",
+          "drift_score",
+          "flagged_intents",
+          "created_at"
+        ],
+        "title": "DriftReportSchema"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "IntentDefinitionSchema": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "examples": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Examples",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "IntentDefinitionSchema"
+      },
+      "TaxonomySummary": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "status"
+        ],
+        "title": "TaxonomySummary"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "ServiceBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Service-to-service HS256 JWT bearer auth (security/jwt_auth.py): every inbound request must carry `Authorization: Bearer <token>`, verified against this module's own service_name as the required audience (TECTONIC_JWT_SHARED_SECRET, one shared signing key across every module in this deployment). Not a user-facing OAuth/OIDC flow -- see this module's README for the full design note."
+      }
+    }
+  },
+  "security": [
+    {
+      "ServiceBearerAuth": []
+    }
+  ]
+}

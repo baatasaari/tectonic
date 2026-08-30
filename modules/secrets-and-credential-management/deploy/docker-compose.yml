@@ -1,0 +1,51 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# standalone with Identity and Access's own POST /v1/identity-access/authorize
+# and Auditability's own POST /v1/auditability/events both stubbed by one
+# dependency-stub service. Encryption at rest needs no external peer -- it's
+# pure, deterministic cryptography. Real Postgres runs here.
+name: secrets-and-credential-management
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: secrets_and_credential_management
+      POSTGRES_PASSWORD: secrets_and_credential_management
+      POSTGRES_DB: secrets_and_credential_management
+    ports:
+      - "5459:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U secrets_and_credential_management"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9132:9132"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      SECRETS_DATABASE_URL: postgresql+asyncpg://secrets_and_credential_management:secrets_and_credential_management@postgres:5432/secrets_and_credential_management
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  secrets-and-credential-management:
+    build: ..
+    ports:
+      - "8111:8111"
+    environment:
+      SECRETS_DATABASE_URL: postgresql+asyncpg://secrets_and_credential_management:secrets_and_credential_management@postgres:5432/secrets_and_credential_management
+      SECRETS_IDENTITY_ACCESS_BASE_URL: http://dependency-stub:9132
+      SECRETS_AUDITABILITY_BASE_URL: http://dependency-stub:9132
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

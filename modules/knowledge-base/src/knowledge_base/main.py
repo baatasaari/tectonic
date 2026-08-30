@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
@@ -16,6 +17,9 @@ from knowledge_base.clients.blob_storage import FileBlobStorage
 from knowledge_base.clients.http_clients import HTTPGraphDBClient, HTTPVectorDBClient
 from knowledge_base.config import KnowledgeBaseSettings, load_settings
 from knowledge_base.db.session import make_engine, make_session_factory
+from knowledge_base.security.entitlement_gate import EntitlementGateMiddleware
+from knowledge_base.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from knowledge_base.security.openapi_security import configure_openapi_security
 from knowledge_base.telemetry.logging import configure_logging, get_logger
 from knowledge_base.telemetry.tracing import configure_tracing
 
@@ -24,23 +28,34 @@ logger = get_logger(component="main")
 
 def build_app_context(settings: KnowledgeBaseSettings, *, blob_root: str | None = None) -> AppContext:
     engine = make_engine(settings)
-    dep_url = settings.dependency_stub_base_url
     root = blob_root or tempfile.mkdtemp(prefix="knowledge-base-blobs-")
     return AppContext(
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
         blob_storage=FileBlobStorage(root),
-        vector_db=HTTPVectorDBClient(dep_url),
-        graph_db=HTTPGraphDBClient(dep_url),
+        vector_db=HTTPVectorDBClient(
+            settings.vector_db_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        graph_db=HTTPGraphDBClient(
+            settings.graph_db_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
     )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = load_settings()
+    settings: KnowledgeBaseSettings = app.state.settings
     configure_logging(settings.telemetry.log_level)
     configure_tracing(settings.service_name, settings.telemetry.otlp_endpoint)
+
+    if settings.jwt_shared_secret == INSECURE_DEFAULT_SECRET:
+        logger.warning(
+            "jwt_shared_secret_is_insecure_default",
+            hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
+        )
 
     ctx = build_app_context(settings)
     app.state.ctx = ctx
@@ -54,12 +69,26 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = load_settings()
+
     app = FastAPI(
         title="Knowledge Base",
         version="0.1.0",
         description="Tectonic Agentic AI Platform — Module 9: ingests, chunks, versions and "
         "manages source-of-truth documents feeding Agentic RAG.",
         lifespan=lifespan,
+    )
+    app.state.settings = settings
+    app.add_middleware(
+        EntitlementGateMiddleware,
+        module_name=settings.service_name,
+        multi_tenancy_base_url=settings.multi_tenancy_base_url,
+        issuer=settings.service_name,
+        shared_secret=settings.jwt_shared_secret,
+        cache_ttl_seconds=settings.entitlement_gate_cache_ttl_seconds,
+    )
+    app.add_middleware(
+        ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )
     app.include_router(documents_router)
 
@@ -86,7 +115,9 @@ def create_app() -> FastAPI:
     async def metrics() -> Response:
         return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+    HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-sentinel-agents
+  labels:
+    app.kubernetes.io/name: sentinel-agents
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: sentinel-agents
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: sentinel-agents
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-sentinel-agents
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.topologySpreadConstraints.maxSkew }}
+          topologyKey: {{ .Values.topologySpreadConstraints.topologyKey }}
+          whenUnsatisfiable: {{ .Values.topologySpreadConstraints.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: sentinel-agents
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: sentinel-agents
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8094
+          env:
+            - name: SENTINEL_AGENTS_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: SENTINEL_AGENTS_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
+            - name: SENTINEL_AGENTS_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: SENTINEL_AGENTS_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: SENTINEL_AGENTS_BASELINING__SENSITIVITY
+              value: {{ .Values.config.sensitivity | quote }}
+            - name: SENTINEL_AGENTS_SWARM_DETECTION__ENABLED
+              value: {{ .Values.config.swarmDetectionEnabled | quote }}
+            - name: SENTINEL_AGENTS_WORKFLOW_ENGINE_BASE_URL
+              value: {{ .Values.workflowEngineBaseUrl | quote }}
+            - name: SENTINEL_AGENTS_TOOL_ORCHESTRATION_BASE_URL
+              value: {{ .Values.toolOrchestrationBaseUrl | quote }}
+            - name: SENTINEL_AGENTS_HUMAN_OVERSIGHT_BASE_URL
+              value: {{ .Values.humanOversightBaseUrl | quote }}
+            - name: SENTINEL_AGENTS_AUDITABILITY_BASE_URL
+              value: {{ .Values.auditabilityBaseUrl | quote }}
+            {{- if .Values.database.existingSecret }}
+            - name: SENTINEL_AGENTS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: SENTINEL_AGENTS_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from workflow_engine.core.domain import InstanceStatus, StepStatus, WorkflowInstanceRecord, new_id
+from workflow_engine.core.domain import (
+    ExecutionMode,
+    InstanceStatus,
+    StepExecutionRecord,
+    StepStatus,
+    WorkflowInstanceRecord,
+    new_id,
+)
 from workflow_engine.core.fakes import StubGuardrailsClient
 from workflow_engine.core.parser import parse_and_validate
 from workflow_engine.core.symbolic import SymbolicRule
@@ -41,12 +48,17 @@ async def test_happy_path_symbolic_then_neural_completes(harness):
 
     assert result.status == InstanceStatus.COMPLETED
     assert result.context["step_1"]["decision"] == "eligible"
-    steps = await harness.repository.list_step_executions(result.id)
+    steps, _total = await harness.repository.list_step_executions(result.id)
     assert {s.step_id: s.status for s in steps} == {"step_1": StepStatus.COMPLETED, "step_2": StepStatus.COMPLETED}
-    event_types = [e["event_type"] for _, e in harness.event_publisher.published]
-    assert "workflow.started" in event_types
-    assert "workflow.completed" in event_types
-    assert event_types.count("step.completed") == 2
+    # workflow.started/workflow.completed are two of the three top-level instance-
+    # lifecycle events with outbox-grade guaranteed delivery (core/events.py's own
+    # module docstring) -- they land in the transactional outbox, not the direct
+    # best-effort publish path, so they show up here rather than in event_publisher.
+    outbox_types = [e.envelope["type"] for e in harness.repository.outbox.values()]
+    assert "com.tectonic.workflow.started" in outbox_types
+    assert "com.tectonic.workflow.completed" in outbox_types
+    event_types = [e["type"] for _, e in harness.event_publisher.published]
+    assert event_types.count("com.tectonic.step.completed") == 2
 
 
 async def test_low_confidence_pauses_for_approval_then_resumes(harness):
@@ -67,13 +79,15 @@ async def test_low_confidence_pauses_for_approval_then_resumes(harness):
     assert paused.status == InstanceStatus.PAUSED_FOR_APPROVAL
     assert paused.current_step_ids == ["step_1"]
     assert len(harness.human_oversight.requests) == 1
-    approval_events = [e for _, e in harness.event_publisher.published if e["event_type"] == "approval.requested"]
+    approval_events = [
+        e for _, e in harness.event_publisher.published if e["type"] == "com.tectonic.approval.requested"
+    ]
     assert len(approval_events) == 1
 
     completed = await harness.scheduler.resume_after_approval(paused, graph, approved=True)
 
     assert completed.status == InstanceStatus.COMPLETED
-    steps = await harness.repository.list_step_executions(completed.id)
+    steps, _total = await harness.repository.list_step_executions(completed.id)
     assert steps[0].status == StepStatus.COMPLETED
 
 
@@ -139,7 +153,7 @@ async def test_step_failure_exhausts_retries_then_replans_to_fallback(harness_fa
     assert len(harness.repository.replan_events) == 1
     replan_event = harness.repository.replan_events[0]
     assert replan_event.original_step_id == "step_1"
-    steps = await harness.repository.list_step_executions(result.id)
+    steps, _total = await harness.repository.list_step_executions(result.id)
     failed_step = next(s for s in steps if s.step_id == "step_1")
     assert failed_step.retry_count == 1
 
@@ -197,6 +211,30 @@ async def test_conditional_edges_route_correctly(harness):
     result = await harness.scheduler.start(instance, graph)
 
     assert result.status == InstanceStatus.COMPLETED
-    steps = await harness.repository.list_step_executions(result.id)
+    steps, _total = await harness.repository.list_step_executions(result.id)
     step_ids = {s.step_id for s in steps}
     assert step_ids == {"step_1", "step_high"}
+
+
+async def test_list_step_executions_paginates_in_id_order(harness):
+    instance = await harness.repository.create_instance(_instance())
+    created = []
+    for i in range(3):
+        rec = await harness.repository.create_step_execution(
+            StepExecutionRecord(id=f"step-exec-{i}", instance_id=instance.id, step_id=f"s{i}", execution_mode=ExecutionMode.SYMBOLIC)
+        )
+        created.append(rec)
+
+    first_page, total_1 = await harness.repository.list_step_executions(instance.id, limit=2, offset=0)
+    second_page, total_2 = await harness.repository.list_step_executions(instance.id, limit=2, offset=2)
+
+    assert total_1 == 3
+    assert total_2 == 3
+    assert [s.id for s in first_page] == ["step-exec-0", "step-exec-1"]
+    assert [s.id for s in second_page] == ["step-exec-2"]
+
+
+async def test_list_step_executions_empty_result_returns_zero_total(harness):
+    steps, total = await harness.repository.list_step_executions("no-such-instance")
+    assert steps == []
+    assert total == 0

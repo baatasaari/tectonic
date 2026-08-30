@@ -74,8 +74,14 @@ class InMemoryConnectorRepository:
         self.drift_incidents.setdefault(record.connector_id, []).append(copy.deepcopy(record))
         return copy.deepcopy(record)
 
-    async def list_drift_incidents(self, connector_id: str) -> list[DriftIncidentRecord]:
-        return [copy.deepcopy(r) for r in self.drift_incidents.get(connector_id, [])]
+    async def list_drift_incidents(
+        self, connector_id: str, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[DriftIncidentRecord], int]:
+        results = sorted(
+            self.drift_incidents.get(connector_id, []), key=lambda r: r.created_at, reverse=True,
+        )
+        sliced = [copy.deepcopy(r) for r in results[offset : offset + limit]]
+        return sliced, len(results)
 
 
 class StubSourceConnectorRuntime:

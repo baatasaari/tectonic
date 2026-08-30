@@ -38,7 +38,11 @@ services:
       - "8085:8085"
     environment:
       AGENTIC_RAG_DATABASE_URL: postgresql+asyncpg://agentic_rag:agentic_rag@postgres:5432/agentic_rag
-      AGENTIC_RAG_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9106
+      AGENTIC_RAG_VECTOR_DB_BASE_URL: http://dependency-stub:9106
+      AGENTIC_RAG_GRAPH_DB_BASE_URL: http://dependency-stub:9106
+      AGENTIC_RAG_KNOWLEDGE_BASE_BASE_URL: http://dependency-stub:9106
+      AGENTIC_RAG_LLM_GATEWAY_BASE_URL: http://dependency-stub:9106
+      AGENTIC_RAG_MULTI_TENANCY_BASE_URL: http://dependency-stub:9106
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: deployment-strategy
+description: "Tectonic Agentic AI Platform — Module 27: Deployment Strategy"
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,7 +1,9 @@
 """SQLAlchemy-backed implementation of GatewayRepository (LLD §3.1)."""
 from __future__ import annotations
 
-from sqlalchemy import select
+import uuid
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from llm_gateway.core.domain import (
@@ -13,6 +15,21 @@ from llm_gateway.core.domain import (
     VirtualKeyStatus,
 )
 from llm_gateway.db import models
+
+
+def _is_valid_uuid(value: str) -> bool:
+    """`id` columns are Postgres `UUID`; a caller-supplied `str` that
+    isn't a syntactically valid UUID by definition names no row, but
+    handing it to `asyncpg` regardless raises an unhandled
+    `ValueError`/`DataError` deep in the driver instead of a clean
+    `None`/404 path (found by this module's own OpenAPI contract-test
+    tier -- see Billing and Metering's `db/repository.py` for the
+    original instance of this exact fix)."""
+    try:
+        uuid.UUID(value)
+        return True
+    except ValueError:
+        return False
 
 
 def _vk_to_domain(m: models.VirtualKey) -> VirtualKeyRecord:
@@ -63,14 +80,30 @@ class SQLAlchemyGatewayRepository:
         return _vk_to_domain(m)
 
     async def get_virtual_key(self, virtual_key_id: str) -> VirtualKeyRecord | None:
+        if not _is_valid_uuid(virtual_key_id):
+            return None
         m = await self.session.get(models.VirtualKey, virtual_key_id)
         return _vk_to_domain(m) if m else None
 
-    async def list_virtual_keys(self, tenant_id: str) -> list[VirtualKeyRecord]:
-        rows = await self.session.execute(select(models.VirtualKey).where(models.VirtualKey.tenant_id == tenant_id))
-        return [_vk_to_domain(m) for m in rows.scalars().all()]
+    async def list_virtual_keys(
+        self, tenant_id: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[VirtualKeyRecord], int]:
+        where_clause = models.VirtualKey.tenant_id == tenant_id
+        total_rows = await self.session.execute(select(func.count(models.VirtualKey.id)).where(where_clause))
+        total = total_rows.scalar_one()
+
+        rows = await self.session.execute(
+            select(models.VirtualKey)
+            .where(where_clause)
+            .order_by(models.VirtualKey.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return [_vk_to_domain(m) for m in rows.scalars().all()], total
 
     async def get_budget_policy(self, budget_policy_id: str) -> BudgetPolicyRecord | None:
+        if not _is_valid_uuid(budget_policy_id):
+            return None
         m = await self.session.get(models.BudgetPolicy, budget_policy_id)
         return _budget_to_domain(m) if m else None
 
@@ -109,6 +142,17 @@ class SQLAlchemyGatewayRepository:
     async def list_provider_configs(self) -> list[ProviderConfigRecord]:
         rows = await self.session.execute(select(models.ProviderConfig))
         return [_provider_to_domain(m) for m in rows.scalars().all()]
+
+    async def create_provider_config(self, record: ProviderConfigRecord) -> ProviderConfigRecord:
+        m = models.ProviderConfig(
+            id=record.id, provider_name=record.provider_name, endpoint=record.endpoint,
+            priority=record.priority, health_status=record.health_status,
+            deprecation_notices=record.deprecation_notices,
+        )
+        self.session.add(m)
+        await self.session.commit()
+        await self.session.refresh(m)
+        return _provider_to_domain(m)
 
     async def update_provider_config(self, record: ProviderConfigRecord) -> ProviderConfigRecord:
         m = await self.session.get(models.ProviderConfig, record.id)

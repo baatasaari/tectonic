@@ -1,0 +1,49 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# standalone with Guardrails' own POST /v1/guardrails/check stubbed by a
+# dependency-stub service. Real Postgres runs here.
+name: multi-modality
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: multi_modality
+      POSTGRES_PASSWORD: multi_modality
+      POSTGRES_DB: multi_modality
+    ports:
+      - "5455:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U multi_modality"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9128:9128"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      MULTI_MODALITY_DATABASE_URL: postgresql+asyncpg://multi_modality:multi_modality@postgres:5432/multi_modality
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  multi-modality:
+    build: ..
+    ports:
+      - "8107:8107"
+    environment:
+      MULTI_MODALITY_DATABASE_URL: postgresql+asyncpg://multi_modality:multi_modality@postgres:5432/multi_modality
+      MULTI_MODALITY_GUARDRAILS_BASE_URL: http://dependency-stub:9128
+      MULTI_MODALITY_MULTI_TENANCY_BASE_URL: http://dependency-stub:9128
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

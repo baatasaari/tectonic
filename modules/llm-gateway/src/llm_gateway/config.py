@@ -49,12 +49,31 @@ class LLMGatewaySettings(BaseSettings):
     telemetry: TelemetryConfig = TelemetryConfig()
 
     database_url: str = "postgresql+asyncpg://llm_gateway:llm_gateway@localhost:5432/llm_gateway"
+
+    # Pool sized against this module's own Helm chart (deploy/helm/llm-gateway/values.yaml):
+    # maxReplicas=30, targeting <=100 steady-state / <=150 burst connections to
+    # this module's own Postgres instance platform-wide at full autoscale.
+    db_pool_size: int = 4
+    db_max_overflow: int = 2
+    db_pool_timeout_seconds: int = 30
+    db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     redis_url: str = "redis://localhost:6379/0"
     service_name: str = "llm-gateway"
+    multi_tenancy_base_url: str = "http://localhost:8109"
+    entitlement_gate_cache_ttl_seconds: float = 30.0
     http_port: int = 8082
-    # Secrets and Credential Management, Evaluation Framework: stubbed until
-    # those modules exist for real.
-    dependency_stub_base_url: str = "http://localhost:9103"
+    secrets_and_credential_management_base_url: str = "http://localhost:8111"
+
+    # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
+    # every module, so this field's env var name is NOT prefixed like the rest of this
+    # settings class: every module's Helm chart injects the same Kubernetes Secret under
+    # this same literal env var name. The default is an insecure, obviously-a-placeholder
+    # value so local dev/tests work with zero config; main.py logs a startup warning if
+    # it's still active.
+    jwt_shared_secret: str = Field(
+        default="dev-insecure-shared-secret-change-me", validation_alias="TECTONIC_JWT_SHARED_SECRET",
+    )
+    jwt_ttl_seconds: int = 300
 
 
 _HOT_RELOADABLE = {

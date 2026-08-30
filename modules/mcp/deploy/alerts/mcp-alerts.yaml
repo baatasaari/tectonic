@@ -1,0 +1,42 @@
+# Prometheus Alertmanager rule definitions for the MCP module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: mcp
+    rules:
+      - alert: MCPRpcErrorRateHigh
+        expr: |
+          sum(rate(mcp_rpc_requests_total{outcome="error"}[5m]))
+            /
+          sum(rate(mcp_rpc_requests_total[5m]))
+          > 0.05
+        labels:
+          severity: warning
+        annotations:
+          summary: "Proxied MCP JSON-RPC error rate above 5%"
+
+      - alert: MCPRpcDeniedRateHigh
+        expr: |
+          sum(rate(mcp_rpc_requests_total{outcome="denied"}[5m]))
+            /
+          sum(rate(mcp_rpc_requests_total[5m]))
+          > 0.2
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 20% of proxied MCP calls are being denied by the access policy"
+          description: "Could be a caller misconfiguration or a genuine policy-enforcement spike -- check which server_id/tenant is driving it before assuming either."
+
+      - alert: MCPRpcLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(mcp_rpc_latency_seconds_bucket[15m])) by (le, server_id)) > 5
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 proxied MCP JSON-RPC latency above 5s for server {{ $labels.server_id }}"
+
+      - alert: MCPCapabilitySyncFailing
+        expr: increase(mcp_capability_sync_total{outcome="error"}[15m]) > 3
+        labels:
+          severity: warning
+        annotations:
+          summary: "Repeated capability sync failures for server {{ $labels.server_id }}"
+          description: "This server's tools/list cache is going stale -- callers may see outdated tool listings."

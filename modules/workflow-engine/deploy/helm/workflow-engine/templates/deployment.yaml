@@ -17,16 +17,36 @@ spec:
         app.kubernetes.io/name: workflow-engine
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      serviceAccountName: {{ .Release.Name }}-workflow-engine
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.topologySpreadConstraints.maxSkew }}
+          topologyKey: {{ .Values.topologySpreadConstraints.topologyKey }}
+          whenUnsatisfiable: {{ .Values.topologySpreadConstraints.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: workflow-engine
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: workflow-engine
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           ports:
             - name: http
               containerPort: 8080
           env:
             - name: WORKFLOW_ENGINE_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: WORKFLOW_ENGINE_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: WORKFLOW_ENGINE_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: WORKFLOW_ENGINE_TELEMETRY__OTLP_ENDPOINT
@@ -39,10 +59,14 @@ spec:
               value: {{ .Values.config.replanningEnabled | quote }}
             - name: WORKFLOW_ENGINE_KAFKA_BOOTSTRAP_SERVERS
               value: {{ .Values.kafka.bootstrapServers | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: WORKFLOW_ENGINE_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: WORKFLOW_ENGINE_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
+            - name: WORKFLOW_ENGINE_TOOL_ORCHESTRATION_BASE_URL
+              value: {{ .Values.toolOrchestrationBaseUrl | quote }}
+            - name: WORKFLOW_ENGINE_GUARDRAILS_BASE_URL
+              value: {{ .Values.guardrailsBaseUrl | quote }}
+            - name: WORKFLOW_ENGINE_HUMAN_OVERSIGHT_BASE_URL
+              value: {{ .Values.humanOversightBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: WORKFLOW_ENGINE_DATABASE_URL
               valueFrom:
@@ -55,7 +79,15 @@ spec:
             {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

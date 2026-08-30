@@ -14,6 +14,7 @@ from conversational_engine.core.ports import (
     LLMGatewayClient,
     LongTermMemoryClient,
     ObservabilityClient,
+    WorkflowEngineClient,
 )
 
 
@@ -29,3 +30,4 @@ class AppContext:
     human_oversight: HumanOversightClient
     observability: ObservabilityClient
     auditability: AuditabilityClient
+    workflow_engine: WorkflowEngineClient | None = None

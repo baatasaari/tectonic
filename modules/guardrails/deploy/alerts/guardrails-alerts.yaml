@@ -1,0 +1,31 @@
+# Prometheus Alertmanager rule definitions for the Guardrails module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: guardrails
+    rules:
+      - alert: GuardrailsCheckLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(guardrails_check_duration_seconds_bucket[5m])) by (le, tenant_id)) > 0.05
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 check latency for tenant {{ $labels.tenant_id }} above 50ms"
+
+      - alert: GuardrailsRedTeamBypassDetected
+        expr: increase(guardrails_redteam_bypass_total[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "A red-team self-test bypassed guardrails for tenant {{ $labels.tenant_id }}"
+          description: "Routed immediately, not batched."
+
+      - alert: GuardrailsInterventionRateAnomaly
+        expr: |
+          abs(guardrails_intervention_rate - avg_over_time(guardrails_intervention_rate[7d]))
+            /
+          avg_over_time(guardrails_intervention_rate[7d])
+          > 0.5
+        labels:
+          severity: warning
+        annotations:
+          summary: "Intervention rate for tenant {{ $labels.tenant_id }} shifted more than 50% from its 7-day baseline"
+          description: "Could indicate either an attack pattern or a misconfiguration."

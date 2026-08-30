@@ -1,0 +1,52 @@
+# Deployability and Testability Contract: this module's platform-specific
+# layers (reasoning narrative, cost attribution) run and test fully with
+# LLM Gateway stubbed and against this module's own Postgres-backed span
+# store. Real Postgres runs here; the Grafana/Tempo/Mimir/Loki stack this
+# module fronts in a full deployment is intentionally out of scope for
+# this compose file — see the module README.
+name: observability
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: observability
+      POSTGRES_PASSWORD: observability
+      POSTGRES_DB: observability
+    ports:
+      - "5463:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U observability"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9119:9119"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      OBSERVABILITY_DATABASE_URL: postgresql+asyncpg://observability:observability@postgres:5432/observability
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  observability:
+    build: ..
+    ports:
+      - "8098:8098"
+    environment:
+      OBSERVABILITY_DATABASE_URL: postgresql+asyncpg://observability:observability@postgres:5432/observability
+      OBSERVABILITY_LLM_GATEWAY_BASE_URL: http://dependency-stub:9119
+      OBSERVABILITY_MULTI_TENANCY_BASE_URL: http://dependency-stub:9119
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

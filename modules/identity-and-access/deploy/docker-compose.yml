@@ -1,0 +1,50 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# standalone with Auditability's own POST /v1/auditability/events stubbed
+# by a dependency-stub service. Token signing/verification needs no
+# external peer -- it's pure, deterministic cryptography. Real Postgres
+# runs here.
+name: identity-and-access
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: identity_access
+      POSTGRES_PASSWORD: identity_access
+      POSTGRES_DB: identity_access
+    ports:
+      - "5458:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U identity_access"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9131:9131"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      IDENTITY_ACCESS_DATABASE_URL: postgresql+asyncpg://identity_access:identity_access@postgres:5432/identity_access
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  identity-access:
+    build: ..
+    ports:
+      - "8110:8110"
+    environment:
+      IDENTITY_ACCESS_DATABASE_URL: postgresql+asyncpg://identity_access:identity_access@postgres:5432/identity_access
+      IDENTITY_ACCESS_AUDITABILITY_BASE_URL: http://dependency-stub:9131
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

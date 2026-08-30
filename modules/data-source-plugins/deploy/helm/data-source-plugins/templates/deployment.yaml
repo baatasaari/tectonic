@@ -17,16 +17,36 @@ spec:
         app.kubernetes.io/name: data-source-plugins
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      serviceAccountName: {{ .Release.Name }}-data-source-plugins
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.topologySpreadConstraints.maxSkew }}
+          topologyKey: {{ .Values.topologySpreadConstraints.topologyKey }}
+          whenUnsatisfiable: {{ .Values.topologySpreadConstraints.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: data-source-plugins
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: data-source-plugins
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           ports:
             - name: http
               containerPort: 8087
           env:
             - name: DATA_SOURCE_PLUGINS_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: DATA_SOURCE_PLUGINS_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: DATA_SOURCE_PLUGINS_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: DATA_SOURCE_PLUGINS_TELEMETRY__OTLP_ENDPOINT
@@ -35,10 +55,8 @@ spec:
               value: {{ .Values.config.driftAutoAdaptEnabled | quote }}
             - name: DATA_SOURCE_PLUGINS_QUALITY__QUALITY_GATE_THRESHOLD
               value: {{ .Values.config.qualityGateThreshold | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: DATA_SOURCE_PLUGINS_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: DATA_SOURCE_PLUGINS_SECRETS_AND_CREDENTIAL_MANAGEMENT_BASE_URL
+              value: {{ .Values.secretsAndCredentialManagementBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: DATA_SOURCE_PLUGINS_DATABASE_URL
               valueFrom:
@@ -51,7 +69,15 @@ spec:
             {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

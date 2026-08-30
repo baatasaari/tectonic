@@ -100,12 +100,14 @@ class ExecutionScheduler:
         self, instance: WorkflowInstanceRecord, graph: WorkflowGraph
     ) -> WorkflowInstanceRecord:
         workflow_instances_active.labels(tenant_id=instance.tenant_id, status=instance.status.value).inc()
-        await self._publish(
-            events.TOPIC_WORKFLOW_INSTANCE,
-            events.workflow_started(instance.tenant_id, instance.trace_id, instance.id, instance.definition_id),
-        )
         instance = replace(instance, current_step_ids=[graph.entry_point])
-        instance = await self.repository.update_instance(instance)
+        # workflow.started is one of the three top-level instance-lifecycle events with
+        # outbox-grade guaranteed delivery -- see core/events.py's own module docstring
+        # for why these three (and not step/approval/replan events) get this guarantee.
+        instance = await self.repository.update_instance_and_enqueue_event(
+            instance, topic=events.TOPIC_WORKFLOW_INSTANCE,
+            envelope=events.workflow_started(instance.tenant_id, instance.trace_id, instance.id, instance.definition_id),
+        )
         return await self._run(instance, graph)
 
     async def resume_after_approval(
@@ -116,7 +118,13 @@ class ExecutionScheduler:
             return instance
 
         step_id = pending_step_ids[0]
-        steps = await self.repository.list_step_executions(instance.id)
+        # `list_step_executions` is now paginated (limit/offset) for the `GET
+        # /instances/{id}/steps` API, but this scheduling logic needs the *complete* set of
+        # step executions for the instance to find the one currently running — a truncated
+        # page here could silently miss it on a long-running workflow. limit=10_000 is an
+        # effectively-unbounded internal page size (one instance's step count is bounded by
+        # its workflow graph, never a user-growable list).
+        steps, _total = await self.repository.list_step_executions(instance.id, limit=10_000)
         step_exec = next((s for s in steps if s.step_id == step_id and s.status == StepStatus.RUNNING), None)
         if step_exec is None:
             step_exec = next((s for s in steps if s.step_id == step_id), None)
@@ -217,20 +225,18 @@ class ExecutionScheduler:
 
         if instance.status == InstanceStatus.RUNNING:
             instance = replace(instance, status=InstanceStatus.COMPLETED, completed_at=now())
-            instance = await self.repository.update_instance(instance)
-            await self._publish(
-                events.TOPIC_WORKFLOW_INSTANCE,
-                events.workflow_completed(instance.tenant_id, instance.trace_id, instance.id),
+            instance = await self.repository.update_instance_and_enqueue_event(
+                instance, topic=events.TOPIC_WORKFLOW_INSTANCE,
+                envelope=events.workflow_completed(instance.tenant_id, instance.trace_id, instance.id),
             )
             workflow_instances_active.labels(tenant_id=instance.tenant_id, status="running").dec()
         return instance
 
     async def _fail(self, instance: WorkflowInstanceRecord, reason: str) -> WorkflowInstanceRecord:
         instance = replace(instance, status=InstanceStatus.FAILED, completed_at=now())
-        instance = await self.repository.update_instance(instance)
-        await self._publish(
-            events.TOPIC_WORKFLOW_INSTANCE,
-            events.workflow_failed(instance.tenant_id, instance.trace_id, instance.id, reason),
+        instance = await self.repository.update_instance_and_enqueue_event(
+            instance, topic=events.TOPIC_WORKFLOW_INSTANCE,
+            envelope=events.workflow_failed(instance.tenant_id, instance.trace_id, instance.id, reason),
         )
         workflow_instances_active.labels(tenant_id=instance.tenant_id, status="running").dec()
         return instance
@@ -278,7 +284,8 @@ class ExecutionScheduler:
         )
         if needs_approval:
             approval = await self.human_handler.request_approval(
-                step_execution_id=step_exec.id, context=instance.context, tenant_id=instance.tenant_id
+                step_execution_id=step_exec.id, instance_id=instance.id,
+                context=instance.context, tenant_id=instance.tenant_id,
             )
             step_exec = replace(step_exec, output=outcome.output, confidence_score=outcome.confidence_score)
             await self.repository.update_step_execution(step_exec)

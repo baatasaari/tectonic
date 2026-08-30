@@ -1,0 +1,48 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# standalone with LLM Gateway stubbed to return a canned NL-query translation.
+# Real Postgres runs here.
+name: auditability
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: auditability
+      POSTGRES_PASSWORD: auditability
+      POSTGRES_DB: auditability
+    ports:
+      - "5447:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auditability"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9120:9120"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      AUDITABILITY_DATABASE_URL: postgresql+asyncpg://auditability:auditability@postgres:5432/auditability
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  auditability:
+    build: ..
+    ports:
+      - "8099:8099"
+    environment:
+      AUDITABILITY_DATABASE_URL: postgresql+asyncpg://auditability:auditability@postgres:5432/auditability
+      AUDITABILITY_LLM_GATEWAY_BASE_URL: http://dependency-stub:9120
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

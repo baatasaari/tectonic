@@ -7,7 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from vector_db.api.deps import get_ctx
 from vector_db.app_context import AppContext
-from vector_db.core.domain import MigrationNotFoundError, PointNotFoundError
+from vector_db.core.domain import (
+    EmbeddingDimensionMismatchError,
+    MigrationNotFoundError,
+    PointNotFoundError,
+    QuotaExceededError,
+)
 from vector_db.schemas.vectors import (
     DeleteResponse,
     IndexPointRequest,
@@ -48,11 +53,16 @@ async def index_point(
     body: IndexPointRequest,
     ctx: AppContext = Depends(get_ctx),
 ) -> IndexPointResponse:
-    point_id = await ctx.vector_service.index_point(
-        tenant_id=body.tenant_id, source_module=body.source_module, source_ref=body.source_ref,
-        content=body.content, vector=body.vector, payload_extra=body.payload,
-        embedding_model_version=body.embedding_model_version,
-    )
+    try:
+        point_id = await ctx.vector_service.index_point(
+            tenant_id=body.tenant_id, source_module=body.source_module, source_ref=body.source_ref,
+            content=body.content, vector=body.vector, payload_extra=body.payload,
+            embedding_model_version=body.embedding_model_version,
+        )
+    except QuotaExceededError as e:
+        raise HTTPException(status_code=429, detail=str(e)) from e
+    except EmbeddingDimensionMismatchError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     return IndexPointResponse(id=point_id)
 
 
@@ -74,10 +84,13 @@ async def query(
     body: QueryRequest,
     ctx: AppContext = Depends(get_ctx),
 ) -> QueryResponse:
-    results = await ctx.vector_service.query(
-        tenant_id=body.tenant_id, text=body.text, vector=body.vector, filters=body.filters,
-        top_k=body.top_k, hybrid=body.hybrid,
-    )
+    try:
+        results = await ctx.vector_service.query(
+            tenant_id=body.tenant_id, text=body.text, vector=body.vector, filters=body.filters,
+            top_k=body.top_k, hybrid=body.hybrid,
+        )
+    except EmbeddingDimensionMismatchError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     return QueryResponse(
         results=[ScoredResultSchema(id=r.id, score=r.score, payload=r.payload) for r in results]
     )

@@ -17,16 +17,36 @@ spec:
         app.kubernetes.io/name: context-engineering
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      serviceAccountName: {{ .Release.Name }}-context-engineering
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.topologySpreadConstraints.maxSkew }}
+          topologyKey: {{ .Values.topologySpreadConstraints.topologyKey }}
+          whenUnsatisfiable: {{ .Values.topologySpreadConstraints.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: context-engineering
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: context-engineering
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           ports:
             - name: http
               containerPort: 8086
           env:
             - name: CONTEXT_ENGINEERING_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: CONTEXT_ENGINEERING_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: CONTEXT_ENGINEERING_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: CONTEXT_ENGINEERING_TELEMETRY__OTLP_ENDPOINT
@@ -35,10 +55,10 @@ spec:
               value: {{ .Values.config.defaultTokenBudget | quote }}
             - name: CONTEXT_ENGINEERING_BUDGET__SUMMARISATION_ENABLED
               value: {{ .Values.config.summarisationEnabled | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: CONTEXT_ENGINEERING_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: CONTEXT_ENGINEERING_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
+            - name: CONTEXT_ENGINEERING_EVALUATION_FRAMEWORK_BASE_URL
+              value: {{ .Values.evaluationFrameworkBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: CONTEXT_ENGINEERING_DATABASE_URL
               valueFrom:
@@ -51,7 +71,15 @@ spec:
             {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

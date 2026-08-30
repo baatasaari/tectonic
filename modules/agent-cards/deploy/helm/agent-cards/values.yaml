@@ -1,0 +1,125 @@
+image:
+  repository: tectonic/agent-cards
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 3
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  # Every orchestrator's discovery query and every card publish/refresh routes through
+  # here -- scales aggressively, the same formula as MCP/A2A's own charts.
+  maxReplicas: 20
+  targetCPUUtilizationPercentage: 70
+
+service:
+  type: ClusterIP
+  port: 8102
+
+config:
+  tenantId: "default"
+  logLevel: "INFO"
+  otlpEndpoint: "http://tempo:4317"
+  performanceWeight: "0.6"
+  complianceWeight: "0.4"
+  complianceFrameworkName: "eu_ai_act"
+  cardStalenessTtlSeconds: "86400"
+  entitlementGateCacheTtlSeconds: "30"
+  entitlementGateMaxStalenessSeconds: "300"
+
+database:
+  url: "postgresql+asyncpg://agent_cards:agent_cards@postgres:5432/agent_cards"
+  existingSecret: ""
+  existingSecretKey: "database-url"
+
+evaluationFrameworkBaseUrl: "http://evaluation-framework:8097"
+regulatoryComplianceBaseUrl: "http://regulatory-compliance:8096"
+multiTenancyBaseUrl: "http://multi-tenancy:8109"
+
+podDisruptionBudget:
+  minAvailable: 2
+
+# Separate readiness/liveness/startup semantics (independent architecture
+# assessment §3.7) -- previously identical probes serving two different jobs.
+# startupProbe gives a slow-starting pod (DB migrations, Kafka connect) a real
+# grace period before liveness starts evaluating it at all; livenessProbe is
+# deliberately loose (a restart is disruptive, so only fire on genuine
+# deadlock); readinessProbe is deliberately tight (pulling a degraded pod out
+# of load balancing is cheap, so react fast).
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: 8102
+  periodSeconds: 5
+  failureThreshold: 30  # ~2.5 minutes to become ready before liveness engages
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 8102
+  periodSeconds: 15
+  failureThreshold: 5  # ~75s of continuous failure before a restart
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 8102
+  periodSeconds: 5
+  failureThreshold: 2  # ~10s of continuous failure before leaving the load balancer
+
+# Pod/container hardening (independent architecture assessment §3.7).
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# A dedicated ServiceAccount with no auto-mounted API token is this module's
+# real least-privilege RBAC posture: it never calls the Kubernetes API at all,
+# so the correct "least privilege" grant is zero permissions, not a fabricated
+# Role for access nothing here needs. See the module README.
+serviceAccount:
+  automountServiceAccountToken: false
+
+# Real default-deny-most NetworkPolicy: ingress only from pods in this
+# module's own namespace, egress only to DNS + same-namespace peers by
+# default (this platform's own modules address each other by short DNS name,
+# which only resolves within one namespace) plus an explicit opt-out for
+# modules that genuinely need broader egress (LLM Gateway calling external
+# model providers, etc.) -- see the module README for which.
+networkPolicy:
+  enabled: true
+  allowExternalEgress: true
+
+# Spreads replicas across nodes so one node loss doesn't take out every
+# replica at once. A soft constraint (ScheduleAnyway) by default -- a hard
+# requirement (DoNotSchedule) can strand pods Pending on a small/single-node
+# cluster with no real availability benefit to justify that.
+topologySpreadConstraints:
+  enabled: true
+  maxSkew: 1
+  topologyKey: kubernetes.io/hostname
+  whenUnsatisfiable: ScheduleAnyway
+
+# Real prioritization across this platform's 34 modules (which deployment
+# matters more when a node is under pressure) is a genuine operational
+# judgment call this chart doesn't make on its own -- unset by default;
+# see the module README.
+priorityClassName: ""

@@ -21,7 +21,9 @@ class GatewayRepository(Protocol):
 
     async def get_virtual_key(self, virtual_key_id: str) -> VirtualKeyRecord | None: ...
 
-    async def list_virtual_keys(self, tenant_id: str) -> list[VirtualKeyRecord]: ...
+    async def list_virtual_keys(
+        self, tenant_id: str, limit: int = 50, offset: int = 0
+    ) -> tuple[list[VirtualKeyRecord], int]: ...
 
     async def get_budget_policy(self, budget_policy_id: str) -> BudgetPolicyRecord | None: ...
 
@@ -32,6 +34,8 @@ class GatewayRepository(Protocol):
     async def create_request_log(self, record: RequestLogRecord) -> RequestLogRecord: ...
 
     async def list_provider_configs(self) -> list[ProviderConfigRecord]: ...
+
+    async def create_provider_config(self, record: ProviderConfigRecord) -> ProviderConfigRecord: ...
 
     async def update_provider_config(self, record: ProviderConfigRecord) -> ProviderConfigRecord: ...
 
@@ -63,6 +67,21 @@ class SecretsClient(Protocol):
     cached briefly by the adapter) from this port instead."""
 
     async def get_provider_api_key(self, provider: str, tenant_id: str) -> str: ...
+
+
+class MultiTenancyQuotaClient(Protocol):
+    """Port to Multi-tenancy's real `POST /tenants/{id}/quota/check`
+    (independent architecture assessment §5.2 / §3.4 point 5) -- the
+    quota analogue of `EntitlementGateMiddleware`'s own gate check.
+    Fails OPEN on any Multi-tenancy error, the same posture that
+    middleware and `HTTPMultiTenancyClient.gate` (Billing and
+    Metering's own reference implementation) already take: a real
+    implementation never raises, always returning `allowed=True` when
+    the check itself couldn't be answered."""
+
+    async def check_quota(
+        self, *, tenant_id: str, resource_class: str, amount: float = 1.0,
+    ) -> tuple[bool, str]: ...
 
 
 class ProviderClient(Protocol):

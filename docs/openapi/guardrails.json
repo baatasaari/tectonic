@@ -1,0 +1,600 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Guardrails",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 14: dual-stage input/output policy enforcement for every LLM Gateway call.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/guardrails/check": {
+      "post": {
+        "tags": [
+          "guardrails"
+        ],
+        "summary": "Check",
+        "operationId": "check_v1_guardrails_check_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/guardrails/policy-profiles": {
+      "post": {
+        "tags": [
+          "guardrails"
+        ],
+        "summary": "Create Policy Profile",
+        "operationId": "create_policy_profile_v1_guardrails_policy_profiles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePolicyProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyProfileSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/guardrails/red-team-runs": {
+      "get": {
+        "tags": [
+          "guardrails"
+        ],
+        "summary": "List Red Team Runs",
+        "operationId": "list_red_team_runs_v1_guardrails_red_team_runs_get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedTeamRunListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/guardrails/red-team-runs/trigger": {
+      "post": {
+        "tags": [
+          "guardrails"
+        ],
+        "summary": "Trigger Red Team Run",
+        "operationId": "trigger_red_team_run_v1_guardrails_red_team_runs_trigger_post",
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriggerRedTeamRunResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Healthz",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Metrics",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BypassIncidentSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "attack_pattern": {
+            "type": "string",
+            "title": "Attack Pattern"
+          },
+          "target_check": {
+            "type": "string",
+            "title": "Target Check"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity"
+          },
+          "resolved": {
+            "type": "boolean",
+            "title": "Resolved"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "attack_pattern",
+          "target_check",
+          "severity",
+          "resolved"
+        ],
+        "title": "BypassIncidentSchema"
+      },
+      "CheckRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "stage": {
+            "type": "string",
+            "title": "Stage"
+          },
+          "policy_profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Profile Id"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "text",
+          "stage"
+        ],
+        "title": "CheckRequest"
+      },
+      "CheckResponse": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "title": "Decision"
+          },
+          "violation_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Violation Category"
+          },
+          "redacted_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redacted Text"
+          },
+          "checks_run": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Checks Run"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision",
+          "violation_category",
+          "redacted_text",
+          "checks_run"
+        ],
+        "title": "CheckResponse"
+      },
+      "CreatePolicyProfileRequest": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "default": "default"
+          },
+          "enabled_checks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Enabled Checks",
+            "default": [
+              "pii_detection",
+              "jailbreak_detection",
+              "groundedness_check"
+            ]
+          },
+          "entity_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Entity Types",
+            "default": [
+              "EMAIL",
+              "PHONE_NUMBER",
+              "PERSON",
+              "CREDIT_CARD"
+            ]
+          },
+          "denied_topics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Denied Topics",
+            "default": []
+          },
+          "groundedness_threshold": {
+            "type": "number",
+            "title": "Groundedness Threshold",
+            "default": 0.85
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id"
+        ],
+        "title": "CreatePolicyProfileRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "PolicyProfileSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "enabled_checks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Enabled Checks"
+          },
+          "pii_entity_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Pii Entity Types"
+          },
+          "denied_topics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Denied Topics"
+          },
+          "groundedness_threshold": {
+            "type": "number",
+            "title": "Groundedness Threshold"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "name",
+          "enabled_checks",
+          "pii_entity_types",
+          "denied_topics",
+          "groundedness_threshold",
+          "status",
+          "created_at"
+        ],
+        "title": "PolicyProfileSchema"
+      },
+      "RedTeamRunListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RedTeamRunSchema"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "RedTeamRunListResponse"
+      },
+      "RedTeamRunSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "attempts_generated": {
+            "type": "integer",
+            "title": "Attempts Generated"
+          },
+          "successful_bypasses": {
+            "type": "integer",
+            "title": "Successful Bypasses"
+          },
+          "run_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Run At"
+          },
+          "bypass_incidents": {
+            "items": {
+              "$ref": "#/components/schemas/BypassIncidentSchema"
+            },
+            "type": "array",
+            "title": "Bypass Incidents",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "attempts_generated",
+          "successful_bypasses",
+          "run_at"
+        ],
+        "title": "RedTeamRunSchema"
+      },
+      "TriggerRedTeamRunResponse": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id"
+        ],
+        "title": "TriggerRedTeamRunResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "ServiceBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Service-to-service HS256 JWT bearer auth (security/jwt_auth.py): every inbound request must carry `Authorization: Bearer <token>`, verified against this module's own service_name as the required audience (TECTONIC_JWT_SHARED_SECRET, one shared signing key across every module in this deployment). Not a user-facing OAuth/OIDC flow -- see this module's README for the full design note."
+      }
+    }
+  },
+  "security": [
+    {
+      "ServiceBearerAuth": []
+    }
+  ]
+}

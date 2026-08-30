@@ -42,6 +42,10 @@ class HandoffTriggerReason(StrEnum):
     EMOTION = "emotion"
     EXPLICIT = "explicit"
     REPEATED_REFUSAL = "repeated_refusal"
+    # Added for the Phase 2 support-agent slice (ticket #82): Workflow
+    # Engine's own business-rule escalation (e.g. a refund above threshold),
+    # not this module's own emotion/keyword-based HandoffTriggerEngine.
+    WORKFLOW_ESCALATION = "workflow_escalation"
 
 
 @dataclass

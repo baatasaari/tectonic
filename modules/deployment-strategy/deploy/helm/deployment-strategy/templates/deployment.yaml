@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-deployment-strategy
+  labels:
+    app.kubernetes.io/name: deployment-strategy
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: deployment-strategy
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: deployment-strategy
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      serviceAccountName: {{ .Release.Name }}-deployment-strategy
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.topologySpreadConstraints.maxSkew }}
+          topologyKey: {{ .Values.topologySpreadConstraints.topologyKey }}
+          whenUnsatisfiable: {{ .Values.topologySpreadConstraints.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: deployment-strategy
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: deployment-strategy
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8106
+          env:
+            - name: DEPLOYMENT_STRATEGY_TENANT_ID
+              value: {{ .Values.config.tenantId | quote }}
+            - name: DEPLOYMENT_STRATEGY_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
+            - name: DEPLOYMENT_STRATEGY_TELEMETRY__LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            - name: DEPLOYMENT_STRATEGY_TELEMETRY__OTLP_ENDPOINT
+              value: {{ .Values.config.otlpEndpoint | quote }}
+            - name: DEPLOYMENT_STRATEGY_MIN_GROUNDEDNESS_SAMPLE_SIZE
+              value: {{ .Values.config.minGroundednessSampleSize | quote }}
+            - name: DEPLOYMENT_STRATEGY_MIN_HEALTH_SCORE
+              value: {{ .Values.config.minHealthScore | quote }}
+            - name: DEPLOYMENT_STRATEGY_GROUNDEDNESS_WEIGHT
+              value: {{ .Values.config.groundednessWeight | quote }}
+            - name: DEPLOYMENT_STRATEGY_COST_WEIGHT
+              value: {{ .Values.config.costWeight | quote }}
+            - name: DEPLOYMENT_STRATEGY_BUDGET_PERIOD
+              value: {{ .Values.config.budgetPeriod | quote }}
+            - name: DEPLOYMENT_STRATEGY_EVALUATION_FRAMEWORK_BASE_URL
+              value: {{ .Values.evaluationFrameworkBaseUrl | quote }}
+            - name: DEPLOYMENT_STRATEGY_FINOPS_BASE_URL
+              value: {{ .Values.finopsBaseUrl | quote }}
+            {{- if .Values.database.existingSecret }}
+            - name: DEPLOYMENT_STRATEGY_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- else }}
+            - name: DEPLOYMENT_STRATEGY_DATABASE_URL
+              value: {{ .Values.database.url | quote }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

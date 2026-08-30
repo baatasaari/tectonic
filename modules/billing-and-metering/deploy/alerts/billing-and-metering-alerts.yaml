@@ -1,0 +1,12 @@
+# Prometheus Alertmanager rule definitions for the Billing and Metering
+# module (LLD §Level 4 "Alerting").
+groups:
+  - name: billing-and-metering
+    rules:
+      - alert: BillingIncompleteInvoiceRateHigh
+        expr: sum(rate(billing_invoices_generated_total{complete="False"}[15m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "At least one incomplete invoice generated in the last 15m"
+          description: "A metering source (FinOps or Auditability) was unreachable during invoice generation -- the LLD's own key metric, metering accuracy, took a real hit. Check that peer's health before the invoice is finalized."

@@ -1,0 +1,54 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# with a replayed/fixture event stream in place of the real Kafka feed
+# (see the module README — this build replaces Kafka ingestion with a
+# synchronous HTTP endpoint), and with Workflow Engine/Tool Orchestration
+# intervention endpoints stubbed. Real Postgres runs here.
+name: sentinel-agents
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sentinel_agents
+      POSTGRES_PASSWORD: sentinel_agents
+      POSTGRES_DB: sentinel_agents
+    ports:
+      - "5444:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinel_agents"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9115:9115"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      SENTINEL_AGENTS_DATABASE_URL: postgresql+asyncpg://sentinel_agents:sentinel_agents@postgres:5432/sentinel_agents
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  sentinel-agents:
+    build: ..
+    ports:
+      - "8094:8094"
+    environment:
+      SENTINEL_AGENTS_DATABASE_URL: postgresql+asyncpg://sentinel_agents:sentinel_agents@postgres:5432/sentinel_agents
+      SENTINEL_AGENTS_WORKFLOW_ENGINE_BASE_URL: http://dependency-stub:9115
+      SENTINEL_AGENTS_TOOL_ORCHESTRATION_BASE_URL: http://dependency-stub:9115
+      SENTINEL_AGENTS_HUMAN_OVERSIGHT_BASE_URL: http://dependency-stub:9115
+      SENTINEL_AGENTS_AUDITABILITY_BASE_URL: http://dependency-stub:9115
+      SENTINEL_AGENTS_MULTI_TENANCY_BASE_URL: http://dependency-stub:9115
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

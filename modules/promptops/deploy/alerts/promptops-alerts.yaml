@@ -1,0 +1,24 @@
+# Prometheus Alertmanager rule definitions for the PromptOps module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: promptops
+    rules:
+      - alert: PromptOpsDriftIncidentsHigh
+        expr: sum(increase(promptops_drift_incidents_total[24h])) > 1
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 1 drift incident detected in the last 24h"
+          description: "An active prompt version's pass rate has significantly dropped from its promotion-time baseline -- check which prompt_name label is driving it."
+
+      - alert: PromptOpsABSignificanceRateLow
+        expr: |
+          sum(increase(promptops_ab_tests_concluded_total{significant="True"}[7d]))
+            /
+          sum(increase(promptops_ab_tests_concluded_total[7d]))
+          < 0.2
+        labels:
+          severity: info
+        annotations:
+          summary: "Fewer than 20% of concluded A/B tests were significant over the last 7 days"
+          description: "Most A/B tests are failing to reach significance -- worth checking sample sizes or whether prompt variants are meaningfully different."

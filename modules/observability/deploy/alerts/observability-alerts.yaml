@@ -1,0 +1,31 @@
+# Prometheus Alertmanager rule definitions for the Observability module
+# (LLD §Level 4 "Alerting"). Meta-alerts about the observability pipeline
+# itself.
+groups:
+  - name: observability
+    rules:
+      - alert: ObservabilityIngestionLagHigh
+        expr: histogram_quantile(0.95, sum(rate(observability_ingestion_latency_seconds_bucket[5m])) by (le)) > 0.1
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 ingestion latency above 100ms"
+
+      - alert: ObservabilityTraceCompletenessLow
+        expr: observability_trace_completeness_ratio < 0.95
+        labels:
+          severity: warning
+        annotations:
+          summary: "Trace completeness for tenant {{ $labels.tenant_id }} below 95%"
+          description: "Indicates an instrumentation gap somewhere upstream."
+
+      - alert: ObservabilityStorageGrowthAnomalous
+        expr: |
+          abs(deriv(observability_storage_cost_per_million_spans[1d]))
+            >
+          3 * stddev_over_time(deriv(observability_storage_cost_per_million_spans[1d])[7d:1d])
+        labels:
+          severity: info
+        annotations:
+          summary: "Storage growth rate deviates sharply from historical baseline"
+          description: "Cost-awareness signal, not necessarily an incident."

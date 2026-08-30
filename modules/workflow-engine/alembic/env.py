@@ -13,8 +13,8 @@ from alembic import context
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from workflow_engine.db.base import Base  # noqa: E402
-from workflow_engine.db import models  # noqa: E402,F401
+from workflow_engine.db import models  # noqa: F401
+from workflow_engine.db.base import Base
 
 config = context.config
 

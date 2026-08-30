@@ -8,3 +8,5 @@ __pycache__/
 htmlcov/
 dist/
 build/
+.sbom-venv/
+sbom.cyclonedx.json*

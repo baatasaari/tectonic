@@ -1,0 +1,24 @@
+# Prometheus Alertmanager rule definitions for the Multi-modality module
+# (LLD §Level 4 "Alerting").
+groups:
+  - name: multi-modality
+    rules:
+      - alert: MultiModalityGroundednessUnavailableRateHigh
+        expr: |
+          sum(rate(multi_modality_groundedness_checks_total{decision="unavailable"}[15m]))
+            /
+          sum(rate(multi_modality_groundedness_checks_total{decision!="not_checked"}[15m]))
+          > 0.1
+        labels:
+          severity: warning
+        annotations:
+          summary: "More than 10% of groundedness checks are unavailable (Guardrails likely degraded)"
+          description: "Extractions are still succeeding, but their groundedness verdicts aren't -- check Guardrails' own health."
+
+      - alert: MultiModalityExtractionLatencyHigh
+        expr: histogram_quantile(0.95, sum(rate(multi_modality_extraction_latency_seconds_bucket[15m])) by (le, modality)) > 2
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 extraction latency over 2s for at least one modality in the last 15m"
+          description: "Conversion latency, the LLD's own key metric, is degraded -- check which modality label is driving it."

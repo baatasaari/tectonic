@@ -1,0 +1,718 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FinOps",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 26: tenant cost reporting, budget policies and a bounded autonomous cost-optimisation agent, built on LLM Gateway's real spend data.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/finops/usage-events": {
+      "post": {
+        "tags": [
+          "finops"
+        ],
+        "summary": "Report Usage Event",
+        "operationId": "report_usage_event_v1_finops_usage_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportUsageEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageEventSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finops/cost-reports/{tenant_id}": {
+      "get": {
+        "tags": [
+          "finops"
+        ],
+        "summary": "Get Cost Report",
+        "operationId": "get_cost_report_v1_finops_cost_reports__tenant_id__get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "period",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Period"
+            }
+          },
+          {
+            "name": "budget_policy_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Budget Policy Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CostReportSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finops/budget-policies": {
+      "post": {
+        "tags": [
+          "finops"
+        ],
+        "summary": "Create Budget Policy",
+        "operationId": "create_budget_policy_v1_finops_budget_policies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBudgetPolicyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetPolicySchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finops/budget-policies/{budget_policy_id}": {
+      "get": {
+        "tags": [
+          "finops"
+        ],
+        "summary": "Get Budget Policy",
+        "operationId": "get_budget_policy_v1_finops_budget_policies__budget_policy_id__get",
+        "parameters": [
+          {
+            "name": "budget_policy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Budget Policy Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetPolicySchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finops/budget-policies/{budget_policy_id}/evaluate": {
+      "post": {
+        "tags": [
+          "finops"
+        ],
+        "summary": "Evaluate Budget Policy",
+        "operationId": "evaluate_budget_policy_v1_finops_budget_policies__budget_policy_id__evaluate_post",
+        "parameters": [
+          {
+            "name": "budget_policy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Budget Policy Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/OptimisationActionSchema"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Evaluate Budget Policy V1 Finops Budget Policies  Budget Policy Id  Evaluate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/finops/budget-policies/{budget_policy_id}/actions": {
+      "get": {
+        "tags": [
+          "finops"
+        ],
+        "summary": "List Optimisation Actions",
+        "operationId": "list_optimisation_actions_v1_finops_budget_policies__budget_policy_id__actions_get",
+        "parameters": [
+          {
+            "name": "budget_policy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Budget Policy Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptimisationActionListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Healthz",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Metrics",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BudgetPolicySchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "period": {
+            "type": "string",
+            "title": "Period"
+          },
+          "limit_amount": {
+            "type": "number",
+            "title": "Limit Amount"
+          },
+          "alert_threshold_pct": {
+            "type": "number",
+            "title": "Alert Threshold Pct"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "period",
+          "limit_amount",
+          "alert_threshold_pct",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "BudgetPolicySchema"
+      },
+      "CostReportSchema": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "period": {
+            "type": "string",
+            "title": "Period"
+          },
+          "llm_gateway_spend": {
+            "type": "number",
+            "title": "Llm Gateway Spend"
+          },
+          "other_usage_cost": {
+            "type": "number",
+            "title": "Other Usage Cost"
+          },
+          "total_cost": {
+            "type": "number",
+            "title": "Total Cost"
+          },
+          "forecast_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forecast Amount"
+          },
+          "budget_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BudgetPolicySchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "utilisation_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utilisation Ratio"
+          },
+          "alert": {
+            "type": "boolean",
+            "title": "Alert"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "period",
+          "llm_gateway_spend",
+          "other_usage_cost",
+          "total_cost",
+          "forecast_amount",
+          "budget_policy",
+          "utilisation_ratio",
+          "alert"
+        ],
+        "title": "CostReportSchema"
+      },
+      "CreateBudgetPolicyRequest": {
+        "properties": {
+          "period": {
+            "type": "string",
+            "title": "Period"
+          },
+          "limit_amount": {
+            "type": "number",
+            "title": "Limit Amount"
+          },
+          "alert_threshold_pct": {
+            "type": "number",
+            "title": "Alert Threshold Pct",
+            "default": 0.8
+          }
+        },
+        "type": "object",
+        "required": [
+          "period",
+          "limit_amount"
+        ],
+        "title": "CreateBudgetPolicyRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "OptimisationActionListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OptimisationActionSchema"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "OptimisationActionListResponse"
+      },
+      "OptimisationActionSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "budget_policy_id": {
+            "type": "string",
+            "title": "Budget Policy Id"
+          },
+          "action_type": {
+            "type": "string",
+            "title": "Action Type"
+          },
+          "previous_value": {
+            "type": "number",
+            "title": "Previous Value"
+          },
+          "new_value": {
+            "type": "number",
+            "title": "New Value"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "taken_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Taken At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "budget_policy_id",
+          "action_type",
+          "previous_value",
+          "new_value",
+          "reason",
+          "taken_at"
+        ],
+        "title": "OptimisationActionSchema"
+      },
+      "ReportUsageEventRequest": {
+        "properties": {
+          "source_module": {
+            "type": "string",
+            "title": "Source Module"
+          },
+          "resource_type": {
+            "type": "string",
+            "title": "Resource Type"
+          },
+          "quantity": {
+            "type": "number",
+            "title": "Quantity"
+          },
+          "unit_cost": {
+            "type": "number",
+            "title": "Unit Cost"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_module",
+          "resource_type",
+          "quantity",
+          "unit_cost"
+        ],
+        "title": "ReportUsageEventRequest"
+      },
+      "UsageEventSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "source_module": {
+            "type": "string",
+            "title": "Source Module"
+          },
+          "resource_type": {
+            "type": "string",
+            "title": "Resource Type"
+          },
+          "quantity": {
+            "type": "number",
+            "title": "Quantity"
+          },
+          "unit_cost": {
+            "type": "number",
+            "title": "Unit Cost"
+          },
+          "cost": {
+            "type": "number",
+            "title": "Cost"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "source_module",
+          "resource_type",
+          "quantity",
+          "unit_cost",
+          "cost",
+          "occurred_at"
+        ],
+        "title": "UsageEventSchema"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "ServiceBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Service-to-service HS256 JWT bearer auth (security/jwt_auth.py): every inbound request must carry `Authorization: Bearer <token>`, verified against this module's own service_name as the required audience (TECTONIC_JWT_SHARED_SECRET, one shared signing key across every module in this deployment). Not a user-facing OAuth/OIDC flow -- see this module's README for the full design note."
+      }
+    }
+  },
+  "security": [
+    {
+      "ServiceBearerAuth": []
+    }
+  ]
+}

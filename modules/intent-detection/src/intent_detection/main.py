@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
@@ -17,6 +18,9 @@ from intent_detection.core.compositional_decomposer import CompositionalDecompos
 from intent_detection.core.drift_monitor import DriftMonitor
 from intent_detection.core.primary_classifier import PrimaryClassifier
 from intent_detection.db.session import make_engine, make_session_factory
+from intent_detection.security.entitlement_gate import EntitlementGateMiddleware
+from intent_detection.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from intent_detection.security.openapi_security import configure_openapi_security
 from intent_detection.telemetry.logging import configure_logging, get_logger
 from intent_detection.telemetry.tracing import configure_tracing
 
@@ -29,7 +33,10 @@ def build_app_context(settings: IntentDetectionSettings) -> AppContext:
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
-        llm_gateway=HTTPLLMGatewayClient(settings.dependency_stub_base_url),
+        llm_gateway=HTTPLLMGatewayClient(
+            settings.llm_gateway_base_url, issuer=settings.service_name,
+            shared_secret=settings.jwt_shared_secret, ttl_seconds=settings.jwt_ttl_seconds,
+        ),
         primary_classifier=PrimaryClassifier(),
         decomposer=CompositionalDecomposer(),
         drift_monitor=DriftMonitor(),
@@ -38,9 +45,15 @@ def build_app_context(settings: IntentDetectionSettings) -> AppContext:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = load_settings()
+    settings: IntentDetectionSettings = app.state.settings
     configure_logging(settings.telemetry.log_level)
     configure_tracing(settings.service_name, settings.telemetry.otlp_endpoint)
+
+    if settings.jwt_shared_secret == INSECURE_DEFAULT_SECRET:
+        logger.warning(
+            "jwt_shared_secret_is_insecure_default",
+            hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
+        )
 
     ctx = build_app_context(settings)
     app.state.ctx = ctx
@@ -54,12 +67,26 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = load_settings()
+
     app = FastAPI(
         title="Intent Detection",
         version="0.1.0",
         description="Tectonic Agentic AI Platform — Module 5: classifies input into intents, "
         "decomposes compositional multi-goal utterances, and monitors intent drift.",
         lifespan=lifespan,
+    )
+    app.state.settings = settings
+    app.add_middleware(
+        EntitlementGateMiddleware,
+        module_name=settings.service_name,
+        multi_tenancy_base_url=settings.multi_tenancy_base_url,
+        issuer=settings.service_name,
+        shared_secret=settings.jwt_shared_secret,
+        cache_ttl_seconds=settings.entitlement_gate_cache_ttl_seconds,
+    )
+    app.add_middleware(
+        ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )
     app.include_router(intents_router)
 
@@ -86,7 +113,9 @@ def create_app() -> FastAPI:
     async def metrics() -> Response:
         return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+    HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

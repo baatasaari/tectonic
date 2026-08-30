@@ -1,0 +1,350 @@
+name: CI
+
+# Lint + test gating for every module (LLD "Deployability and testability
+# contract": each module builds, lints and tests fully independently). Runs
+# per-module in a fail-fast:false matrix so one module's failure doesn't hide
+# another's, and each module's unit tier is fast enough (well under a minute)
+# that running all 19 on every push/PR is cheap.
+#
+# A Postgres service is always started so that any module's tests/integration/
+# tier (opt-in via TECTONIC_TEST_POSTGRES_URL — see that module's
+# tests/integration/conftest.py) runs for real here, not just skips. Not every
+# module has that tier yet as of this workflow's introduction; the "does this
+# directory exist" guard below means adding one to a module later needs no
+# workflow change to start being exercised in CI.
+
+on:
+  push:
+    branches: ["claude/**"]
+  pull_request:
+    branches: ["claude/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least-privilege default; the sbom-and-sign job below grants itself the extra
+# id-token: write a keyless Sigstore signature needs, nothing else does.
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    name: ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tectonic_ci
+          POSTGRES_PASSWORD: tectonic_ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tectonic_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - a2a
+          - agent-cards
+          - agent-marketplace
+          - agentic-rag
+          - auditability
+          - billing-and-metering
+          - context-engineering
+          - conversational-engine
+          - data-source-plugins
+          - deployment-strategy
+          - evaluation-framework
+          - finops
+          - graph-db
+          - guardrails
+          - human-oversight
+          - identity-and-access
+          - intent-detection
+          - knowledge-base
+          - llm-gateway
+          - llmops
+          - long-term-memory
+          - mcp
+          - multi-modality
+          - multi-tenancy
+          - observability
+          - promptops
+          - regulatory-compliance
+          - secrets-and-credential-management
+          - sdk-and-developer-portal
+          - sentinel-agents
+          - short-term-memory
+          - tool-orchestration
+          - vector-db
+          - workflow-engine
+
+    defaults:
+      run:
+        working-directory: modules/${{ matrix.module }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: "modules/${{ matrix.module }}/pyproject.toml"
+
+      - name: Install module (with dev dependencies)
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Lint (ruff)
+        run: ruff check src tests
+
+      - name: Unit tests
+        run: pytest tests/unit -v
+
+      - name: Integration tests (real Postgres, only if this module has that tier)
+        if: hashFiles(format('modules/{0}/tests/integration/**', matrix.module)) != ''
+        env:
+          TECTONIC_TEST_POSTGRES_URL: postgresql://tectonic_ci:tectonic_ci@localhost:5432/postgres
+        run: pytest tests/integration -v
+
+      - name: Contract tests (real Postgres + OpenAPI-schema-driven fuzzing, only if this module has that tier)
+        if: hashFiles(format('modules/{0}/tests/contract/**', matrix.module)) != ''
+        env:
+          TECTONIC_TEST_POSTGRES_URL: postgresql://tectonic_ci:tectonic_ci@localhost:5432/postgres
+        run: pytest tests/contract -v
+
+  product-slice-support-agent:
+    # Ticket #82's own real, live product-slice verification
+    # (docs/phase2-product-slice-01-support-agent.md,
+    # tests/product-slices/), wired into CI as its own job rather than
+    # folded into the lint-and-test matrix above: it needs all 15 of this
+    # slice's own real modules running as real processes simultaneously
+    # against a real Postgres, not one module tested in isolation, so it
+    # doesn't fit that job's own per-module shape. Deliberately does not
+    # `needs: lint-and-test` -- that matrix job covers all 34 modules
+    # (most of them outside this slice), and this job does its own fresh
+    # checkout/build/run anyway; running independently lets both start
+    # immediately instead of this one waiting on unrelated modules'
+    # matrix legs. See tests/product-slices/README.md for what this
+    # actually runs and how to run it locally.
+    name: product-slice (support-agent)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tectonic_ci
+          POSTGRES_PASSWORD: tectonic_ci
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tectonic_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: postgresql-client (usually preinstalled on ubuntu-latest; explicit so a runner-image change can't silently break ensure_databases())
+        run: sudo apt-get update -y && sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Build every module's own venv (this slice's own 15 real module processes -- each needs its own isolated .venv, same as running any one of them locally; see scripts/product-slice-stubs/stack.py's own module docstring)
+        run: |
+          for m in identity-and-access multi-tenancy llm-gateway intent-detection knowledge-base \
+                   tool-orchestration guardrails human-oversight billing-and-metering auditability \
+                   observability conversational-engine workflow-engine agentic-rag vector-db; do
+            echo "::group::venv: $m"
+            (cd "modules/$m" && uv venv && uv pip install -e ".[dev]")
+            echo "::endgroup::"
+          done
+
+      - name: Install tests/product-slices' own dependencies (not an installable package -- see its own README)
+        run: |
+          cd tests/product-slices
+          uv venv
+          uv pip install pytest pytest-asyncio httpx fastapi uvicorn \
+            "opentelemetry-api>=1.27" "opentelemetry-sdk>=1.27" \
+            "opentelemetry-instrumentation-fastapi>=0.48b0" "opentelemetry-instrumentation-httpx>=0.48b0"
+
+      - name: Run the support-agent product-slice e2e suite (stands up all 15 modules + a mock external-systems stub itself, seeds a real tenant, runs every scripted conversation, tears the stack back down)
+        env:
+          TECTONIC_STACK_POSTGRES_USER: tectonic_ci
+          TECTONIC_STACK_POSTGRES_PASSWORD: tectonic_ci
+        run: |
+          cd tests/product-slices
+          source .venv/bin/activate
+          pytest -v
+
+      - name: Upload every module's own log on failure (scripts/product-slice-stubs/stack.py's own per-module log files -- the fastest way to see which real module actually failed)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-slice-logs
+          path: /tmp/support-agent-slice-logs/
+          retention-days: 14
+
+  sbom-and-sign:
+    # Supply-chain gate: a CycloneDX SBOM of each module's real *runtime*
+    # dependency set (a clean install of the module alone, deliberately
+    # separate from the [dev]-extras install lint-and-test uses, so test
+    # tooling never shows up as if it shipped), keylessly signed with
+    # Sigstore via this workflow run's own GitHub Actions OIDC identity --
+    # no long-lived signing key for this repo to leak. Verify a downloaded
+    # SBOM against this provenance with:
+    #   sigstore verify github --cert-identity <this workflow's identity> \
+    #     --repository ${{ github.repository }} sbom.cyclonedx.json
+    # Runs on push only (not pull_request): forked-PR runs don't carry the
+    # OIDC token this needs, and signing every PR permutation of every
+    # module isn't the point -- what matters is provenance for what actually
+    # lands on a branch.
+    name: sbom (${{ matrix.module }})
+    if: github.event_name == 'push'
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - a2a
+          - agent-cards
+          - agent-marketplace
+          - agentic-rag
+          - auditability
+          - billing-and-metering
+          - context-engineering
+          - conversational-engine
+          - data-source-plugins
+          - deployment-strategy
+          - evaluation-framework
+          - finops
+          - graph-db
+          - guardrails
+          - human-oversight
+          - identity-and-access
+          - intent-detection
+          - knowledge-base
+          - llm-gateway
+          - llmops
+          - long-term-memory
+          - mcp
+          - multi-modality
+          - multi-tenancy
+          - observability
+          - promptops
+          - regulatory-compliance
+          - secrets-and-credential-management
+          - sdk-and-developer-portal
+          - sentinel-agents
+          - short-term-memory
+          - tool-orchestration
+          - vector-db
+          - workflow-engine
+
+    defaults:
+      run:
+        working-directory: modules/${{ matrix.module }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: "modules/${{ matrix.module }}/pyproject.toml"
+
+      - name: Install the module's runtime dependencies only (no dev/test extras)
+        run: |
+          uv venv .sbom-venv
+          uv pip install --python .sbom-venv/bin/python -e .
+
+      - name: Generate SBOM (CycloneDX, from the clean runtime environment)
+        run: >-
+          uvx --from cyclonedx-bom cyclonedx-py environment
+          --of json -o sbom.cyclonedx.json .sbom-venv/bin/python
+
+      - name: Sign SBOM (Sigstore, keyless via this run's GitHub Actions OIDC identity)
+        run: uvx --from sigstore sigstore sign --bundle sbom.cyclonedx.json.sigstore --overwrite sbom.cyclonedx.json
+
+      - name: Upload SBOM + signature
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.module }}
+          path: |
+            modules/${{ matrix.module }}/sbom.cyclonedx.json
+            modules/${{ matrix.module }}/sbom.cyclonedx.json.sigstore
+          retention-days: 90
+
+  ci:
+    # A single, stable check name for branch protection to require, instead of
+    # 19 individual matrix-leg names that shift whenever a module is added.
+    name: CI
+    if: always()
+    needs: [lint-and-test, product-slice-support-agent, sbom-and-sign]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every module job to have succeeded
+        run: |
+          if [ "${{ needs.lint-and-test.result }}" != "success" ]; then
+            echo "One or more module jobs failed (result: ${{ needs.lint-and-test.result }})."
+            exit 1
+          fi
+          if [ "${{ needs.product-slice-support-agent.result }}" != "success" ]; then
+            echo "The support-agent product-slice job failed (result: ${{ needs.product-slice-support-agent.result }})."
+            exit 1
+          fi
+          # sbom-and-sign only runs on push (see its own `if:`) -- "skipped" is
+          # its expected, passing result on a pull_request event.
+          if [ "${{ needs.sbom-and-sign.result }}" != "success" ] && [ "${{ needs.sbom-and-sign.result }}" != "skipped" ]; then
+            echo "One or more SBOM/signing jobs failed (result: ${{ needs.sbom-and-sign.result }})."
+            exit 1
+          fi
+          echo "All module jobs passed."

@@ -10,6 +10,7 @@ from llm_gateway.core.fakes import (
     FakeProviderClient,
     FakeQualityScoreProvider,
     InMemoryGatewayRepository,
+    StubMultiTenancyQuotaClient,
 )
 from llm_gateway.core.gateway_service import LLMGatewayService
 from llm_gateway.core.router import QualityAwareRouter
@@ -25,12 +26,14 @@ class Harness:
         self.quality_scores = kwargs.get("quality_scores") or FakeQualityScoreProvider()
         self.provider_client = kwargs.get("provider_client") or FakeProviderClient()
         self.settings = kwargs.get("settings") or LLMGatewaySettings()
+        self.multi_tenancy = kwargs.get("multi_tenancy") or StubMultiTenancyQuotaClient()
 
         self.router = QualityAwareRouter(self.quality_scores, self.settings.routing)
         self.cost_governance = CostGovernanceEngine(self.repository, self.settings.budget)
         self.failover = FailoverManager(self.provider_client, self.settings.failover.max_provider_attempts)
         self.service = LLMGatewayService(
-            self.repository, self.cache, self.router, self.cost_governance, self.failover, self.settings
+            self.repository, self.cache, self.router, self.cost_governance, self.failover, self.settings,
+            multi_tenancy=self.multi_tenancy,
         )
 
     async def seed_tenant(

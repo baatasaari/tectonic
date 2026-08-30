@@ -1,0 +1,779 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Long-Term Memory",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 13: durable, cross-session hybrid memory store with consolidation, forgetting and self-reflection.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/long-term-memory/items": {
+      "post": {
+        "tags": [
+          "long-term-memory"
+        ],
+        "summary": "Store Item",
+        "operationId": "store_item_v1_long_term_memory_items_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StoreItemRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryItemSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/long-term-memory/query": {
+      "post": {
+        "tags": [
+          "long-term-memory"
+        ],
+        "summary": "Query Items",
+        "operationId": "query_items_v1_long_term_memory_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RankedMemoryItemSchema"
+                  },
+                  "type": "array",
+                  "title": "Response Query Items V1 Long Term Memory Query Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/long-term-memory/reflections": {
+      "get": {
+        "tags": [
+          "long-term-memory"
+        ],
+        "summary": "List Reflections",
+        "operationId": "list_reflections_v1_long_term_memory_reflections_get",
+        "parameters": [
+          {
+            "name": "agent_ref",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Agent Ref"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReflectionEntryListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "long-term-memory"
+        ],
+        "summary": "Generate Reflection",
+        "operationId": "generate_reflection_v1_long_term_memory_reflections_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateReflectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReflectionEntrySchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/long-term-memory/erasure-requests": {
+      "post": {
+        "tags": [
+          "long-term-memory"
+        ],
+        "summary": "Create Erasure Request",
+        "operationId": "create_erasure_request_v1_long_term_memory_erasure_requests_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErasureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRecordSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/long-term-memory/erasure-requests/{deletion_id}": {
+      "get": {
+        "tags": [
+          "long-term-memory"
+        ],
+        "summary": "Get Erasure Request",
+        "operationId": "get_erasure_request_v1_long_term_memory_erasure_requests__deletion_id__get",
+        "parameters": [
+          {
+            "name": "deletion_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Deletion Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletionRecordSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/long-term-memory/consolidation-runs": {
+      "post": {
+        "tags": [
+          "long-term-memory"
+        ],
+        "summary": "Run Consolidation",
+        "operationId": "run_consolidation_v1_long_term_memory_consolidation_runs_post",
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsolidationRunSchema"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Healthz",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Metrics",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ConsolidationRunSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "items_merged_count": {
+            "type": "integer",
+            "title": "Items Merged Count"
+          },
+          "items_decayed_count": {
+            "type": "integer",
+            "title": "Items Decayed Count"
+          },
+          "run_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Run At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "items_merged_count",
+          "items_decayed_count",
+          "run_at"
+        ],
+        "title": "ConsolidationRunSchema"
+      },
+      "DeletionRecordSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "subject_ref": {
+            "type": "string",
+            "title": "Subject Ref"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "memory_items_deleted": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Memory Items Deleted"
+          },
+          "deletion_proof_hash": {
+            "type": "string",
+            "title": "Deletion Proof Hash"
+          },
+          "requested_by": {
+            "type": "string",
+            "title": "Requested By"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "subject_ref",
+          "status",
+          "memory_items_deleted",
+          "deletion_proof_hash",
+          "requested_by",
+          "completed_at"
+        ],
+        "title": "DeletionRecordSchema"
+      },
+      "ErasureRequest": {
+        "properties": {
+          "subject_ref": {
+            "type": "string",
+            "title": "Subject Ref"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": ""
+          },
+          "requested_by": {
+            "type": "string",
+            "title": "Requested By",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "subject_ref"
+        ],
+        "title": "ErasureRequest"
+      },
+      "GenerateReflectionRequest": {
+        "properties": {
+          "agent_ref": {
+            "type": "string",
+            "title": "Agent Ref"
+          },
+          "triggering_interaction_ref": {
+            "type": "string",
+            "title": "Triggering Interaction Ref"
+          },
+          "context": {
+            "type": "string",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "agent_ref",
+          "triggering_interaction_ref",
+          "context"
+        ],
+        "title": "GenerateReflectionRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MemoryItemSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "memory_type": {
+            "type": "string",
+            "title": "Memory Type"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "visibility_policy_ref": {
+            "type": "string",
+            "title": "Visibility Policy Ref"
+          },
+          "vector_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector Ref"
+          },
+          "graph_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Graph Ref"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "relevance_score": {
+            "type": "number",
+            "title": "Relevance Score"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "last_accessed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Accessed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "scope",
+          "memory_type",
+          "content",
+          "visibility_policy_ref",
+          "vector_ref",
+          "graph_ref",
+          "status",
+          "relevance_score",
+          "created_at",
+          "last_accessed_at"
+        ],
+        "title": "MemoryItemSchema"
+      },
+      "QueryRequest": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query"
+          },
+          "memory_types": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Types"
+          },
+          "top_k": {
+            "type": "integer",
+            "title": "Top K",
+            "default": 10
+          },
+          "requesting_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requesting Agent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "query"
+        ],
+        "title": "QueryRequest"
+      },
+      "RankedMemoryItemSchema": {
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/MemoryItemSchema"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item",
+          "score"
+        ],
+        "title": "RankedMemoryItemSchema"
+      },
+      "ReflectionEntryListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReflectionEntrySchema"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "ReflectionEntryListResponse"
+      },
+      "ReflectionEntrySchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "agent_ref": {
+            "type": "string",
+            "title": "Agent Ref"
+          },
+          "triggering_interaction_ref": {
+            "type": "string",
+            "title": "Triggering Interaction Ref"
+          },
+          "reflection_content": {
+            "type": "string",
+            "title": "Reflection Content"
+          },
+          "applied": {
+            "type": "boolean",
+            "title": "Applied"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "agent_ref",
+          "triggering_interaction_ref",
+          "reflection_content",
+          "applied",
+          "created_at"
+        ],
+        "title": "ReflectionEntrySchema"
+      },
+      "StoreItemRequest": {
+        "properties": {
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "memory_type": {
+            "type": "string",
+            "title": "Memory Type"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "visibility_policy_ref": {
+            "type": "string",
+            "title": "Visibility Policy Ref",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "scope",
+          "memory_type",
+          "content"
+        ],
+        "title": "StoreItemRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "ServiceBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Service-to-service HS256 JWT bearer auth (security/jwt_auth.py): every inbound request must carry `Authorization: Bearer <token>`, verified against this module's own service_name as the required audience (TECTONIC_JWT_SHARED_SECRET, one shared signing key across every module in this deployment). Not a user-facing OAuth/OIDC flow -- see this module's README for the full design note."
+      }
+    }
+  },
+  "security": [
+    {
+      "ServiceBearerAuth": []
+    }
+  ]
+}

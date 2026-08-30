@@ -1,0 +1,6 @@
+apiVersion: v2
+name: identity-and-access
+description: "Tectonic Agentic AI Platform — Module 31: Identity and Access"
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

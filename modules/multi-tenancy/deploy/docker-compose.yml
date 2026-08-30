@@ -1,0 +1,67 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# standalone with a generic tenant-scoped list endpoint (both a clean and a
+# deliberately-leaking variant) stubbed by a dependency-stub service. Real
+# Postgres and Kafka(-compatible) run here for real, the same event-backbone
+# profile Workflow Engine's own docker-compose.yml (Module 1) established.
+name: multi-tenancy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: multi_tenancy
+      POSTGRES_PASSWORD: multi_tenancy
+      POSTGRES_DB: multi_tenancy
+    ports:
+      - "5457:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U multi_tenancy"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=512M
+      - --overprovisioned
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+    ports:
+      - "9095:9092"
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9130:9130"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      MULTI_TENANCY_DATABASE_URL: postgresql+asyncpg://multi_tenancy:multi_tenancy@postgres:5432/multi_tenancy
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  multi-tenancy:
+    build: ..
+    ports:
+      - "8109:8109"
+    environment:
+      MULTI_TENANCY_DATABASE_URL: postgresql+asyncpg://multi_tenancy:multi_tenancy@postgres:5432/multi_tenancy
+      MULTI_TENANCY_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      MULTI_TENANCY_PROBE_TARGETS: '[{"name":"agent-cards","base_url":"http://dependency-stub:9130","list_path":"/v1/agent-cards","audience":"agent-cards"}]'
+      MULTI_TENANCY_AUDITABILITY_BASE_URL: http://dependency-stub:9130
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
@@ -21,6 +22,9 @@ from agentic_rag.clients.http_clients import (
 )
 from agentic_rag.config import AgenticRAGSettings, load_settings
 from agentic_rag.db.session import make_engine, make_session_factory
+from agentic_rag.security.entitlement_gate import EntitlementGateMiddleware
+from agentic_rag.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from agentic_rag.security.openapi_security import configure_openapi_security
 from agentic_rag.telemetry.logging import configure_logging, get_logger
 from agentic_rag.telemetry.tracing import configure_tracing
 
@@ -29,23 +33,35 @@ logger = get_logger(component="main")
 
 def build_app_context(settings: AgenticRAGSettings) -> AppContext:
     engine = make_engine(settings)
-    dep_url = settings.dependency_stub_base_url
+    jwt_kwargs = {
+        "issuer": settings.service_name,
+        "shared_secret": settings.jwt_shared_secret,
+        "ttl_seconds": settings.jwt_ttl_seconds,
+    }
     return AppContext(
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
-        vector_db=HTTPVectorDBClient(dep_url),
-        graph_db=HTTPGraphDBClient(dep_url),
-        knowledge_base=HTTPKnowledgeBaseClient(dep_url),
-        llm_gateway=HTTPLLMGatewayClient(dep_url),
+        vector_db=HTTPVectorDBClient(settings.vector_db_base_url, **jwt_kwargs),
+        graph_db=HTTPGraphDBClient(settings.graph_db_base_url, **jwt_kwargs),
+        knowledge_base=HTTPKnowledgeBaseClient(settings.knowledge_base_base_url, **jwt_kwargs),
+        llm_gateway=HTTPLLMGatewayClient(
+            settings.llm_gateway_base_url, default_virtual_key=settings.llm_gateway_virtual_key, **jwt_kwargs
+        ),
     )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = load_settings()
+    settings: AgenticRAGSettings = app.state.settings
     configure_logging(settings.telemetry.log_level)
     configure_tracing(settings.service_name, settings.telemetry.otlp_endpoint)
+
+    if settings.jwt_shared_secret == INSECURE_DEFAULT_SECRET:
+        logger.warning(
+            "jwt_shared_secret_is_insecure_default",
+            hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
+        )
 
     ctx = build_app_context(settings)
     app.state.ctx = ctx
@@ -59,12 +75,26 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = load_settings()
+
     app = FastAPI(
         title="Agentic RAG",
         version="0.1.0",
         description="Tectonic Agentic AI Platform — Module 6: multi-hop, self-correcting retrieval "
         "that reformulates queries, checks groundedness and re-retrieves when needed.",
         lifespan=lifespan,
+    )
+    app.state.settings = settings
+    app.add_middleware(
+        EntitlementGateMiddleware,
+        module_name=settings.service_name,
+        multi_tenancy_base_url=settings.multi_tenancy_base_url,
+        issuer=settings.service_name,
+        shared_secret=settings.jwt_shared_secret,
+        cache_ttl_seconds=settings.entitlement_gate_cache_ttl_seconds,
+    )
+    app.add_middleware(
+        ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )
     app.include_router(rag_router)
 
@@ -91,7 +121,9 @@ def create_app() -> FastAPI:
     async def metrics() -> Response:
         return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+    HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

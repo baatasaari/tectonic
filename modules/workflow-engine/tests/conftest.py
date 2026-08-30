@@ -6,8 +6,10 @@ from workflow_engine.config import ExecutionConfig, ReplanningConfig
 from workflow_engine.core.fakes import (
     InMemoryEventPublisher,
     InMemoryWorkflowRepository,
+    StubAgenticRAGClient,
     StubGuardrailsClient,
     StubHumanOversightClient,
+    StubIntentDetectionClient,
     StubLLMGatewayClient,
     StubToolOrchestrationClient,
 )
@@ -29,8 +31,13 @@ class Harness:
         self.tool_orchestration = StubToolOrchestrationClient()
         self.guardrails = kwargs.get("guardrails") or StubGuardrailsClient()
         self.human_oversight = StubHumanOversightClient()
+        self.intent_detection = kwargs.get("intent_detection") or StubIntentDetectionClient()
+        self.agentic_rag = kwargs.get("agentic_rag") or StubAgenticRAGClient()
 
-        neural_executor = NeuralStepExecutor(self.llm_gateway, self.tool_orchestration, self.guardrails)
+        neural_executor = NeuralStepExecutor(
+            self.llm_gateway, self.tool_orchestration, self.guardrails,
+            intent_detection=self.intent_detection, agentic_rag=self.agentic_rag,
+        )
         human_handler = HumanApprovalHandler(self.repository, self.human_oversight)
         replanner = Replanner(self.repository, self.llm_gateway)
 

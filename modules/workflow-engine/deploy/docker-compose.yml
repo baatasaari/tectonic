@@ -57,7 +57,11 @@ services:
     environment:
       WORKFLOW_ENGINE_DATABASE_URL: postgresql+asyncpg://workflow_engine:workflow_engine@postgres:5432/workflow_engine
       WORKFLOW_ENGINE_KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
-      WORKFLOW_ENGINE_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9100
+      WORKFLOW_ENGINE_LLM_GATEWAY_BASE_URL: http://dependency-stub:9100
+      WORKFLOW_ENGINE_TOOL_ORCHESTRATION_BASE_URL: http://dependency-stub:9100
+      WORKFLOW_ENGINE_GUARDRAILS_BASE_URL: http://dependency-stub:9100
+      WORKFLOW_ENGINE_HUMAN_OVERSIGHT_BASE_URL: http://dependency-stub:9100
+      WORKFLOW_ENGINE_MULTI_TENANCY_BASE_URL: http://dependency-stub:9100
       # No OTel collector in this profile; traces export best-effort and are
       # dropped if nothing is listening. Point WORKFLOW_ENGINE_TELEMETRY__OTLP_ENDPOINT
       # at a real collector (Tempo/Jaeger/etc.) for an environment that has one.

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: guardrails
+description: Tectonic Agentic AI Platform — Module 14: Guardrails
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
@@ -20,6 +21,9 @@ from context_engineering.clients.http_clients import (
 from context_engineering.config import ContextEngineeringSettings, load_settings
 from context_engineering.core.tokenization import SimpleTokenCounter
 from context_engineering.db.session import make_engine, make_session_factory
+from context_engineering.security.entitlement_gate import EntitlementGateMiddleware
+from context_engineering.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from context_engineering.security.openapi_security import configure_openapi_security
 from context_engineering.telemetry.logging import configure_logging, get_logger
 from context_engineering.telemetry.tracing import configure_tracing
 
@@ -28,22 +32,32 @@ logger = get_logger(component="main")
 
 def build_app_context(settings: ContextEngineeringSettings) -> AppContext:
     engine = make_engine(settings)
-    dep_url = settings.dependency_stub_base_url
+    jwt_kwargs = {
+        "issuer": settings.service_name,
+        "shared_secret": settings.jwt_shared_secret,
+        "ttl_seconds": settings.jwt_ttl_seconds,
+    }
     return AppContext(
         settings=settings,
         engine=engine,
         session_factory=make_session_factory(engine),
-        llm_gateway=HTTPLLMGatewayClient(dep_url),
-        evaluation_feedback=HTTPEvaluationFeedbackClient(dep_url),
+        llm_gateway=HTTPLLMGatewayClient(settings.llm_gateway_base_url, **jwt_kwargs),
+        evaluation_feedback=HTTPEvaluationFeedbackClient(settings.evaluation_framework_base_url, **jwt_kwargs),
         token_counter=SimpleTokenCounter(),
     )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = load_settings()
+    settings: ContextEngineeringSettings = app.state.settings
     configure_logging(settings.telemetry.log_level)
     configure_tracing(settings.service_name, settings.telemetry.otlp_endpoint)
+
+    if settings.jwt_shared_secret == INSECURE_DEFAULT_SECRET:
+        logger.warning(
+            "jwt_shared_secret_is_insecure_default",
+            hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
+        )
 
     ctx = build_app_context(settings)
     app.state.ctx = ctx
@@ -57,12 +71,26 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    settings = load_settings()
+
     app = FastAPI(
         title="Context Engineering",
         version="0.1.0",
         description="Tectonic Agentic AI Platform — Module 7: assembles, compresses and prunes "
         "context within token budget using ontology constraints.",
         lifespan=lifespan,
+    )
+    app.state.settings = settings
+    app.add_middleware(
+        EntitlementGateMiddleware,
+        module_name=settings.service_name,
+        multi_tenancy_base_url=settings.multi_tenancy_base_url,
+        issuer=settings.service_name,
+        shared_secret=settings.jwt_shared_secret,
+        cache_ttl_seconds=settings.entitlement_gate_cache_ttl_seconds,
+    )
+    app.add_middleware(
+        ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )
     app.include_router(context_router)
 
@@ -89,7 +117,9 @@ def create_app() -> FastAPI:
     async def metrics() -> Response:
         return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+    HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

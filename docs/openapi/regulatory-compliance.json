@@ -1,0 +1,913 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Regulatory and Compliance",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 17: crosswalk engine mapping controls once to EU AI Act, NIST AI RMF, ISO 42001 and DORA, with living regulatory feed.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/regulatory-compliance/framework-profiles": {
+      "post": {
+        "tags": [
+          "regulatory-compliance"
+        ],
+        "summary": "Create Framework Profile",
+        "operationId": "create_framework_profile_v1_regulatory_compliance_framework_profiles_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFrameworkProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FrameworkProfileSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/regulatory-compliance/mappings": {
+      "get": {
+        "tags": [
+          "regulatory-compliance"
+        ],
+        "summary": "List Mappings",
+        "operationId": "list_mappings_v1_regulatory_compliance_mappings_get",
+        "parameters": [
+          {
+            "name": "control_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Control Name"
+            }
+          },
+          {
+            "name": "framework_name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Framework Name"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlMappingListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/regulatory-compliance/mappings/publish": {
+      "post": {
+        "tags": [
+          "regulatory-compliance"
+        ],
+        "summary": "Publish Mappings",
+        "description": "The Regulatory Feed Manager's publish endpoint (LLD \u00a7Level 3 \"Sequence: regulatory\nfeed update\") \u2014 an operator posts a new mapping table version here.",
+        "operationId": "publish_mappings_v1_regulatory_compliance_mappings_publish_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishMappingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishMappingsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/regulatory-compliance/control-events": {
+      "post": {
+        "tags": [
+          "regulatory-compliance"
+        ],
+        "summary": "Record Control Event",
+        "description": "Direct ingestion of a control-implementation event. The LLD's own diagram has these\nevents arrive via Auditability (Human Oversight/Guardrails/Workflow Engine publish to\nAuditability, which forwards here) \u2014 since Auditability (Module 20) isn't built yet in\nthis platform, source modules post here directly. Wiring a real Auditability-event\nconsumer becomes a drop-in replacement for this endpoint once Module 20 exists.",
+        "operationId": "record_control_event_v1_regulatory_compliance_control_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ControlEventRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ControlEventResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/regulatory-compliance/coverage": {
+      "get": {
+        "tags": [
+          "regulatory-compliance"
+        ],
+        "summary": "Coverage",
+        "operationId": "coverage_v1_regulatory_compliance_coverage_get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "framework_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Framework Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/regulatory-compliance/evidence-packs": {
+      "post": {
+        "tags": [
+          "regulatory-compliance"
+        ],
+        "summary": "Create Evidence Pack",
+        "description": "Enqueues generation and returns immediately \u2014 the record itself, at\nstatus=generating, IS the queue entry. `EvidencePackWorker` (started in main.py's\nlifespan) picks it up via a durable Postgres SELECT FOR UPDATE SKIP LOCKED poll\nloop, not an in-process FastAPI BackgroundTasks job, so a pod restart between this\n202 response and the job completing no longer loses the work: the pack stays\nclaimable by any worker instance until it actually finishes.",
+        "operationId": "create_evidence_pack_v1_regulatory_compliance_evidence_packs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEvidencePackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidencePackSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/regulatory-compliance/evidence-packs/{pack_id}": {
+      "get": {
+        "tags": [
+          "regulatory-compliance"
+        ],
+        "summary": "Get Evidence Pack",
+        "operationId": "get_evidence_pack_v1_regulatory_compliance_evidence_packs__pack_id__get",
+        "parameters": [
+          {
+            "name": "pack_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Pack Id"
+            }
+          },
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "include_document",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Document"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidencePackSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Healthz",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Metrics",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ControlEventRequest": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "control_name": {
+            "type": "string",
+            "title": "Control Name"
+          },
+          "source_module": {
+            "type": "string",
+            "title": "Source Module"
+          },
+          "evidence_ref": {
+            "type": "string",
+            "title": "Evidence Ref"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "control_name",
+          "source_module",
+          "evidence_ref"
+        ],
+        "title": "ControlEventRequest"
+      },
+      "ControlEventResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "control_name": {
+            "type": "string",
+            "title": "Control Name"
+          },
+          "source_module": {
+            "type": "string",
+            "title": "Source Module"
+          },
+          "evidence_ref": {
+            "type": "string",
+            "title": "Evidence Ref"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At"
+          },
+          "mappings": {
+            "items": {
+              "$ref": "#/components/schemas/MappingResultSchema"
+            },
+            "type": "array",
+            "title": "Mappings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "control_name",
+          "source_module",
+          "evidence_ref",
+          "occurred_at",
+          "mappings"
+        ],
+        "title": "ControlEventResponse"
+      },
+      "ControlMappingListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ControlMappingSchema"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "ControlMappingListResponse"
+      },
+      "ControlMappingSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "control_name": {
+            "type": "string",
+            "title": "Control Name"
+          },
+          "framework_name": {
+            "type": "string",
+            "title": "Framework Name"
+          },
+          "framework_version": {
+            "type": "string",
+            "title": "Framework Version"
+          },
+          "clause_references": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Clause References"
+          },
+          "mapping_rationale": {
+            "type": "string",
+            "title": "Mapping Rationale"
+          },
+          "deprecated": {
+            "type": "boolean",
+            "title": "Deprecated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "control_name",
+          "framework_name",
+          "framework_version",
+          "clause_references",
+          "mapping_rationale",
+          "deprecated"
+        ],
+        "title": "ControlMappingSchema"
+      },
+      "CoverageResponse": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "framework_name": {
+            "type": "string",
+            "title": "Framework Name"
+          },
+          "coverage_percentage": {
+            "type": "number",
+            "title": "Coverage Percentage"
+          },
+          "gaps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Gaps"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "framework_name",
+          "coverage_percentage",
+          "gaps"
+        ],
+        "title": "CoverageResponse"
+      },
+      "CreateEvidencePackRequest": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "framework_name": {
+            "type": "string",
+            "title": "Framework Name"
+          },
+          "date_range": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Range"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "framework_name"
+        ],
+        "title": "CreateEvidencePackRequest"
+      },
+      "CreateFrameworkProfileRequest": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "framework_name": {
+            "type": "string",
+            "title": "Framework Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "framework_name",
+          "version"
+        ],
+        "title": "CreateFrameworkProfileRequest"
+      },
+      "EvidencePackSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "framework_name": {
+            "type": "string",
+            "title": "Framework Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "coverage_percentage": {
+            "type": "number",
+            "title": "Coverage Percentage"
+          },
+          "document_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Ref"
+          },
+          "document_format": {
+            "type": "string",
+            "title": "Document Format"
+          },
+          "document_bytes_b64": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Bytes B64"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "framework_name",
+          "status",
+          "generated_at",
+          "coverage_percentage",
+          "document_ref",
+          "document_format",
+          "created_at",
+          "attempts"
+        ],
+        "title": "EvidencePackSchema"
+      },
+      "FrameworkProfileSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "framework_name": {
+            "type": "string",
+            "title": "Framework Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "framework_name",
+          "version",
+          "enabled",
+          "created_at"
+        ],
+        "title": "FrameworkProfileSchema"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MappingResultSchema": {
+        "properties": {
+          "control_name": {
+            "type": "string",
+            "title": "Control Name"
+          },
+          "framework_name": {
+            "type": "string",
+            "title": "Framework Name"
+          },
+          "clause_references": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Clause References"
+          }
+        },
+        "type": "object",
+        "required": [
+          "control_name",
+          "framework_name",
+          "clause_references"
+        ],
+        "title": "MappingResultSchema"
+      },
+      "PublishMappingsRequest": {
+        "properties": {
+          "mappings": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Mappings"
+          },
+          "deprecate_prior": {
+            "type": "boolean",
+            "title": "Deprecate Prior",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "mappings"
+        ],
+        "title": "PublishMappingsRequest"
+      },
+      "PublishMappingsResponse": {
+        "properties": {
+          "mappings_published": {
+            "type": "integer",
+            "title": "Mappings Published"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mappings_published"
+        ],
+        "title": "PublishMappingsResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "ServiceBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Service-to-service HS256 JWT bearer auth (security/jwt_auth.py): every inbound request must carry `Authorization: Bearer <token>`, verified against this module's own service_name as the required audience (TECTONIC_JWT_SHARED_SECRET, one shared signing key across every module in this deployment). Not a user-facing OAuth/OIDC flow -- see this module's README for the full design note."
+      }
+    }
+  },
+  "security": [
+    {
+      "ServiceBearerAuth": []
+    }
+  ]
+}

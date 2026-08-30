@@ -1,0 +1,222 @@
+"""Abstract ports this module depends on: persistence, the Auditability
+peer, and the one generic client shape the Isolation Probe Service
+reuses against every registered platform module.
+"""
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any, Protocol
+
+from multi_tenancy.core.domain import (
+    EnvironmentRecord,
+    EventOutboxRecord,
+    HierarchyStatus,
+    IsolationProbeResult,
+    OrganisationRecord,
+    QuotaSet,
+    ResidencyPolicy,
+    ResourceAllocation,
+    ResourceAllocationStatus,
+    TenantEntitlementRecord,
+    TenantRecord,
+    TenantStatus,
+    WorkspaceRecord,
+)
+
+
+class MultiTenancyRepository(Protocol):
+    async def create_tenant(self, record: TenantRecord) -> TenantRecord: ...
+
+    async def get_tenant(self, tenant_id: str) -> TenantRecord | None: ...
+
+    async def update_tenant(self, record: TenantRecord) -> TenantRecord: ...
+
+    async def create_tenant_and_enqueue_event(
+        self, record: TenantRecord, *, topic: str, envelope: dict[str, Any],
+    ) -> TenantRecord:
+        """Atomically creates the tenant AND enqueues its accompanying
+        CloudEvents envelope into `event_outbox`, one DB commit -- the
+        rollout of Workflow Engine's own `update_instance_and_enqueue_event`
+        pattern to this module's top-level entity. See
+        `core.domain.EventOutboxRecord`'s own docstring."""
+        ...
+
+    async def update_tenant_and_enqueue_event(
+        self, record: TenantRecord, *, topic: str, envelope: dict[str, Any],
+    ) -> TenantRecord:
+        """Atomically updates the tenant AND enqueues its accompanying
+        CloudEvents envelope, one DB commit -- see
+        `create_tenant_and_enqueue_event`'s own docstring."""
+        ...
+
+    async def list_tenants(
+        self, *, status: TenantStatus | None = None, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[TenantRecord], int]: ...
+
+    async def create_probe_result(self, record: IsolationProbeResult) -> IsolationProbeResult: ...
+
+    async def list_probe_results(
+        self, *, tenant_id: str | None = None, target_name: str | None = None, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[IsolationProbeResult], int]: ...
+
+    async def replace_entitlements(
+        self, *, tenant_id: str, module_names: list[str],
+    ) -> list[TenantEntitlementRecord]:
+        """Wholesale replace: deletes every existing entitlement row for
+        this tenant, inserts one per `module_names`, and stamps the
+        tenant's own `entitlements_configured_at` -- even when
+        `module_names` is empty, since that's a real, meaningful state
+        (see `TenantRecord.entitlements_configured_at`'s docstring)."""
+        ...
+
+    async def list_entitlements(self, tenant_id: str) -> list[TenantEntitlementRecord]: ...
+
+    # --- Organisation / Workspace / Environment (platform hierarchy control plane) ---
+
+    async def create_organisation(self, record: OrganisationRecord) -> OrganisationRecord: ...
+
+    async def get_organisation(self, organisation_id: str) -> OrganisationRecord | None: ...
+
+    async def update_organisation(self, record: OrganisationRecord, *, expected_version: int) -> OrganisationRecord:
+        """Real compare-and-swap: `UPDATE ... WHERE id = :id AND version =
+        :expected_version`. Raises `core.domain.OptimisticConcurrencyError`
+        if `expected_version` no longer matches the row's current
+        version -- someone else updated it first."""
+        ...
+
+    async def list_organisations(
+        self, *, status: HierarchyStatus | None = None, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[OrganisationRecord], int]: ...
+
+    async def create_workspace(self, record: WorkspaceRecord) -> WorkspaceRecord: ...
+
+    async def get_workspace(self, workspace_id: str) -> WorkspaceRecord | None: ...
+
+    async def update_workspace(self, record: WorkspaceRecord, *, expected_version: int) -> WorkspaceRecord:
+        """Real compare-and-swap -- see `update_organisation`'s own
+        docstring for the shape and the error this raises."""
+        ...
+
+    async def list_workspaces(
+        self, *, tenant_id: str | None = None, status: HierarchyStatus | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[WorkspaceRecord], int]: ...
+
+    async def create_environment(self, record: EnvironmentRecord) -> EnvironmentRecord: ...
+
+    async def get_environment(self, environment_id: str) -> EnvironmentRecord | None: ...
+
+    async def update_environment(self, record: EnvironmentRecord, *, expected_version: int) -> EnvironmentRecord:
+        """Real compare-and-swap -- see `update_organisation`'s own
+        docstring for the shape and the error this raises."""
+        ...
+
+    async def list_environments(
+        self, *, workspace_id: str | None = None, status: HierarchyStatus | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[EnvironmentRecord], int]: ...
+
+    # --- Quota Set / real-time quota enforcement ---
+
+    async def get_quota_set(self, tenant_id: str) -> QuotaSet | None: ...
+
+    async def upsert_quota_set(self, *, tenant_id: str, limits: dict[str, float]) -> QuotaSet:
+        """Wholesale replace, the same pattern `replace_entitlements`
+        already established: one row per tenant, the whole `limits`
+        dict is always replaced together, never patched key by key."""
+        ...
+
+    # --- Residency Policy ---
+
+    async def get_residency_policy(self, tenant_id: str) -> ResidencyPolicy | None: ...
+
+    async def upsert_residency_policy(self, *, tenant_id: str, allowed_regions: list[str]) -> ResidencyPolicy:
+        """Wholesale replace, the same pattern `upsert_quota_set`/
+        `replace_entitlements` already established: one row per tenant,
+        the whole `allowed_regions` list is always replaced together."""
+        ...
+
+    async def increment_quota_counter(
+        self, *, tenant_id: str, resource_class: str, amount: float, window_seconds: int, now: datetime,
+    ) -> float:
+        """Atomically increments the fixed-window counter for
+        `(tenant_id, resource_class, quota_window_start(now,
+        window_seconds))` by `amount` and returns the new total -- a
+        single atomic upsert at the repository layer (real
+        `INSERT ... ON CONFLICT DO UPDATE` in the SQL implementation),
+        so this is correct under concurrent callers, not a
+        read-then-write race."""
+        ...
+
+    # --- Resource Allocation ---
+
+    async def create_resource_allocation(self, record: ResourceAllocation) -> ResourceAllocation: ...
+
+    async def get_resource_allocation(self, allocation_id: str) -> ResourceAllocation | None: ...
+
+    async def update_resource_allocation(
+        self, record: ResourceAllocation, *, expected_version: int,
+    ) -> ResourceAllocation:
+        """Real compare-and-swap -- see `update_organisation`'s own
+        docstring for the shape and the error this raises."""
+        ...
+
+    async def get_active_resource_allocation(self, environment_id: str) -> ResourceAllocation | None:
+        """The most recently updated `ACTIVE` allocation for this
+        environment -- the baseline `ResourceAllocationService` compares
+        a new request against. `None` if this environment has never had
+        one approved."""
+        ...
+
+    async def list_resource_allocations(
+        self, *, environment_id: str | None = None, status: ResourceAllocationStatus | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[ResourceAllocation], int]: ...
+
+    # --- Event outbox relay (core/outbox_worker.py) ---
+
+    async def claim_next_outbox_event(self, worker_id: str, lease_seconds: int) -> EventOutboxRecord | None:
+        """`SELECT ... FOR UPDATE SKIP LOCKED` in the SQL implementation --
+        the same claim shape Workflow Engine's `claim_next_outbox_event`
+        already established, so multiple worker processes/pods can poll
+        this table concurrently with no double-claim."""
+        ...
+
+    async def mark_outbox_event_published(self, event_id: str) -> None: ...
+
+    async def requeue_outbox_event_for_retry(self, event_id: str, *, error: str) -> None: ...
+
+    async def fail_exhausted_outbox_events(self, max_attempts: int) -> int:
+        """The poison-pill guard: an event that has failed `max_attempts`
+        times in a row stops being retried and is marked `failed` for
+        good, rather than being reclaimed forever."""
+        ...
+
+    async def force_expire_stale_outbox_leases(self) -> int:
+        """The startup recovery sweep: force-expires every currently-held
+        lease, so anything left mid-flight by a now-dead previous worker
+        instance is reclaimed on the very next poll tick."""
+        ...
+
+
+class EventPublisher(Protocol):
+    async def publish(self, topic: str, event: dict[str, Any]) -> None: ...
+
+
+class AuditabilityClient(Protocol):
+    async def emit(self, event: dict[str, Any]) -> None:
+        """Best-effort: never the reason a tenancy control-plane write
+        fails. Calls Auditability's real `POST /v1/auditability/events`."""
+        ...
+
+
+class TenantScopedListClient(Protocol):
+    async def list_tenant_scoped_items(self, *, tenant_id: str) -> list[dict[str, Any]]:
+        """Calls this target's own real list endpoint (base_url + list_path
+        baked in at construction) with `?tenant_id=<tenant_id>`, and
+        returns the raw `items` array. Every module in this platform
+        follows the identical `?tenant_id=X` -> `{"items":
+        [...each with its own tenant_id...]}` list contract, so this one
+        client shape works against any of them with no per-module
+        adapter code."""
+        ...

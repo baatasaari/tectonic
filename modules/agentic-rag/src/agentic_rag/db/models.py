@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CHAR, JSON, Float, ForeignKey, Index, Integer, String, func
+from sqlalchemy import CHAR, JSON, DateTime, Float, ForeignKey, Index, Integer, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,7 +31,7 @@ class RetrievalRequest(Base):
     scope: Mapped[list[str]] = mapped_column(JSONType, default=list)
     max_hops: Mapped[int] = mapped_column(Integer(), default=3)
     groundedness_threshold: Mapped[float] = mapped_column(Float(), default=0.85)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class RetrievalHop(Base):
@@ -44,7 +44,7 @@ class RetrievalHop(Base):
     reformulated_query: Mapped[str | None] = mapped_column(String(), nullable=True)
     retrieved_items: Mapped[list[dict]] = mapped_column(JSONType, default=list)
     groundedness_score: Mapped[float] = mapped_column(Float())
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class RetrievalResult(Base):

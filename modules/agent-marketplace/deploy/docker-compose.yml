@@ -1,0 +1,49 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# standalone with Agent Cards' own GET /agent-cards/{id} stubbed by a
+# dependency-stub service. Real Postgres runs here.
+name: agent-marketplace
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: agent_marketplace
+      POSTGRES_PASSWORD: agent_marketplace
+      POSTGRES_DB: agent_marketplace
+    ports:
+      - "5451:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent_marketplace"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9124:9124"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      AGENT_MARKETPLACE_DATABASE_URL: postgresql+asyncpg://agent_marketplace:agent_marketplace@postgres:5432/agent_marketplace
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  agent-marketplace:
+    build: ..
+    ports:
+      - "8103:8103"
+    environment:
+      AGENT_MARKETPLACE_DATABASE_URL: postgresql+asyncpg://agent_marketplace:agent_marketplace@postgres:5432/agent_marketplace
+      AGENT_MARKETPLACE_AGENT_CARDS_BASE_URL: http://dependency-stub:9124
+      AGENT_MARKETPLACE_MULTI_TENANCY_BASE_URL: http://dependency-stub:9124
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: evaluation-framework
+description: Tectonic Agentic AI Platform — Module 18: Evaluation Framework
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

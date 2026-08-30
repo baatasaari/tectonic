@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+from typing import Any
 
 from vector_db.core.domain import MigrationRecord
 
@@ -20,8 +21,8 @@ class StubEmbeddingProvider:
         self.dimension = dimension
         self.calls: list[dict] = []
 
-    async def embed(self, text: str, *, model: str | None = None) -> list[float]:
-        self.calls.append({"text": text, "model": model})
+    async def embed(self, text: str, *, model: str | None = None, tenant_id: str = "") -> list[float]:
+        self.calls.append({"text": text, "model": model, "tenant_id": tenant_id})
         seed = f"{model or 'default'}:{text}".encode()
         digest = hashlib.sha256(seed).digest()
         return [(digest[i % len(digest)] / 255.0) * 2 - 1 for i in range(self.dimension)]
@@ -42,3 +43,22 @@ class InMemoryMigrationRepository:
     async def update(self, record: MigrationRecord) -> MigrationRecord:
         self.migrations[record.id] = copy.deepcopy(record)
         return copy.deepcopy(record)
+
+
+class StubMultiTenancyQuotaClient:
+    """Deterministic quota-check outcome for `VectorService` tests --
+    `HTTPMultiTenancyClient` (clients/multi_tenancy_client.py) is the
+    real thing, exercised separately with a respx-mocked transport."""
+
+    def __init__(self, *, allowed: bool = True, reason: str = "") -> None:
+        self.allowed = allowed
+        self.reason = reason
+        self.calls: list[dict[str, Any]] = []
+
+    async def check_quota(
+        self, *, tenant_id: str, resource_class: str, amount: float = 1.0, current_usage: float | None = None,
+    ) -> tuple[bool, str]:
+        self.calls.append(
+            {"tenant_id": tenant_id, "resource_class": resource_class, "amount": amount, "current_usage": current_usage}
+        )
+        return self.allowed, self.reason

@@ -1,0 +1,51 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# with LLM Gateway stubbed (for LLM-as-judge calls and the real
+# deepeval.metrics.FaithfulnessMetric's completion calls alike) and with a
+# direct HTTP fixture in place of live Kafka traffic for the continuous
+# evaluation path. Real Postgres runs here.
+name: evaluation-framework
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: evalfw
+      POSTGRES_PASSWORD: evalfw
+      POSTGRES_DB: evalfw
+    ports:
+      - "5462:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evalfw"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9118:9118"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      EVALUATION_FRAMEWORK_DATABASE_URL: postgresql+asyncpg://evalfw:evalfw@postgres:5432/evalfw
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  evaluation-framework:
+    build: ..
+    ports:
+      - "8097:8097"
+    environment:
+      EVALUATION_FRAMEWORK_DATABASE_URL: postgresql+asyncpg://evalfw:evalfw@postgres:5432/evalfw
+      EVALUATION_FRAMEWORK_LLM_GATEWAY_BASE_URL: http://dependency-stub:9118
+      EVALUATION_FRAMEWORK_MULTI_TENANCY_BASE_URL: http://dependency-stub:9118
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

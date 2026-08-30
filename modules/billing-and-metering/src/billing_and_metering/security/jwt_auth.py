@@ -1,0 +1,103 @@
+"""Service-to-service JWT bearer authentication — the same platform-wide
+mechanism every other module uses (see any other module's own
+`security/jwt_auth.py` docstring for the full rationale).
+
+- `mint_service_token` / `ServiceBearerAuth`: the outbound side. This
+  module's two platform-peer outbound dependencies (FinOps,
+  Auditability) are each called with a token scoped to it via the
+  `aud` claim.
+- `ServiceAuthMiddleware`: the inbound side. Verifies every request's
+  `Authorization: Bearer <token>` against this module's own
+  `service_name` as the required audience, except `/healthz` and
+  `/metrics` (cluster-internal probes/scraping, the same exclusion every
+  module makes).
+"""
+from __future__ import annotations
+
+import time
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+import httpx
+import jwt
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp
+
+from billing_and_metering.telemetry.logging import get_logger
+
+logger = get_logger(component="jwt_auth")
+
+ALGORITHM = "HS256"
+DEFAULT_TTL_SECONDS = 300
+INSECURE_DEFAULT_SECRET = "dev-insecure-shared-secret-change-me"
+_EXCLUDED_PATHS = frozenset({"/healthz", "/metrics"})
+
+
+def mint_service_token(
+    *, issuer: str, audience: str, shared_secret: str, ttl_seconds: int = DEFAULT_TTL_SECONDS,
+) -> str:
+    """Mints a short-lived token for THIS module (`issuer`) to call a
+    specific peer (`audience`). A fresh token is minted per call (HMAC
+    signing is cheap; there's no need to cache/reuse one across requests)."""
+    now = int(time.time())
+    payload = {"iss": issuer, "aud": audience, "iat": now, "exp": now + ttl_seconds}
+    return jwt.encode(payload, shared_secret, algorithm=ALGORITHM)
+
+
+def verify_service_token(token: str, *, audience: str, shared_secret: str) -> dict[str, Any]:
+    """Raises `jwt.PyJWTError` (or a subclass, e.g. `ExpiredSignatureError`,
+    `InvalidAudienceError`) on any invalid token; returns the decoded claims
+    on success."""
+    return jwt.decode(token, shared_secret, algorithms=[ALGORITHM], audience=audience)
+
+
+class ServiceBearerAuth(httpx.Auth):
+    """An `httpx.Auth` flow: attaches a fresh `Authorization: Bearer <JWT>`
+    header to every outbound request an `httpx.AsyncClient` makes, scoped
+    to the specific peer (`audience`) that client talks to."""
+
+    def __init__(
+        self, *, issuer: str, audience: str, shared_secret: str, ttl_seconds: int = DEFAULT_TTL_SECONDS,
+    ) -> None:
+        self._issuer = issuer
+        self._audience = audience
+        self._shared_secret = shared_secret
+        self._ttl_seconds = ttl_seconds
+
+    def auth_flow(self, request: httpx.Request):
+        token = mint_service_token(
+            issuer=self._issuer, audience=self._audience,
+            shared_secret=self._shared_secret, ttl_seconds=self._ttl_seconds,
+        )
+        request.headers["Authorization"] = f"Bearer {token}"
+        yield request
+
+
+class ServiceAuthMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app: ASGIApp, *, audience: str, shared_secret: str) -> None:
+        super().__init__(app)
+        self._audience = audience
+        self._shared_secret = shared_secret
+
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        if request.url.path in _EXCLUDED_PATHS:
+            return await call_next(request)
+
+        header = request.headers.get("authorization", "")
+        scheme, _, token = header.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            return JSONResponse({"detail": "missing bearer token"}, status_code=401)
+
+        try:
+            verify_service_token(token, audience=self._audience, shared_secret=self._shared_secret)
+        except jwt.ExpiredSignatureError:
+            return JSONResponse({"detail": "token expired"}, status_code=401)
+        except jwt.PyJWTError as exc:
+            logger.warning("service_auth_rejected", path=request.url.path, error=str(exc))
+            return JSONResponse({"detail": f"invalid token: {exc}"}, status_code=401)
+
+        return await call_next(request)

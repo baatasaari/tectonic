@@ -14,13 +14,14 @@ from llm_gateway.core.domain import (
     BudgetExceededError,
     CompletionRequest,
     CompletionResponse,
+    QuotaExceededError,
     RequestLogRecord,
     VirtualKeyInvalidError,
     VirtualKeyStatus,
     new_id,
 )
 from llm_gateway.core.failover import FailoverManager
-from llm_gateway.core.ports import GatewayRepository, SemanticCache
+from llm_gateway.core.ports import GatewayRepository, MultiTenancyQuotaClient, SemanticCache
 from llm_gateway.core.router import QualityAwareRouter
 from llm_gateway.telemetry.logging import get_logger
 from llm_gateway.telemetry.metrics import (
@@ -43,6 +44,7 @@ class LLMGatewayService:
         cost_governance: CostGovernanceEngine,
         failover: FailoverManager,
         settings: LLMGatewaySettings,
+        multi_tenancy: MultiTenancyQuotaClient | None = None,
     ) -> None:
         self.repository = repository
         self.cache = cache
@@ -50,6 +52,7 @@ class LLMGatewayService:
         self.cost_governance = cost_governance
         self.failover = failover
         self.settings = settings
+        self.multi_tenancy = multi_tenancy
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         overhead_start = time.perf_counter()
@@ -60,6 +63,26 @@ class LLMGatewayService:
             raise VirtualKeyInvalidError(f"virtual key '{request.virtual_key_id}' is not active")
         if vk.tenant_id != request.tenant_id:
             raise VirtualKeyInvalidError("virtual key does not belong to the requesting tenant")
+
+        # Real pre-flight quota check (independent architecture assessment §5.2 /
+        # §3.4 point 5) -- requests_per_minute, checked once per incoming request
+        # (cache hit or not: a cache hit is still an accepted request from the
+        # tenant's own quota perspective). tokens_per_minute isn't checked
+        # pre-flight -- actual token count is unknown until the completion itself
+        # runs, a genuinely different, real, separate accounting design; this
+        # module's real, tested reference implementation is the rate-shaped check
+        # that fits naturally as a pre-flight gate. `self.multi_tenancy` is
+        # optional so this module's own unit tests that construct the service
+        # directly without a Multi-tenancy client keep working unchanged.
+        if self.multi_tenancy is not None:
+            allowed, reason = await self.multi_tenancy.check_quota(
+                tenant_id=request.tenant_id, resource_class="requests_per_minute",
+            )
+            if not allowed:
+                llm_gateway_requests_total.labels(
+                    tenant_id=request.tenant_id, provider="none", model=request.model, outcome="rejected"
+                ).inc()
+                raise QuotaExceededError(reason or "requests_per_minute quota exceeded")
 
         if self.settings.cache.semantic_cache_enabled:
             cached = await self.cache.lookup(request.model, request.messages, request.tenant_id)

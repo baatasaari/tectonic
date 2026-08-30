@@ -1,0 +1,51 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# standalone with Evaluation Framework's own GET /scores and LLM Gateway's
+# own POST /chat/completions both stubbed by a dependency-stub service.
+# Real Postgres runs here.
+name: promptops
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: promptops
+      POSTGRES_PASSWORD: promptops
+      POSTGRES_DB: promptops
+    ports:
+      - "5456:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U promptops"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9129:9129"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      PROMPTOPS_DATABASE_URL: postgresql+asyncpg://promptops:promptops@postgres:5432/promptops
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  promptops:
+    build: ..
+    ports:
+      - "8108:8108"
+    environment:
+      PROMPTOPS_DATABASE_URL: postgresql+asyncpg://promptops:promptops@postgres:5432/promptops
+      PROMPTOPS_EVALUATION_FRAMEWORK_BASE_URL: http://dependency-stub:9129
+      PROMPTOPS_LLM_GATEWAY_BASE_URL: http://dependency-stub:9129
+      PROMPTOPS_MULTI_TENANCY_BASE_URL: http://dependency-stub:9129
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

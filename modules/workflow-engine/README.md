@@ -25,9 +25,11 @@ src/workflow_engine/
     human.py                  Human Approval Handler
     replanner.py               Replanner — structural (symbolic) + content (neural) adaptation
     scheduler.py                Execution Scheduler — the graph runtime
-    events.py                    Event topic/payload builders
-  db/                     SQLAlchemy 2.0 async models + repository
+    events.py                    CloudEvents envelope builders
+    outbox_worker.py              OutboxRelayWorker — durable event-outbox relay to Kafka
+  db/                     SQLAlchemy 2.0 async models + repository (incl. the event_outbox table)
   clients/                Kafka publisher, HTTP clients for the 4 external modules
+  security/                Service-to-service JWT bearer auth (shared signing key), the entitlement gate, real OpenAPI security scheme declarations
   telemetry/               OTel tracing, Prometheus metrics, structlog logging
   api/                     FastAPI routers (LLD §3.3)
   schemas/                  Pydantic request/response models
@@ -40,6 +42,50 @@ tests/integration/        Real-Postgres tier via testcontainers (needs Docker)
 ```
 
 ## Design notes vs. the LLD
+
+- **The event backbone: CloudEvents envelopes, and a real transactional
+  outbox for the three top-level instance-lifecycle events**
+  (independent architecture assessment §3.3 "Add an event backbone").
+  `core/events.py` builds real CloudEvents v1.0 envelopes
+  (https://cloudevents.io/) for every event this module emits — not the
+  ad hoc dict shape this module used before: `specversion`/`id`/
+  `source`/`type`/`subject`/`time`/`datacontenttype`/`data` are the
+  spec's own core attributes, and `tenant_id`/`environment_id`/
+  `correlation_id`/`causation_id` are CloudEvents *extension*
+  attributes — the assessment's own §3.3 required-fields list,
+  attribute for attribute. `id` doubles as the delivery idempotency
+  key (CloudEvents' own spec defines `id` + `source` as what a
+  consumer dedupes redelivery on). No module in this platform runs a
+  real Kafka consumer yet, so this is a real, spec-shaped producer
+  contract with nothing live to break — the same "reference
+  implementation before rollout" shape this platform used for
+  `EntitlementGateMiddleware`.
+
+  Three events — `workflow.started`, `workflow.completed`,
+  `workflow.failed` — get outbox-grade guaranteed delivery:
+  `WorkflowRepository.update_instance_and_enqueue_event` writes the
+  instance's state change AND its envelope into a new `event_outbox`
+  table in the *same* DB commit, so a committed transition is
+  guaranteed to have its event durably queued — no dual-write window
+  where the DB write lands but a direct Kafka publish is lost, or vice
+  versa. `core/outbox_worker.py`'s `OutboxRelayWorker` is what actually
+  delivers them, reusing the exact claim/lease/poison-pill shape
+  Regulatory Compliance's `EvidencePackWorker` already established for
+  this platform's durable background jobs (`SELECT ... FOR UPDATE SKIP
+  LOCKED`, verified against real Postgres to never double-claim under
+  concurrent workers — see `tests/integration/test_outbox_worker_postgres.py`).
+  Every other event this module emits (step/approval/replan events)
+  deliberately stays on the pre-existing best-effort direct-publish
+  path (`ExecutionScheduler._publish`) — higher-volume, more tolerant
+  of an occasional drop, and not the events other modules most need a
+  durability guarantee on (billing usage, audit trails, SDK portal
+  dashboards). Extending outbox-grade delivery to the rest, and rolling
+  this same pattern out to other modules with their own event-emission
+  needs, is separate, real, unbuilt follow-up work — the CloudEvents
+  envelope contract above is meant to be that rollout's shared
+  starting point.
+
+- **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
 
 - **ADK 2.0 Workflow Runtime.** The LLD names Google ADK 2.0's Workflow
   Runtime as the production graph executor. `core/scheduler.py` implements
@@ -66,6 +112,175 @@ tests/integration/        Real-Postgres tier via testcontainers (needs Docker)
   falling back to the deployment's configured default tenant. A real
   deployment sits this behind whatever the platform's auth layer resolves
   tenant from.
+- **Postgres integration tests, now dual-path.** `tests/integration/`
+  previously required Docker/testcontainers only; it now also accepts
+  `TECTONIC_TEST_POSTGRES_URL` against an already-running Postgres (see
+  `tests/integration/conftest.py`), matching the pattern used across the
+  rest of the platform. Running it for real for the first time (Docker
+  was never available in the environment this module was originally
+  built in) surfaced a genuine schema-drift bug: every `Mapped[datetime]`
+  column in `db/models.py` (`published_at`, `started_at`, `completed_at`,
+  `requested_at`, `resolved_at`, `created_at`) was missing
+  `DateTime(timezone=True)`, even though every Alembic migration already
+  defines them as timestamptz and the domain layer's defaults are all
+  tz-aware. Invisible under SQLite; asyncpg rejected the mismatch for
+  real. Fixed in `db/models.py`.
+
+- **Connection pooling tuned to replica count.** SQLAlchemy's out-of-
+  the-box defaults (`pool_size=5`, `max_overflow=10`) are the same
+  regardless of how many pods are running — at this module's own
+  `deploy/helm/workflow-engine/values.yaml` `autoscaling.maxReplicas: 10`,
+  that's up to 150 connections to this module's own Postgres
+  instance from this module alone at full autoscale, with no one having
+  deliberately decided that number. `db/session.py`'s `make_engine` now
+  passes explicit, configurable `pool_size=10` /
+  `max_overflow=5` (`db_pool_size`/`db_max_overflow`
+  Settings, env-overridable) sized so this module's own steady-state
+  total stays at ~100 connections and its full-burst total at ~150,
+  even at `maxReplicas`. `pool_recycle=1800s` also avoids stale
+  connections behind a cloud LB/proxy's own idle-connection timeout —
+  a real, independent gap, not just a replica-count one.
+- **Pagination on `GET /{instance_id}/steps`.** Added `limit`/`offset`
+  query params (default 50, max 200) and a `StepExecutionListResponse`
+  envelope (`items`/`total`/`limit`/`offset`) — this endpoint previously
+  returned every step execution for an instance unbounded, a real
+  scaling gap for a long-running or heavily-replanned workflow instance.
+  Neither `started_at` nor `completed_at` is a reliable ordering column
+  (both are nullable — a pending step has neither), so this orders by
+  `id` ascending instead, a stable, deterministic tiebreaker so
+  limit/offset pagination is actually meaningful. `GET
+  /{instance_id}` (the instance detail view, which embeds the complete
+  step list inline) is a distinct, intentionally-unpaginated internal
+  call against the same repository method (`limit=10_000`, an
+  effectively-unbounded internal page size) — that view genuinely needs
+  the complete list, not one page of it.
+
+- **Service-to-service JWT auth.** Before this, no module authenticated
+  any of its inbound HTTP calls — any process able to reach a module's
+  port could call it, and every outbound call this module makes carried
+  no credential at all. `security/jwt_auth.py` adds shared-signing-key
+  (HS256) bearer auth: `ServiceAuthMiddleware` verifies every inbound
+  request's `Authorization: Bearer <JWT>` against this module's own
+  `service_name` as the required audience (except `/healthz` and
+  `/metrics` — Kubernetes probes and Prometheus scraping carry no auth
+  token); `ServiceBearerAuth` (an `httpx.Auth` flow) mints a fresh,
+  short-lived (5 min default) token scoped via the `aud` claim to the
+  *specific* peer being called on every outbound request this module's
+  four HTTP clients (`HTTPLLMGatewayClient`, `HTTPToolOrchestrationClient`,
+  `HTTPGuardrailsClient`, `HTTPHumanOversightClient`) make — a token
+  minted to call one peer is rejected if replayed against a different
+  one. The shared secret (`TECTONIC_JWT_SHARED_SECRET`, one Kubernetes
+  Secret referenced by every module's Helm chart under this same literal
+  env var name, not a per-module-prefixed one) defaults to an obviously-
+  insecure placeholder for zero-config local dev/tests; `main.py` logs a
+  startup warning if it's still active. This is service-to-service auth
+  for inter-module calls, not the platform's external-facing user-auth
+  story — a real API gateway/OAuth layer in front of the platform's own
+  entry points is a separate, larger concern, out of scope here.
+
+- **Its generated OpenAPI document declares the real auth it enforces**
+  (`security/openapi_security.py`; independent architecture assessment
+  §3.6: "Every OpenAPI document must include OAuth/OIDC security
+  schemes"). `ServiceAuthMiddleware` is plain Starlette middleware, so
+  FastAPI's automatic OpenAPI generation has zero visibility into it —
+  every module's spec previously declared no `securitySchemes` and no
+  per-operation `security` requirement at all, even though every
+  request (`/healthz`/`/metrics` excepted) genuinely needs one.
+  `configure_openapi_security` overrides `app.openapi` to declare a
+  real `ServiceBearerAuth` HTTP-bearer/JWT scheme, set it as the
+  document-level default, and explicitly mark the same paths
+  `jwt_auth.py`'s own `_EXCLUDED_PATHS` skips as unauthenticated — one
+  source of truth, reused rather than duplicated, so a module with a
+  non-default exclusion set is handled correctly with no special-casing.
+
+- **Enforces its own subscription entitlement via `EntitlementGateMiddleware`**
+  (`security/entitlement_gate.py`) — see Agent Cards' README and the rollout
+  playbook doc (`docs/entitlement-gate-rollout.md`) for the shared reference
+  implementation. Layered after `ServiceAuthMiddleware` (authenticate, then
+  entitle), it calls Multi-tenancy's real `GET /tenants/{id}/gate?module=workflow-engine`,
+  denying with `402 Payment Required` when the tenant's subscription doesn't
+  include this module. It **fails open** if Multi-tenancy is unreachable — a
+  deliberate contrast with `ServiceAuthMiddleware`'s zero-trust fail-closed
+  posture.
+
+- **Kubernetes hardening** (`deploy/helm/workflow-engine/`; independent
+  architecture assessment §3.7). Previously: no ServiceAccount (every
+  pod ran under the namespace `default` one, with a full,
+  auto-mounted API token no code here ever needs), no pod/container
+  `securityContext` (root-capable, no seccomp profile, a writable root
+  filesystem, every Linux capability retained), no `NetworkPolicy`
+  (any pod anywhere in the cluster could reach it), identical
+  liveness/readiness probes (no real startup grace period), and no
+  topology spread. Fixed:
+  - **ServiceAccount** (`templates/serviceaccount.yaml`), with
+    `automountServiceAccountToken: false` — this module never calls
+    the Kubernetes API at all, so the correct least-privilege RBAC
+    grant is zero permissions, not a fabricated `Role` for access
+    nothing here needs.
+  - **Pod securityContext**: `runAsNonRoot`, a fixed non-root
+    UID/GID/fsGroup, `seccompProfile: RuntimeDefault`. **Container
+    securityContext**: `allowPrivilegeEscalation: false`,
+    `readOnlyRootFilesystem: true` (a small `emptyDir` mounted at
+    `/tmp` covers any library that transiently needs scratch space —
+    this process itself writes nothing to disk), `capabilities: {drop:
+    [ALL]}`.
+  - **NetworkPolicy** (`templates/networkpolicy.yaml`): ingress
+    restricted to pods in this module's own namespace on its own
+    port — this platform's modules address each other by short DNS
+    name, which only resolves within one namespace, so this is a real
+    restriction, not a theoretical one. Egress: DNS always allowed,
+    same-namespace peers always allowed, and a `networkPolicy.
+    allowExternalEgress` value (default `true`) an operator can set
+    `false` once they've audited which modules genuinely need real
+    external egress (LLM Gateway calling model providers, etc.) and
+    which don't — an honest, documented gap, not a false claim of full
+    lockdown.
+  - **Separate readiness/liveness/startup semantics**: a new
+    `startupProbe` gives a slow-starting pod real time to come up
+    before liveness starts evaluating it at all;
+    `livenessProbe` is deliberately loose (a restart is disruptive, so
+    only fire on genuine deadlock); `readinessProbe` is deliberately
+    tight (pulling a degraded pod out of load balancing is cheap, so
+    react fast).
+  - **`topologySpreadConstraints`**, spreading replicas across nodes
+    (soft — `ScheduleAnyway` — by default, since a hard requirement
+    can strand pods `Pending` on a small/single-node cluster with no
+    real availability benefit to justify that).
+  - **`priorityClassName`** is a real, exposed value but left unset by
+    default: which of this platform's 34 modules should preempt which
+    others under node pressure is a genuine operational judgment call
+    this chart doesn't make on its own — separate, unbuilt work.
+  Same mechanical rollout to the other 33 modules; see the root
+  README's "Platform-kernel hardening" section.
+
+- **Real wire shapes for every peer client, plus the Kafka
+  half-initialized-producer hang** (ticket #82's own Phase 2 support-agent
+  slice — the first time this module ran as a real process against real
+  peers instead of every prior test's own stubs). Every one of the four
+  pre-existing peer clients (LLM Gateway, Tool Orchestration, Guardrails,
+  Human Oversight) posted an invented request shape and/or read an
+  invented response shape that never matched the real peer's actual
+  route/schema — fixed against each peer's real contract, with respx-based
+  wire-shape-pinning tests (`tests/unit/test_http_clients_real_wire_shapes.py`)
+  so a future accidental revert fails immediately. Added `HTTPIntentDetectionClient`/
+  `HTTPAgenticRAGClient` (this module had no client for either before) and
+  new `intent_ref`/`rag_ref`-configured neural steps, additive and fully
+  backward compatible. `POST /definitions` now also registers any
+  `symbolic_rulesets` from the request body (previously there was no way
+  at all, through the real API, to configure a symbolic rule), and
+  `POST /instances` resolves `definition_id` by name when it isn't
+  UUID-shaped (a caller with a stable definition name, like
+  Conversational Engine's own static config, can never know a
+  dynamically-created definition's server-generated UUID otherwise). The
+  actual root cause of a long hang this ticket spent real effort
+  diagnosing: `KafkaEventPublisher.start()` assigned `self._producer`
+  *before* `await self._producer.start()` succeeded, so a failed connect
+  (this sandbox's own permanent no-Kafka condition) left a half-initialized
+  producer in place, defeating `publish()`'s own `is None` fast-fail guard
+  and hanging `send_and_wait()` forever instead — fixed to assign only
+  after a confirmed-successful start, with a regression test
+  (`tests/unit/test_kafka_publisher.py`) proving `publish()` now raises
+  near-instantly instead.
 
 ## Running locally
 
@@ -83,5 +298,23 @@ docker compose -f deploy/docker-compose.yml up --build   # full stack incl. Post
 |---|---|---|
 | Unit | Nothing — in-memory fakes only | `pytest tests/unit` |
 | Integration (isolated) | Docker (Postgres via testcontainers) | `pytest tests/integration` |
-| Contract | Running instance + `schemathesis` | not yet wired into CI here |
+| Contract | Real Postgres (same as Integration) | `pytest tests/contract` |
 | Load | Running instance + `locust` | not yet wired into CI here |
+
+The contract tier (`tests/contract/`) is this platform's rollout of
+Billing and Metering's own Phase 1 CI-supply-chain-gate reference
+implementation (ticket #73/#80): `schemathesis`/Hypothesis drive
+schema-conformant-but-otherwise-arbitrary requests at this module's
+real, running app (real middleware, real Postgres) for every operation
+its own generated OpenAPI document declares, and any `5xx` is a
+genuine contract violation. It found two real bugs on its first runs
+(a non-UUID path/query segment reaching `asyncpg` unguarded on
+`get_definition`/`get_instance`/`get_step_execution`/
+`get_approval_request`/`list_step_executions`, and an unbounded
+`offset` overflowing Postgres's `bigint` column — both now fixed; see
+the module docstring in `tests/contract/test_openapi_contract.py` and
+`tests/contract/conftest.py` for the full account, including why this
+module's own real Kafka producer/outbox worker are swapped for no-ops
+and the DB engine for a `NullPool` one in the contract fixture). CI
+(`.github/workflows/ci.yml`) runs this tier automatically for any
+module with a `tests/contract/` directory.

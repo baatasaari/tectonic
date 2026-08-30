@@ -1,0 +1,50 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# standalone using its own bundled detectors and a stubbed LLM Gateway for
+# the ambiguous-case fallback path. Real Postgres runs here.
+name: guardrails
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: guardrails
+      POSTGRES_PASSWORD: guardrails
+      POSTGRES_DB: guardrails
+    ports:
+      - "5443:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U guardrails"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9114:9114"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      GUARDRAILS_DATABASE_URL: postgresql+asyncpg://guardrails:guardrails@postgres:5432/guardrails
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  guardrails:
+    build: ..
+    ports:
+      - "8093:8093"
+    environment:
+      GUARDRAILS_DATABASE_URL: postgresql+asyncpg://guardrails:guardrails@postgres:5432/guardrails
+      GUARDRAILS_LLM_GATEWAY_BASE_URL: http://dependency-stub:9114
+      GUARDRAILS_SENTINEL_AGENTS_BASE_URL: http://dependency-stub:9114
+      GUARDRAILS_MULTI_TENANCY_BASE_URL: http://dependency-stub:9114
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

@@ -1,0 +1,744 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Evaluation Framework",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 18: faithfulness, coherence and tool-trace scoring, as both a CI/CD gate and continuous production evaluation.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/evaluation-framework/evaluate": {
+      "post": {
+        "tags": [
+          "evaluation-framework"
+        ],
+        "summary": "Evaluate",
+        "operationId": "evaluate_v1_evaluation_framework_evaluate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvaluateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalRunSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/evaluation-framework/gate": {
+      "post": {
+        "tags": [
+          "evaluation-framework"
+        ],
+        "summary": "Gate",
+        "operationId": "gate_v1_evaluation_framework_gate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GateResultSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/evaluation-framework/domain-packs": {
+      "post": {
+        "tags": [
+          "evaluation-framework"
+        ],
+        "summary": "Create Domain Pack",
+        "operationId": "create_domain_pack_v1_evaluation_framework_domain_packs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDomainPackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DomainMetricPackSchema"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/evaluation-framework/scores": {
+      "get": {
+        "tags": [
+          "evaluation-framework"
+        ],
+        "summary": "List Scores",
+        "operationId": "list_scores_v1_evaluation_framework_scores_get",
+        "parameters": [
+          {
+            "name": "tenant_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tenant Id"
+            }
+          },
+          {
+            "name": "agent_ref",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Ref"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricScoreListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/evaluation-framework/sample": {
+      "post": {
+        "tags": [
+          "evaluation-framework"
+        ],
+        "summary": "Sample",
+        "operationId": "sample_v1_evaluation_framework_sample_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SampleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SampleResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Healthz",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "Metrics",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateDomainPackRequest": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "pack_name": {
+            "type": "string",
+            "title": "Pack Name"
+          },
+          "custom_thresholds": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Custom Thresholds",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "pack_name"
+        ],
+        "title": "CreateDomainPackRequest"
+      },
+      "DomainMetricPackSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "pack_name": {
+            "type": "string",
+            "title": "Pack Name"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "custom_thresholds": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Custom Thresholds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "pack_name",
+          "enabled",
+          "custom_thresholds"
+        ],
+        "title": "DomainMetricPackSchema"
+      },
+      "EvalRunSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "trigger_source": {
+            "type": "string",
+            "title": "Trigger Source"
+          },
+          "agent_ref": {
+            "type": "string",
+            "title": "Agent Ref"
+          },
+          "metrics_evaluated": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Metrics Evaluated"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "scores": {
+            "items": {
+              "$ref": "#/components/schemas/MetricScoreSchema"
+            },
+            "type": "array",
+            "title": "Scores",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "trigger_source",
+          "agent_ref",
+          "metrics_evaluated",
+          "status",
+          "started_at",
+          "completed_at"
+        ],
+        "title": "EvalRunSchema"
+      },
+      "EvaluateRequest": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "agent_ref": {
+            "type": "string",
+            "title": "Agent Ref"
+          },
+          "agent_output": {
+            "type": "string",
+            "title": "Agent Output"
+          },
+          "reference_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Data"
+          },
+          "metric_set": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Metric Set"
+          },
+          "trigger_source": {
+            "type": "string",
+            "title": "Trigger Source",
+            "default": "ci_cd"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "agent_ref",
+          "agent_output",
+          "metric_set"
+        ],
+        "title": "EvaluateRequest"
+      },
+      "GateRequest": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "eval_run_id": {
+            "type": "string",
+            "title": "Eval Run Id"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment",
+            "default": "production"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "eval_run_id"
+        ],
+        "title": "GateRequest"
+      },
+      "GateResultSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "eval_run_id": {
+            "type": "string",
+            "title": "Eval Run Id"
+          },
+          "overall_passed": {
+            "type": "boolean",
+            "title": "Overall Passed"
+          },
+          "blocking_failures": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blocking Failures"
+          },
+          "environment": {
+            "type": "string",
+            "title": "Environment"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "eval_run_id",
+          "overall_passed",
+          "blocking_failures",
+          "environment",
+          "created_at"
+        ],
+        "title": "GateResultSchema"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MetricScoreListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MetricScoreSchema"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "MetricScoreListResponse"
+      },
+      "MetricScoreSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "metric_name": {
+            "type": "string",
+            "title": "Metric Name"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "threshold": {
+            "type": "number",
+            "title": "Threshold"
+          },
+          "passed": {
+            "type": "boolean",
+            "title": "Passed"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "metric_name",
+          "score",
+          "threshold",
+          "passed",
+          "created_at"
+        ],
+        "title": "MetricScoreSchema"
+      },
+      "SampleRequest": {
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "title": "Tenant Id"
+          },
+          "interaction_id": {
+            "type": "string",
+            "title": "Interaction Id"
+          },
+          "agent_ref": {
+            "type": "string",
+            "title": "Agent Ref"
+          },
+          "agent_output": {
+            "type": "string",
+            "title": "Agent Output"
+          },
+          "reference_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Data"
+          },
+          "metric_set": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Metric Set"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tenant_id",
+          "interaction_id",
+          "agent_ref",
+          "agent_output",
+          "metric_set"
+        ],
+        "title": "SampleRequest"
+      },
+      "SampleResponse": {
+        "properties": {
+          "sampled": {
+            "type": "boolean",
+            "title": "Sampled"
+          },
+          "eval_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eval Run Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sampled"
+        ],
+        "title": "SampleResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
+    "securitySchemes": {
+      "ServiceBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Service-to-service HS256 JWT bearer auth (security/jwt_auth.py): every inbound request must carry `Authorization: Bearer <token>`, verified against this module's own service_name as the required audience (TECTONIC_JWT_SHARED_SECRET, one shared signing key across every module in this deployment). Not a user-facing OAuth/OIDC flow -- see this module's README for the full design note."
+      }
+    }
+  },
+  "security": [
+    {
+      "ServiceBearerAuth": []
+    }
+  ]
+}

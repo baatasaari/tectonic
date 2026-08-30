@@ -1,0 +1,49 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# standalone with a registered MCP server stubbed by dependency-stub (minimal
+# initialize/tools-list/tools-call JSON-RPC server). Real Postgres runs here.
+name: mcp-gateway
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mcp_gateway
+      POSTGRES_PASSWORD: mcp_gateway
+      POSTGRES_DB: mcp_gateway
+    ports:
+      - "5448:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mcp_gateway"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9121:9121"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      MCP_GATEWAY_DATABASE_URL: postgresql+asyncpg://mcp_gateway:mcp_gateway@postgres:5432/mcp_gateway
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  mcp-gateway:
+    build: ..
+    ports:
+      - "8100:8100"
+    environment:
+      MCP_GATEWAY_DATABASE_URL: postgresql+asyncpg://mcp_gateway:mcp_gateway@postgres:5432/mcp_gateway
+      MCP_GATEWAY_DEPENDENCY_STUB_BASE_URL: http://dependency-stub:9121
+      MCP_GATEWAY_MULTI_TENANCY_BASE_URL: http://dependency-stub:9121
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

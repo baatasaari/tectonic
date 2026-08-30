@@ -4,10 +4,13 @@ separately, reporting degraded rather than binary pass/fail, per the LLD.
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from sqlalchemy import text
 
@@ -15,15 +18,22 @@ from workflow_engine.api.routes_definitions import router as definitions_router
 from workflow_engine.api.routes_instances import router as instances_router
 from workflow_engine.app_context import AppContext
 from workflow_engine.clients.http_clients import (
+    HTTPAgenticRAGClient,
     HTTPGuardrailsClient,
     HTTPHumanOversightClient,
+    HTTPIntentDetectionClient,
     HTTPLLMGatewayClient,
     HTTPToolOrchestrationClient,
 )
 from workflow_engine.clients.kafka_publisher import KafkaEventPublisher
 from workflow_engine.config import WorkflowEngineSettings, load_settings
+from workflow_engine.core.outbox_worker import OutboxRelayWorker
 from workflow_engine.core.symbolic import SymbolicRuleExecutor
+from workflow_engine.db.repository import SQLAlchemyWorkflowRepository
 from workflow_engine.db.session import make_engine, make_session_factory
+from workflow_engine.security.entitlement_gate import EntitlementGateMiddleware
+from workflow_engine.security.jwt_auth import INSECURE_DEFAULT_SECRET, ServiceAuthMiddleware
+from workflow_engine.security.openapi_security import configure_openapi_security
 from workflow_engine.telemetry.logging import configure_logging, get_logger
 from workflow_engine.telemetry.tracing import configure_tracing
 
@@ -35,48 +45,126 @@ def build_app_context(settings: WorkflowEngineSettings) -> tuple[AppContext, Kaf
     session_factory = make_session_factory(engine)
     event_publisher = KafkaEventPublisher(settings.kafka_bootstrap_servers)
 
-    dep_base_url = settings.dependency_stub_base_url
 
     ctx = AppContext(
         settings=settings,
         engine=engine,
         session_factory=session_factory,
         event_publisher=event_publisher,
-        llm_gateway=HTTPLLMGatewayClient(dep_base_url),
-        tool_orchestration=HTTPToolOrchestrationClient(dep_base_url),
-        guardrails=HTTPGuardrailsClient(dep_base_url),
-        human_oversight=HTTPHumanOversightClient(dep_base_url),
+        llm_gateway=HTTPLLMGatewayClient(
+            settings.llm_gateway_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds, default_virtual_key=settings.llm_gateway_virtual_key,
+        ),
+        tool_orchestration=HTTPToolOrchestrationClient(
+            settings.tool_orchestration_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        guardrails=HTTPGuardrailsClient(
+            settings.guardrails_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        human_oversight=HTTPHumanOversightClient(
+            settings.human_oversight_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
         symbolic_executor=SymbolicRuleExecutor(),
+        intent_detection=HTTPIntentDetectionClient(
+            settings.intent_detection_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
+        agentic_rag=HTTPAgenticRAGClient(
+            settings.agentic_rag_base_url, issuer=settings.service_name, shared_secret=settings.jwt_shared_secret,
+            ttl_seconds=settings.jwt_ttl_seconds,
+        ),
     )
     return ctx, event_publisher
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = load_settings()
+    settings: WorkflowEngineSettings = app.state.settings
     configure_logging(settings.telemetry.log_level)
     configure_tracing(settings.service_name, settings.telemetry.otlp_endpoint)
 
+    if settings.jwt_shared_secret == INSECURE_DEFAULT_SECRET:
+        logger.warning(
+            "jwt_shared_secret_is_insecure_default",
+            hint="set TECTONIC_JWT_SHARED_SECRET in every module sharing this deployment",
+        )
+
     ctx, event_publisher = build_app_context(settings)
-    await event_publisher.start()
+    try:
+        await event_publisher.start()
+    except Exception as exc:
+        # A genuine module-level gap surfaced standing this module up as a real
+        # process without a real Kafka broker (ticket #82): this was an
+        # unguarded await, so an unreachable broker crashed the whole app at
+        # startup even though nothing on the synchronous request path needs
+        # Kafka -- the outbox pattern is fire-and-forget by design (see
+        # core/outbox_worker.py's own docstring) and no module in this
+        # platform runs a real Kafka consumer yet. Degrading instead matches
+        # this module's own "safe direction to fail" posture elsewhere
+        # (Postgres/Kafka reported independently and non-fatally in
+        # /healthz): the outbox keeps queuing events durably in Postgres:
+        # OutboxRelayWorker's own per-event try/except already requeues
+        # publish failures for retry (poison-pilled after max_attempts)
+        # without this process ever going down, so a broker that comes back
+        # later drains the backlog with no further code change.
+        logger.warning("kafka_event_publisher_start_failed_degraded", error=str(exc))
     app.state.ctx = ctx
 
-    logger.info("startup_complete", service=settings.service_name, tenant_id=settings.tenant_id)
+    @asynccontextmanager
+    async def repository_factory():
+        async with ctx.session_factory() as session:
+            yield SQLAlchemyWorkflowRepository(session)
+
+    outbox_worker = OutboxRelayWorker(
+        repository_factory, event_publisher,
+        poll_interval_seconds=settings.outbox_worker_poll_interval_seconds,
+        lease_seconds=settings.outbox_worker_lease_seconds,
+        max_attempts=settings.outbox_worker_max_attempts,
+    )
+    await outbox_worker.recover_stuck_events()
+    outbox_worker_task = asyncio.create_task(outbox_worker.run_forever())
+    app.state.outbox_worker = outbox_worker
+
+    logger.info(
+        "startup_complete", service=settings.service_name, tenant_id=settings.tenant_id,
+        outbox_worker_id=outbox_worker.worker_id,
+    )
     try:
         yield
     finally:
+        outbox_worker.stop()
+        outbox_worker_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await outbox_worker_task
         await event_publisher.stop()
         await ctx.engine.dispose()
         logger.info("shutdown_complete")
 
 
 def create_app() -> FastAPI:
+    settings = load_settings()
+
     app = FastAPI(
         title="Workflow Engine",
         version="0.1.0",
         description="Tectonic Agentic AI Platform — Module 1: executes agent workflows as "
         "DAGs/graphs with neurosymbolic step routing and confidence-gated autonomy.",
         lifespan=lifespan,
+    )
+    app.state.settings = settings
+    app.add_middleware(
+        EntitlementGateMiddleware,
+        module_name=settings.service_name,
+        multi_tenancy_base_url=settings.multi_tenancy_base_url,
+        issuer=settings.service_name,
+        shared_secret=settings.jwt_shared_secret,
+        cache_ttl_seconds=settings.entitlement_gate_cache_ttl_seconds,
+    )
+    app.add_middleware(
+        ServiceAuthMiddleware, audience=settings.service_name, shared_secret=settings.jwt_shared_secret,
     )
     app.include_router(definitions_router)
     app.include_router(instances_router)
@@ -112,7 +200,9 @@ def create_app() -> FastAPI:
     async def metrics() -> Response:
         return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
+    HTTPXClientInstrumentor().instrument()
     FastAPIInstrumentor.instrument_app(app)
+    configure_openapi_security(app)
     return app
 
 

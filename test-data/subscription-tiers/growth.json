@@ -1,0 +1,28 @@
+{
+  "tier": "growth",
+  "tenant_name": "Growth Test Co",
+  "description": "Adds real retrieval (Agentic RAG, Knowledge Base, Vector DB, Context Engineering), quality signal (Evaluation Framework, Observability), persistence (Long-Term Memory) and cost visibility (FinOps) on top of the Starter set.",
+  "billing": {
+    "plan_name": "Growth",
+    "unit_prices": {
+      "workflow-engine": 120,
+      "conversational-engine": 90,
+      "llm-gateway": 150,
+      "tool-orchestration": 80,
+      "agentic-rag": 140,
+      "context-engineering": 70,
+      "knowledge-base": 110,
+      "vector-db": 130,
+      "evaluation-framework": 90,
+      "observability": 100,
+      "long-term-memory": 90,
+      "finops": 90,
+      "llm.cost_usd": 0.02
+    }
+  },
+  "admin_identity": {
+    "name": "Growth Test Co Admin",
+    "type": "user",
+    "role_names": ["tenant-admin"]
+  }
+}

@@ -1,0 +1,53 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# standalone with Identity and Access's, Multi-tenancy's, and Auditability's
+# real endpoints -- plus a real, live /openapi.json of its own for the
+# catalogue/SDK path -- all stubbed by one dependency-stub service. Real
+# Postgres runs here.
+name: sdk-and-developer-portal
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: sdk_and_developer_portal
+      POSTGRES_PASSWORD: sdk_and_developer_portal
+      POSTGRES_DB: sdk_and_developer_portal
+    ports:
+      - "5461:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sdk_and_developer_portal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9134:9134"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      SDKPORTAL_DATABASE_URL: postgresql+asyncpg://sdk_and_developer_portal:sdk_and_developer_portal@postgres:5432/sdk_and_developer_portal
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  sdk-and-developer-portal:
+    build: ..
+    ports:
+      - "8113:8113"
+    environment:
+      SDKPORTAL_DATABASE_URL: postgresql+asyncpg://sdk_and_developer_portal:sdk_and_developer_portal@postgres:5432/sdk_and_developer_portal
+      SDKPORTAL_IDENTITY_ACCESS_BASE_URL: http://dependency-stub:9134
+      SDKPORTAL_MULTI_TENANCY_BASE_URL: http://dependency-stub:9134
+      SDKPORTAL_AUDITABILITY_BASE_URL: http://dependency-stub:9134
+      SDKPORTAL_CATALOG_TARGETS: '[{"name":"auditability","base_url":"http://dependency-stub:9134"}]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully

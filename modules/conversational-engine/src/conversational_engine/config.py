@@ -32,6 +32,17 @@ class StreamingConfig(BaseModel):
     protocol: Literal["sse", "websocket"] = "sse"
 
 
+class WorkflowRoutingConfig(BaseModel):
+    """Added for the Phase 2 support-agent slice (ticket #82). Default off:
+    every pre-existing turn keeps calling LLM Gateway directly, unchanged.
+    When enabled, handle_turn() creates/drives a real Workflow Engine
+    instance instead — see session_manager.py's own
+    _handle_turn_via_workflow_engine docstring."""
+
+    enabled: bool = False
+    definition_id: str = "support-agent-v1"
+
+
 class TelemetryConfig(BaseModel):
     otlp_endpoint: str = "http://localhost:4317"
     log_level: str = "INFO"
@@ -49,16 +60,51 @@ class ConversationalEngineSettings(BaseSettings):
     handoff: HandoffConfig = HandoffConfig()
     streaming: StreamingConfig = StreamingConfig()
     telemetry: TelemetryConfig = TelemetryConfig()
+    workflow_routing: WorkflowRoutingConfig = WorkflowRoutingConfig()
 
     database_url: str = "postgresql+asyncpg://conversational_engine:conversational_engine@localhost:5432/conversational_engine"
+
+    # Pool sized against this module's own Helm chart (deploy/helm/conversational-engine/values.yaml):
+    # maxReplicas=20, targeting <=100 steady-state / <=150 burst connections to
+    # this module's own Postgres instance platform-wide at full autoscale.
+    db_pool_size: int = 5
+    db_max_overflow: int = 2
+    db_pool_timeout_seconds: int = 30
+    db_pool_recycle_seconds: int = 1800  # avoid stale connections behind cloud LB/proxy idle timeouts
     redis_url: str = "redis://localhost:6379/0"
     service_name: str = "conversational-engine"
+    multi_tenancy_base_url: str = "http://localhost:8109"
+    entitlement_gate_cache_ttl_seconds: float = 30.0
+    # Bounded-staleness fallback window (security/entitlement_gate.py) -- how long a
+    # VERIFIED entitlement decision may still be served after Multi-tenancy becomes
+    # unreachable before the gate switches to fail-closed. Must exceed
+    # entitlement_gate_cache_ttl_seconds to have any effect.
+    entitlement_gate_max_staleness_seconds: float = 300.0
     http_port: int = 8081
-    # Points at the dependency-stub service for LLM Gateway / Guardrails /
-    # Long-Term Memory / Human Oversight until those modules are deployed for
-    # real (LLM Gateway now exists as Module 3 — point this at its real base
-    # URL in any environment where both are deployed).
-    dependency_stub_base_url: str = "http://localhost:9101"
+    llm_gateway_base_url: str = "http://localhost:8082"
+    # One shared virtual key for every completion this module makes -- see
+    # clients/http_clients.py's own module docstring for why (the same
+    # documented per-tenant-resolution deferral Workflow Engine's own
+    # identical field already established, ticket #82).
+    llm_gateway_virtual_key: str = "conversational-engine-default"
+    # Added for the Phase 2 support-agent slice (ticket #82).
+    workflow_engine_base_url: str = "http://localhost:8080"
+    guardrails_base_url: str = "http://localhost:8093"
+    long_term_memory_base_url: str = "http://localhost:8092"
+    human_oversight_base_url: str = "http://localhost:8095"
+    observability_base_url: str = "http://localhost:8098"
+    auditability_base_url: str = "http://localhost:8099"
+
+    # Service-to-service JWT auth (security/jwt_auth.py) — one shared secret across
+    # every module, so this field's env var name is NOT prefixed like the rest of this
+    # settings class: every module's Helm chart injects the same Kubernetes Secret under
+    # this same literal env var name. The default is an insecure, obviously-a-placeholder
+    # value so local dev/tests work with zero config; main.py logs a startup warning if
+    # it's still active.
+    jwt_shared_secret: str = Field(
+        default="dev-insecure-shared-secret-change-me", validation_alias="TECTONIC_JWT_SHARED_SECRET",
+    )
+    jwt_ttl_seconds: int = 300
 
 
 _HOT_RELOADABLE = {

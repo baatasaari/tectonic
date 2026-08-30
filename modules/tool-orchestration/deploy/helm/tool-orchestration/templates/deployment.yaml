@@ -17,16 +17,36 @@ spec:
         app.kubernetes.io/name: tool-orchestration
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      serviceAccountName: {{ .Release.Name }}-tool-orchestration
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: {{ .Values.topologySpreadConstraints.maxSkew }}
+          topologyKey: {{ .Values.topologySpreadConstraints.topologyKey }}
+          whenUnsatisfiable: {{ .Values.topologySpreadConstraints.whenUnsatisfiable }}
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: tool-orchestration
+              app.kubernetes.io/instance: {{ .Release.Name }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: tool-orchestration
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           ports:
             - name: http
               containerPort: 8083
           env:
             - name: TOOL_ORCHESTRATION_TENANT_ID
               value: {{ .Values.config.tenantId | quote }}
+            - name: TOOL_ORCHESTRATION_MULTI_TENANCY_BASE_URL
+              value: {{ .Values.multiTenancyBaseUrl | quote }}
             - name: TOOL_ORCHESTRATION_TELEMETRY__LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
             - name: TOOL_ORCHESTRATION_TELEMETRY__OTLP_ENDPOINT
@@ -37,10 +57,12 @@ spec:
               value: {{ .Values.config.synthesisEnabled | quote }}
             - name: TOOL_ORCHESTRATION_REDIS_URL
               value: {{ .Values.redis.url | quote }}
-            {{- if .Values.dependencyStubBaseUrl }}
-            - name: TOOL_ORCHESTRATION_DEPENDENCY_STUB_BASE_URL
-              value: {{ .Values.dependencyStubBaseUrl | quote }}
-            {{- end }}
+            - name: TOOL_ORCHESTRATION_LLM_GATEWAY_BASE_URL
+              value: {{ .Values.llmGatewayBaseUrl | quote }}
+            - name: TOOL_ORCHESTRATION_GUARDRAILS_BASE_URL
+              value: {{ .Values.guardrailsBaseUrl | quote }}
+            - name: TOOL_ORCHESTRATION_SENTINEL_AGENTS_BASE_URL
+              value: {{ .Values.sentinelAgentsBaseUrl | quote }}
             {{- if .Values.database.existingSecret }}
             - name: TOOL_ORCHESTRATION_DATABASE_URL
               valueFrom:
@@ -53,7 +75,15 @@ spec:
             {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          startupProbe:
+            {{- toYaml .Values.startupProbe | nindent 12 }}
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
           readinessProbe:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

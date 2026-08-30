@@ -1,0 +1,51 @@
+# Deployability and Testability Contract: this module runs and tests fully
+# standalone with FinOps's own GET /v1/finops/cost-reports/{tenant_id} and
+# Auditability's own GET /v1/auditability/events both stubbed by one
+# dependency-stub service. Real Postgres runs here.
+name: billing-and-metering
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: billing_and_metering
+      POSTGRES_PASSWORD: billing_and_metering
+      POSTGRES_DB: billing_and_metering
+    ports:
+      - "5460:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U billing_and_metering"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  dependency-stub:
+    build: ../stubs/dependency-stub
+    ports:
+      - "9133:9133"
+
+  migrate:
+    build: ..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      BILLING_DATABASE_URL: postgresql+asyncpg://billing_and_metering:billing_and_metering@postgres:5432/billing_and_metering
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  billing-and-metering:
+    build: ..
+    ports:
+      - "8112:8112"
+    environment:
+      BILLING_DATABASE_URL: postgresql+asyncpg://billing_and_metering:billing_and_metering@postgres:5432/billing_and_metering
+      BILLING_FINOPS_BASE_URL: http://dependency-stub:9133
+      BILLING_AUDITABILITY_BASE_URL: http://dependency-stub:9133
+      BILLING_MULTI_TENANCY_BASE_URL: http://dependency-stub:9133
+    depends_on:
+      postgres:
+        condition: service_healthy
+      dependency-stub:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
