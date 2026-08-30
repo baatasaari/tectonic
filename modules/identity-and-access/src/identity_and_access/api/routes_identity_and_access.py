@@ -9,6 +9,7 @@ from identity_and_access.api.deps import (
     build_identity_provider_service,
     build_identity_registry_service,
     build_oidc_federation_service,
+    build_role_binding_service,
     build_role_service,
     build_saml_federation_service,
     build_scim_token_service,
@@ -28,7 +29,9 @@ from identity_and_access.core.domain import (
     IdentityStatus,
     IdentityType,
     InvalidTransitionError,
+    RoleAlreadyExistsError,
     RoleNotFoundError,
+    RoleNotGrantedError,
 )
 from identity_and_access.core.ports import IdentityAccessRepository
 from identity_and_access.schemas.identity_and_access import (
@@ -38,6 +41,7 @@ from identity_and_access.schemas.identity_and_access import (
     AuthorizeRequest,
     CreateRoleRequest,
     CreateScimTokenRequest,
+    GrantRoleRequest,
     GroupListResponse,
     GroupSchema,
     IdentityListResponse,
@@ -50,6 +54,8 @@ from identity_and_access.schemas.identity_and_access import (
     RegisterGroupRequest,
     RegisterIdentityProviderRequest,
     RegisterIdentityRequest,
+    RoleBindingListResponse,
+    RoleBindingSchema,
     RoleListResponse,
     RoleSchema,
     SamlLoginRequest,
@@ -75,7 +81,17 @@ def _reject_null_byte_query(**params: str | None) -> None:
 
 
 def _role_schema(role) -> RoleSchema:
-    return RoleSchema(name=role.name, scopes=role.scopes, description=role.description, created_at=role.created_at)
+    return RoleSchema(
+        id=role.id, tenant_id=role.tenant_id, name=role.name, scopes=role.scopes,
+        description=role.description, created_at=role.created_at,
+    )
+
+
+def _role_binding_schema(binding) -> RoleBindingSchema:
+    return RoleBindingSchema(
+        id=binding.id, tenant_id=binding.tenant_id, identity_id=binding.identity_id, role_name=binding.role_name,
+        granted_by=binding.granted_by, granted_at=binding.granted_at, revoked_at=binding.revoked_at,
+    )
 
 
 def _identity_schema(identity) -> IdentitySchema:
@@ -97,21 +113,29 @@ def _auth_decision_schema(decision) -> AuthDecisionSchema:
 @router.post("/roles", response_model=RoleSchema, status_code=201)
 async def create_role(
     body: CreateRoleRequest,
+    tenant_id: str = Depends(resolve_tenant_id),
     repository: IdentityAccessRepository = Depends(get_repository),
 ) -> RoleSchema:
     service = build_role_service(repository)
-    role = await service.create(name=body.name, scopes=body.scopes, description=body.description)
+    try:
+        role = await service.create(
+            tenant_id=tenant_id, name=body.name, scopes=body.scopes, description=body.description,
+        )
+    except RoleAlreadyExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _role_schema(role)
 
 
 @router.get("/roles", response_model=RoleListResponse)
 async def list_roles(
+    tenant_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     repository: IdentityAccessRepository = Depends(get_repository),
 ) -> RoleListResponse:
+    _reject_null_byte_query(tenant_id=tenant_id)
     service = build_role_service(repository)
-    roles, total = await service.list(limit=limit, offset=offset)
+    roles, total = await service.list(tenant_id=tenant_id, limit=limit, offset=offset)
     return RoleListResponse(items=[_role_schema(r) for r in roles], total=total, limit=limit, offset=offset)
 
 
@@ -188,6 +212,52 @@ async def reinstate_identity(
     except InvalidTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return _identity_schema(identity)
+
+
+@router.post("/identities/{identity_id}/roles", response_model=IdentitySchema, status_code=201)
+async def grant_role(
+    identity_id: str,
+    body: GrantRoleRequest,
+    repository: IdentityAccessRepository = Depends(get_repository),
+) -> IdentitySchema:
+    service = build_role_binding_service(repository)
+    try:
+        identity = await service.grant(identity_id=identity_id, role_name=body.role_name, granted_by=body.granted_by)
+    except IdentityNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RoleNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _identity_schema(identity)
+
+
+@router.post("/identities/{identity_id}/roles/{role_name}/revoke", response_model=IdentitySchema)
+async def revoke_role(
+    identity_id: str,
+    role_name: str,
+    repository: IdentityAccessRepository = Depends(get_repository),
+) -> IdentitySchema:
+    service = build_role_binding_service(repository)
+    try:
+        identity = await service.revoke(identity_id=identity_id, role_name=role_name)
+    except IdentityNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RoleNotGrantedError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _identity_schema(identity)
+
+
+@router.get("/identities/{identity_id}/role-bindings", response_model=RoleBindingListResponse)
+async def list_identity_role_bindings(
+    identity_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    repository: IdentityAccessRepository = Depends(get_repository),
+) -> RoleBindingListResponse:
+    service = build_role_binding_service(repository)
+    bindings, total = await service.list_bindings(identity_id=identity_id, limit=limit, offset=offset)
+    return RoleBindingListResponse(
+        items=[_role_binding_schema(b) for b in bindings], total=total, limit=limit, offset=offset,
+    )
 
 
 @router.get("/identities/{identity_id}/auth-decisions", response_model=AuthDecisionListResponse)

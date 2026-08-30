@@ -22,7 +22,8 @@ src/identity_and_access/
     ports.py                    Repository, the real Auditability client port, OidcTokenVerifier, SamlAssertionVerifier
     fakes.py                     In-memory implementations of every port, for unit tests
     identity_registry_service.py  Identity Registry — register/revoke/reinstate
-    role_service.py                Role Service — create/get/list
+    role_service.py                Role Service — create/get/list, tenant-scoped
+    role_binding_service.py         Role Binding Service — grant/revoke a role on an existing identity, real audit trail
     token_service.py                Token Service — issues requested ∩ granted scoped tokens (role_names ∪ federated_role_names)
     authorization_service.py        Authorization Service — the zero-trust live authorize check
     identity_provider_service.py    Identity Provider Service — per-tenant OIDC/SAML config CRUD
@@ -32,7 +33,7 @@ src/identity_and_access/
     group_service.py                 Group Service — IdP-group -> default-role mapping, live recompute
     scim_token_service.py            SCIM Token Service — show-once per-tenant provisioning bearer tokens
     scim_service.py                   SCIM 2.0 User/Group lifecycle, mapped onto IdentityRecord/GroupRecord
-  db/                      SQLAlchemy 2.0 async models + repository (Identity/Role/AuthDecision/IdentityProvider/Group/ScimToken)
+  db/                      SQLAlchemy 2.0 async models + repository (Identity/Role/RoleBinding/AuthDecision/IdentityProvider/Group/ScimToken)
   clients/                 Resilient HTTP client to Auditability
   security/
     jwt_auth.py               Service-to-service JWT (platform-wide shared secret, this module's own inbound protection); excludes /scim/* by prefix
@@ -43,7 +44,7 @@ src/identity_and_access/
     scim_auth.py                  SCIM's own per-tenant bearer token dependency
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
   api/
-    routes_identity_and_access.py  FastAPI router — roles, identities, tokens, authorize, identity-providers, oidc/login, saml/login, groups, scim-tokens
+    routes_identity_and_access.py  FastAPI router — roles, identities, role bindings, tokens, authorize, identity-providers, oidc/login, saml/login, groups, scim-tokens
     routes_scim.py                   SCIM 2.0 router — /scim/v2/{tenant_id}/Users and /Groups
   schemas/
     identity_and_access.py     Pydantic request/response models for this module's own REST shapes
@@ -52,6 +53,73 @@ src/identity_and_access/
 
 ## Design notes vs. the LLD
 
+- **IAM v2 foundation: tenant-scoped roles and a real role-binding
+  lifecycle.** (Independent architecture assessment §31, P0: "no...
+  user/group/membership lifecycle" -- picked from that same finding's
+  own backlog after the entitlement-gate bounded-staleness fix.) Before
+  this, `RoleRecord`'s `name` was this module's sole, platform-global
+  primary key -- one tenant creating a role called `"admin"` meant no
+  other tenant could ever create their own `"admin"` (the second
+  tenant's `create_role` call failed outright against the first
+  tenant's row), and there was no way to grant or revoke a single role
+  on an already-registered identity at all -- `role_names` could only
+  ever be set once, at `register()` time. Both fixed:
+  - **Roles are now tenant-scoped.** `RoleRecord` gained `id`/`tenant_id`;
+    the table's primary key moved from `name` to `id`, with a real
+    unique constraint on `(tenant_id, name)` (Alembic `0003`, which
+    backfills every pre-existing role as a platform-wide default --
+    see below -- rather than guessing which one tenant it should
+    belong to, preserving exactly the access every existing identity
+    already had). `POST /v1/identity-access/roles` and `GET .../roles`
+    resolve `tenant_id` the same way every other tenant-scoped route in
+    this module already does (`resolve_tenant_id`: the `X-Tenant-Id`
+    header, falling back to this deployment's own configured
+    `tenant_id`) -- there's no separate "admin" identity or elevated
+    caller; posting a role while authenticated as tenant A creates it
+    for tenant A, full stop.
+  - **A `PLATFORM_TENANT_ID` sentinel (`"__platform__"`), not `None`,
+    marks a platform-wide default role** -- kept consistent with every
+    other `tenant_id` column/field in this module's data model, none of
+    which is nullable. `RoleService.get`/`TokenService.issue`/
+    `IdentityRegistryService.register`'s role-existence check all
+    resolve a role name the same way: the calling tenant's own role of
+    that name if one exists, else the platform-wide default of that
+    name, else not found -- a tenant's own role shadows a
+    platform-wide one of the same name rather than colliding with it.
+    `GET /roles?tenant_id=...` deliberately does **not** auto-merge in
+    platform-wide roles (an exact filter, matching every other
+    `list_*` route in this module) -- a caller wanting both calls it
+    twice, once with its own `tenant_id` and once with
+    `PLATFORM_TENANT_ID`, rather than this module inventing
+    merge/pagination semantics nobody asked for.
+  - **Role bindings: a real grant/revoke lifecycle with its own audit
+    trail.** New `POST /identities/{id}/roles` (grant),
+    `POST /identities/{id}/roles/{role_name}/revoke`, and
+    `GET /identities/{id}/role-bindings` (`core/role_binding_service.py`).
+    `IdentityRecord.role_names` stays the fast-path "currently
+    effective roles" list every other service already reads; each
+    grant/revoke additionally writes/updates a durable
+    `RoleBindingRecord` row (`granted_by`, `granted_at`, `revoked_at`)
+    -- one row per grant, revoked in place rather than a second row, the
+    same "materialized view + event log" split this module already
+    uses for `AuthDecisionRecord` vs. the live `authorize()` check.
+    Granting an already-held role is idempotent (no duplicate binding
+    row); revoking a role never granted raises a clean 404
+    (`RoleNotGrantedError`), not a silent no-op.
+  - **Deliberately not built here** (out of scope for this pass, same
+    "reference pattern in one place first" convention as this
+    platform's other multi-module rollouts): a `TenantMembership`
+    entity distinct from `RoleBindingRecord`. Every `IdentityRecord`
+    already belongs to exactly one `tenant_id` for its whole life (set
+    once at `register()`/JIT-provisioning time, never reassigned) --
+    given that, a role binding *is* this module's membership record
+    (identity × role, tenant-scoped); a third, redundant entity would
+    only restate `IdentityRecord.tenant_id`. Cross-tenant identity
+    membership (one human identity belonging to more than one tenant)
+    isn't modeled at all -- a contractor working across two client
+    tenants registers as two separate identities today, one per
+    tenant, the same way SCIM/OIDC/SAML JIT-provisioning already treat
+    every login as scoped to one `(tenant_id, provider_id)` pair.
 - **Zero-trust actually means something here.** `AuthorizationService.
   authorize` re-checks the issuing identity's *current* status against
   the live registry on every single call — a revoked identity's

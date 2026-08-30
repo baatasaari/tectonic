@@ -29,7 +29,7 @@ class IdentityRegistryService:
     ) -> IdentityRecord:
         role_names = role_names or []
         for role_name in role_names:
-            if await self._repository.get_role(role_name) is None:
+            if await self._repository.get_role(tenant_id, role_name) is None:
                 raise RoleNotFoundError(role_name)
 
         record = IdentityRecord(id=new_id(), tenant_id=tenant_id, name=name, type=type, role_names=role_names)

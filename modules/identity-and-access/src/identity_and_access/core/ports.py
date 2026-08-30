@@ -13,6 +13,7 @@ from identity_and_access.core.domain import (
     IdentityProviderRecord,
     IdentityRecord,
     IdentityStatus,
+    RoleBindingRecord,
     RoleRecord,
     ScimTokenRecord,
 )
@@ -35,9 +36,43 @@ class IdentityAccessRepository(Protocol):
 
     async def create_role(self, record: RoleRecord) -> RoleRecord: ...
 
-    async def get_role(self, name: str) -> RoleRecord | None: ...
+    async def get_role_by_tenant_and_name(self, tenant_id: str, name: str) -> RoleRecord | None:
+        """Exact (tenant_id, name) lookup -- no platform-role fallback. Used by
+        create_role's own pre-existence check; RoleService.get is the caller
+        that wants the tenant-then-platform-fallback resolution instead."""
+        ...
 
-    async def list_roles(self, *, limit: int = 50, offset: int = 0) -> tuple[list[RoleRecord], int]: ...
+    async def get_role(self, tenant_id: str, name: str) -> RoleRecord | None:
+        """Resolves a role name the way every real caller (grant, token
+        issuance, identity registration) needs it: the calling tenant's own
+        role of that name if one exists, else the platform-wide default of
+        that name, else None. Never confuse this with
+        get_role_by_tenant_and_name's exact lookup."""
+        ...
+
+    async def list_roles(
+        self, *, tenant_id: str | None = None, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[RoleRecord], int]: ...
+
+    # -- Role bindings (grant/revoke audit trail) --
+
+    async def create_role_binding(self, record: RoleBindingRecord) -> RoleBindingRecord: ...
+
+    async def get_active_role_binding(self, *, identity_id: str, role_name: str) -> RoleBindingRecord | None:
+        """The most recent not-yet-revoked binding for this (identity, role)
+        pair, if any -- what `revoke` needs to mark revoked."""
+        ...
+
+    async def revoke_role_binding(self, binding_id: str) -> RoleBindingRecord | None:
+        """Sets revoked_at on this binding row in place -- see
+        RoleBindingRecord's own docstring for why revoke is an update to the
+        original grant row, not a second row."""
+        ...
+
+    async def list_role_bindings(
+        self, *, tenant_id: str | None = None, identity_id: str | None = None, role_name: str | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[RoleBindingRecord], int]: ...
 
     async def create_auth_decision(self, record: AuthDecisionRecord) -> AuthDecisionRecord: ...
 

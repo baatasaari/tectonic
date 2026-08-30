@@ -279,9 +279,17 @@ default). Neither is a production credential.
 
 ## 12. Backlog (P0/P1/P2/P3)
 
-- **P0**: None. Nothing is broken or blocking; all touched modules are
-  green (including in real GitHub Actions CI, not just this sandbox --
-  see the note on `TECTONIC_TEST_POSTGRES_URL`-vs-CI-credentials below).
+- **P0**: Two closed this session (see the "P0 -- DONE" entries below);
+  several remain open from the reassessment's own Phase 1A backlog (IAM
+  v2's own contract-test-tier rollout to the ~29 modules that don't have
+  it, provisioning-saga reconciliation, universal operation-level
+  authorization, a real external access gateway, event-backbone
+  consumer/inbox pattern, image supply-chain build/scan/sign/admission
+  gates, branch-protection required-status-check configuration -- no
+  GitHub MCP tool found for that last one this session). Nothing is
+  currently broken or blocking merge; all touched modules are green
+  (including in real GitHub Actions CI, not just this sandbox -- see the
+  note on `TECTONIC_TEST_POSTGRES_URL`-vs-CI-credentials below).
 - **P1 -- DONE (this session).** The platform-wide NUL-byte-in-a-raw-
   `Query()`-string-parameter bug class (originally surfaced for real by
   the new CI job's own first run, against Multi-tenancy's and Billing
@@ -393,6 +401,54 @@ default). Neither is a production credential.
   module covering the stale-serve window, the fail-closed boundary, a
   denied decision staying denied when served stale, and a forged cache
   signature being rejected.
+- **P0 -- DONE (this session).** Independent architecture assessment's
+  own P0 Phase 1A closure item, user-selected: "IAM v2 foundation". Two
+  real, evidence-based gaps found by direct inspection of Identity and
+  Access (not previously documented anywhere): `RoleRecord.name` was the
+  sole, platform-global primary key -- a second tenant could never
+  create a role with a name any other tenant already used, full stop
+  (the `create_role` call just failed); and there was no way to grant or
+  revoke a single role on an already-registered identity at all --
+  `role_names` could only ever be set once, at `register()` time, no
+  endpoint existed to change it after. Both fixed:
+  - **Tenant-scoped roles**: `Role` gained `id`/`tenant_id`, PK moved
+    from `name` to `id`, real unique constraint on `(tenant_id, name)`
+    (Alembic `0003`, backfills every pre-existing role as
+    `PLATFORM_TENANT_ID` -- a sentinel, not `None`, kept consistent with
+    every other non-nullable `tenant_id` field in this module --
+    preserving exactly the access every identity already had).
+    `RoleService.get`/`TokenService.issue`/`IdentityRegistryService.
+    register`'s role check all resolve tenant-then-platform-fallback; a
+    tenant's own role shadows a platform default of the same name.
+  - **Role bindings**: new `core/role_binding_service.py`,
+    `POST /identities/{id}/roles` (grant) /
+    `.../roles/{role_name}/revoke` (revoke) /
+    `GET /identities/{id}/role-bindings` -- each grant/revoke writes/
+    updates a durable `RoleBindingRecord` (`granted_by`/`granted_at`/
+    `revoked_at`), one row per grant revoked in place, the same
+    "materialized view + event log" split this module already uses for
+    `AuthDecisionRecord`. Idempotent grant (no duplicate row for an
+    already-held role); revoke of a never-granted role raises a clean
+    404, not a silent no-op.
+  - **Deliberately not built**: a separate `TenantMembership` entity --
+    every `IdentityRecord` already belongs to exactly one tenant for its
+    whole life, so `RoleBindingRecord` already *is* this module's
+    membership record; cross-tenant identity membership (one identity,
+    multiple tenants) isn't modeled at all, same posture as
+    OIDC/SAML/SCIM JIT-provisioning already take. Also not touched: the
+    other P0 Phase 1A items (IAM v2's own contract-test tier, the
+    provisioning-saga/authorization/gateway/event-backbone/supply-chain
+    items below).
+  Full design in that module's own README's "Design notes vs. the LLD"
+  section. Ruff clean; 169 unit tests green, including new
+  `test_role_binding_service.py` and extended
+  `test_role_service.py`/`test_routes_identity_and_access.py`
+  coverage (tenant isolation, the 409-on-duplicate-name case, the
+  platform-wide-fallback/shadowing case, grant/revoke/list-bindings
+  end-to-end through real routes); 13 integration tests green against
+  real Postgres including two brand-new role-binding/tenant-scoping
+  tests and the real Alembic `0003` migration itself running end-to-end
+  (backfill included).
 - **P1**: Fix Agentic RAG's own Graph DB/Knowledge-Base-symbolic-lookup
   client wire shapes properly (currently sidestepped via
   `hybrid_retrieval_enabled=false` for this slice only) once Knowledge
@@ -425,24 +481,26 @@ pasted both directly into the conversation. If a future session needs
 either one again and doesn't have it in context, ask the user to paste it
 again rather than trying to reconstruct it from README prose.
 
-**This session's own work**: closed one of the reassessment's P0 Phase 1A
-items, user-selected from four options — the `EntitlementGateMiddleware`
-bounded-staleness cache (§12's newest P0 entry above). Not yet
-committed/pushed at the time this section was last edited during the
-same pass — check `git log`/`git status` on
-`claude/practical-wozniak-l1723c-rw7pp0` before assuming it is or isn't
-on `origin` yet.
+**This session's own work**: closed two of the reassessment's P0 Phase
+1A items in sequence — the `EntitlementGateMiddleware` bounded-staleness
+cache, then (this same session, continued) Identity and Access's IAM v2
+foundation (tenant-scoped roles + a real role-binding lifecycle). See
+§12's two newest "P0 -- DONE" entries above for the full account of
+each. Confirm current push/PR state with `git log`/`git status` on
+`claude/practical-wozniak-l1723c-rw7pp0` and a live check of open PRs
+before assuming either is or isn't merged yet — this file is a
+point-in-time snapshot, not a live source of truth for that.
 
 **Remaining P0 Phase 1A closure items from the reassessment's own
-backlog, not yet started** (the other three options offered alongside
-the one picked this session):
+backlog, not yet started** (the other two options offered alongside IAM
+v2 foundation, plus items the reassessment's own backlog named that were
+never offered as a discrete choice):
 
-- IAM v2 foundation (memberships, tenant roles, role bindings) —
-  Identity and Access module.
 - Contract-test tier (schemathesis/Hypothesis, per
   `modules/multi-tenancy/tests/contract/conftest.py`'s established
   harness fixes) rolled out to the remaining ~29 modules that don't have
-  it yet.
+  it yet — including Identity and Access itself, which still has none
+  (this session's IAM v2 work only extended its unit/integration tiers).
 - Provisioning-saga/resource-allocation reconciliation.
 - Universal operation-level authorization; a real external access
   gateway; event-backbone consumer/inbox pattern; image supply-chain

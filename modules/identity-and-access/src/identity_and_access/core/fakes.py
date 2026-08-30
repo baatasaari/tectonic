@@ -8,14 +8,17 @@ from __future__ import annotations
 from typing import Any
 
 from identity_and_access.core.domain import (
+    PLATFORM_TENANT_ID,
     AuthDecisionRecord,
     FederationError,
     GroupRecord,
     IdentityProviderRecord,
     IdentityRecord,
     IdentityStatus,
+    RoleBindingRecord,
     RoleRecord,
     ScimTokenRecord,
+    now,
 )
 
 
@@ -23,6 +26,7 @@ class InMemoryIdentityAccessRepository:
     def __init__(self) -> None:
         self.identities: dict[str, IdentityRecord] = {}
         self.roles: dict[str, RoleRecord] = {}
+        self.role_bindings: dict[str, RoleBindingRecord] = {}
         self.auth_decisions: list[AuthDecisionRecord] = []
         self.identity_providers: dict[str, IdentityProviderRecord] = {}
         self.groups: dict[str, GroupRecord] = {}
@@ -63,14 +67,64 @@ class InMemoryIdentityAccessRepository:
         return results[offset:offset + limit], len(results)
 
     async def create_role(self, record: RoleRecord) -> RoleRecord:
-        self.roles[record.name] = record
+        self.roles[record.id] = record
         return record
 
-    async def get_role(self, name: str) -> RoleRecord | None:
-        return self.roles.get(name)
+    async def get_role_by_tenant_and_name(self, tenant_id: str, name: str) -> RoleRecord | None:
+        for role in self.roles.values():
+            if role.tenant_id == tenant_id and role.name == name:
+                return role
+        return None
 
-    async def list_roles(self, *, limit: int = 50, offset: int = 0) -> tuple[list[RoleRecord], int]:
-        results = sorted(self.roles.values(), key=lambda r: r.created_at)
+    async def get_role(self, tenant_id: str, name: str) -> RoleRecord | None:
+        role = await self.get_role_by_tenant_and_name(tenant_id, name)
+        if role is not None:
+            return role
+        if tenant_id == PLATFORM_TENANT_ID:
+            return None
+        return await self.get_role_by_tenant_and_name(PLATFORM_TENANT_ID, name)
+
+    async def list_roles(
+        self, *, tenant_id: str | None = None, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[RoleRecord], int]:
+        results = list(self.roles.values())
+        if tenant_id is not None:
+            results = [r for r in results if r.tenant_id == tenant_id]
+        results = sorted(results, key=lambda r: r.created_at)
+        return results[offset:offset + limit], len(results)
+
+    async def create_role_binding(self, record: RoleBindingRecord) -> RoleBindingRecord:
+        self.role_bindings[record.id] = record
+        return record
+
+    async def get_active_role_binding(self, *, identity_id: str, role_name: str) -> RoleBindingRecord | None:
+        candidates = [
+            b for b in self.role_bindings.values()
+            if b.identity_id == identity_id and b.role_name == role_name and b.revoked_at is None
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda b: b.granted_at)
+
+    async def revoke_role_binding(self, binding_id: str) -> RoleBindingRecord | None:
+        binding = self.role_bindings.get(binding_id)
+        if binding is None:
+            return None
+        binding.revoked_at = now()
+        return binding
+
+    async def list_role_bindings(
+        self, *, tenant_id: str | None = None, identity_id: str | None = None, role_name: str | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[RoleBindingRecord], int]:
+        results = list(self.role_bindings.values())
+        if tenant_id is not None:
+            results = [b for b in results if b.tenant_id == tenant_id]
+        if identity_id is not None:
+            results = [b for b in results if b.identity_id == identity_id]
+        if role_name is not None:
+            results = [b for b in results if b.role_name == role_name]
+        results = sorted(results, key=lambda b: b.granted_at, reverse=True)
         return results[offset:offset + limit], len(results)
 
     async def create_auth_decision(self, record: AuthDecisionRecord) -> AuthDecisionRecord:

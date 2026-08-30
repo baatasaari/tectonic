@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity_and_access.core.domain import (
+    PLATFORM_TENANT_ID,
     AuthDecisionRecord,
     GroupRecord,
     IdentityProviderRecord,
@@ -15,6 +16,7 @@ from identity_and_access.core.domain import (
     IdentityRecord,
     IdentityStatus,
     IdentityType,
+    RoleBindingRecord,
     RoleRecord,
     ScimTokenRecord,
 )
@@ -37,7 +39,17 @@ def _identity_to_domain(m: models.Identity) -> IdentityRecord:
 
 
 def _role_to_domain(m: models.Role) -> RoleRecord:
-    return RoleRecord(name=m.name, scopes=list(m.scopes or []), description=m.description, created_at=_as_utc(m.created_at))
+    return RoleRecord(
+        id=str(m.id), tenant_id=m.tenant_id, name=m.name, scopes=list(m.scopes or []),
+        description=m.description, created_at=_as_utc(m.created_at),
+    )
+
+
+def _role_binding_to_domain(m: models.RoleBinding) -> RoleBindingRecord:
+    return RoleBindingRecord(
+        id=str(m.id), tenant_id=m.tenant_id, identity_id=m.identity_id, role_name=m.role_name,
+        granted_by=m.granted_by, granted_at=_as_utc(m.granted_at), revoked_at=_as_utc(m.revoked_at),
+    )
 
 
 def _auth_decision_to_domain(m: models.AuthDecision) -> AuthDecisionRecord:
@@ -131,23 +143,95 @@ class SQLAlchemyIdentityAccessRepository:
         return [_identity_to_domain(m) for m in rows.scalars().all()], total
 
     async def create_role(self, record: RoleRecord) -> RoleRecord:
-        m = models.Role(name=record.name, scopes=record.scopes, description=record.description)
+        m = models.Role(
+            id=record.id, tenant_id=record.tenant_id, name=record.name,
+            scopes=record.scopes, description=record.description,
+        )
         self.session.add(m)
         await self.session.commit()
         await self.session.refresh(m)
         return _role_to_domain(m)
 
-    async def get_role(self, name: str) -> RoleRecord | None:
-        m = await self.session.get(models.Role, name)
+    async def get_role_by_tenant_and_name(self, tenant_id: str, name: str) -> RoleRecord | None:
+        stmt = select(models.Role).where(models.Role.tenant_id == tenant_id, models.Role.name == name)
+        m = (await self.session.execute(stmt)).scalars().first()
         return _role_to_domain(m) if m else None
 
-    async def list_roles(self, *, limit: int = 50, offset: int = 0) -> tuple[list[RoleRecord], int]:
-        count_stmt = select(func.count(models.Role.name))
+    async def get_role(self, tenant_id: str, name: str) -> RoleRecord | None:
+        role = await self.get_role_by_tenant_and_name(tenant_id, name)
+        if role is not None:
+            return role
+        if tenant_id == PLATFORM_TENANT_ID:
+            return None
+        return await self.get_role_by_tenant_and_name(PLATFORM_TENANT_ID, name)
+
+    async def list_roles(
+        self, *, tenant_id: str | None = None, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[RoleRecord], int]:
+        filters = []
+        if tenant_id is not None:
+            filters.append(models.Role.tenant_id == tenant_id)
+
+        count_stmt = select(func.count(models.Role.id)).where(*filters)
         total = (await self.session.execute(count_stmt)).scalar_one()
 
-        stmt = select(models.Role).order_by(models.Role.created_at.desc()).limit(limit).offset(offset)
+        stmt = select(models.Role).where(*filters).order_by(models.Role.created_at.desc()).limit(limit).offset(offset)
         rows = await self.session.execute(stmt)
         return [_role_to_domain(m) for m in rows.scalars().all()], total
+
+    async def create_role_binding(self, record: RoleBindingRecord) -> RoleBindingRecord:
+        m = models.RoleBinding(
+            id=record.id, tenant_id=record.tenant_id, identity_id=record.identity_id,
+            role_name=record.role_name, granted_by=record.granted_by,
+        )
+        self.session.add(m)
+        await self.session.commit()
+        await self.session.refresh(m)
+        return _role_binding_to_domain(m)
+
+    async def get_active_role_binding(self, *, identity_id: str, role_name: str) -> RoleBindingRecord | None:
+        stmt = (
+            select(models.RoleBinding)
+            .where(
+                models.RoleBinding.identity_id == identity_id,
+                models.RoleBinding.role_name == role_name,
+                models.RoleBinding.revoked_at.is_(None),
+            )
+            .order_by(models.RoleBinding.granted_at.desc())
+        )
+        m = (await self.session.execute(stmt)).scalars().first()
+        return _role_binding_to_domain(m) if m else None
+
+    async def revoke_role_binding(self, binding_id: str) -> RoleBindingRecord | None:
+        m = await self.session.get(models.RoleBinding, binding_id)
+        if m is None:
+            return None
+        m.revoked_at = datetime.now(UTC)
+        await self.session.commit()
+        await self.session.refresh(m)
+        return _role_binding_to_domain(m)
+
+    async def list_role_bindings(
+        self, *, tenant_id: str | None = None, identity_id: str | None = None, role_name: str | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> tuple[list[RoleBindingRecord], int]:
+        filters = []
+        if tenant_id is not None:
+            filters.append(models.RoleBinding.tenant_id == tenant_id)
+        if identity_id is not None:
+            filters.append(models.RoleBinding.identity_id == identity_id)
+        if role_name is not None:
+            filters.append(models.RoleBinding.role_name == role_name)
+
+        count_stmt = select(func.count(models.RoleBinding.id)).where(*filters)
+        total = (await self.session.execute(count_stmt)).scalar_one()
+
+        stmt = (
+            select(models.RoleBinding).where(*filters).order_by(models.RoleBinding.granted_at.desc())
+            .limit(limit).offset(offset)
+        )
+        rows = await self.session.execute(stmt)
+        return [_role_binding_to_domain(m) for m in rows.scalars().all()], total
 
     async def create_auth_decision(self, record: AuthDecisionRecord) -> AuthDecisionRecord:
         m = models.AuthDecision(

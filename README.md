@@ -1125,6 +1125,33 @@ fail-open version (porting is mechanical, tracked there), and
 `requests_per_minute` check, Vector DB's `vector_count` check) are a
 related but distinct gap, untouched by this pass.
 
+**Next P0 Phase 1A closure item: Identity and Access's IAM v2
+foundation — tenant-scoped roles and a real role-binding lifecycle.**
+Direct inspection surfaced two real gaps behind the reassessment's own
+§31 finding ("no... user/group/membership lifecycle"), neither
+previously documented: `RoleRecord.name` was this module's sole,
+platform-global primary key — one tenant creating a role called
+`"admin"` meant no other tenant could ever create their own `"admin"`,
+since the second tenant's `create_role` call failed outright against
+the first tenant's row — and there was no way to grant or revoke a
+single role on an already-registered identity at all; `role_names`
+could only ever be set once, at `register()` time. Both fixed: `Role`
+gained real tenant scoping (`id`/`tenant_id`, a unique constraint on
+`(tenant_id, name)`, a `PLATFORM_TENANT_ID` sentinel for a platform-wide
+default role every tenant can fall back to, backfilled via a real
+Alembic migration that preserves every pre-existing role's access
+exactly); and a new `RoleBindingService` gives `POST
+/identities/{id}/roles` (grant) and `.../roles/{role_name}/revoke`
+their own durable, queryable `RoleBindingRecord` audit trail
+(`granted_by`/`granted_at`/`revoked_at`), the same "materialized view +
+event log" split this module already used for `AuthDecisionRecord`.
+Deliberately not built: a separate `TenantMembership` entity — every
+`IdentityRecord` already belongs to exactly one tenant for its whole
+life, so a role binding already *is* this module's membership record;
+a third entity would only restate `tenant_id`. Full design, including
+the exact reasoning for both deliberate omissions, in that module's own
+README.
+
 ## Modules
 
 ### Module 1: Workflow Engine

@@ -40,7 +40,7 @@ class TokenService:
         # access working.
         granted_pool: set[str] = set()
         for role_name in {*identity.role_names, *identity.federated_role_names}:
-            role = await self._repository.get_role(role_name)
+            role = await self._repository.get_role(identity.tenant_id, role_name)
             if role is not None:
                 granted_pool.update(role.scopes)
 

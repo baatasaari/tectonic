@@ -15,6 +15,23 @@ def new_id() -> str:
     return str(uuid.uuid4())
 
 
+# IAM v2 foundation (independent architecture assessment §31, P0: "no...
+# user/group/membership lifecycle"). Before this, `RoleRecord` had no
+# tenant scoping at all -- `name` was the sole, platform-wide primary
+# key, so two tenants could never each have their own role named e.g.
+# "admin" (the second tenant's `create_role` call just fails outright,
+# since the first tenant already owns that name globally). Roles are now
+# tenant-scoped; this sentinel marks a *platform-wide* role -- seeded
+# once, resolvable by every tenant as a fallback when no tenant-specific
+# role of that name exists (see RoleService.get / the repository's
+# get_role two-step lookup) -- rather than reusing `None`, since every
+# other tenant_id field in this module's data model is a required
+# string, never nullable; a real sentinel value keeps that consistent
+# and lets the same non-nullable `tenant_id` column/unique-constraint
+# shape apply here as everywhere else.
+PLATFORM_TENANT_ID = "__platform__"
+
+
 class IdentityType(StrEnum):
     USER = "user"
     AGENT = "agent"
@@ -61,6 +78,19 @@ class RoleNotFoundError(Exception):
         super().__init__(f"Role not found: {role_name}")
 
 
+class RoleAlreadyExistsError(Exception):
+    def __init__(self, tenant_id: str, role_name: str) -> None:
+        super().__init__(f"Role already exists for tenant {tenant_id}: {role_name}")
+
+
+class RoleNotGrantedError(Exception):
+    """Raised revoking a role an identity doesn't currently hold -- distinct
+    from RoleNotFoundError (the role itself doesn't exist at all)."""
+
+    def __init__(self, identity_id: str, role_name: str) -> None:
+        super().__init__(f"Identity {identity_id} does not hold role: {role_name}")
+
+
 class InvalidTransitionError(Exception):
     def __init__(self, from_status: IdentityStatus, to_status: IdentityStatus) -> None:
         super().__init__(f"Illegal transition: {from_status.value} -> {to_status.value}")
@@ -98,9 +128,36 @@ class ScimConflictError(Exception):
 @dataclass
 class RoleRecord:
     name: str
+    # PLATFORM_TENANT_ID for a platform-wide default role, a real tenant_id for
+    # a tenant's own custom role -- see PLATFORM_TENANT_ID's own docstring above.
+    tenant_id: str = PLATFORM_TENANT_ID
+    id: str = field(default_factory=new_id)
     scopes: list[str] = field(default_factory=list)
     description: str = ""
     created_at: datetime = field(default_factory=now)
+
+
+@dataclass
+class RoleBindingRecord:
+    """A durable, individually-queryable grant/revoke event -- the real
+    "role binding" the IAM v2 foundation gap named: `IdentityRecord.
+    role_names` stays the fast-path "currently effective roles" list
+    (what TokenService/AuthorizationService actually read), while this
+    record is its audit trail, the same "materialized view + event log"
+    split this module already uses for AuthDecisionRecord vs. the live
+    `authorize()` check. One row per grant; `revoked_at` is set in place
+    on that same row when the grant is later revoked (not a second row)
+    -- so "is this role currently granted, and when/by whom, and if
+    revoked when" is always one record, not a scan-and-pair-up over two.
+    """
+
+    id: str
+    tenant_id: str
+    identity_id: str
+    role_name: str
+    granted_by: str = ""
+    granted_at: datetime = field(default_factory=now)
+    revoked_at: datetime | None = None
 
 
 @dataclass

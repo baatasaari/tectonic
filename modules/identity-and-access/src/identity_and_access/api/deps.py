@@ -11,6 +11,7 @@ from identity_and_access.core.identity_provider_service import IdentityProviderS
 from identity_and_access.core.identity_registry_service import IdentityRegistryService
 from identity_and_access.core.oidc_federation_service import OidcFederationService
 from identity_and_access.core.ports import IdentityAccessRepository
+from identity_and_access.core.role_binding_service import RoleBindingService
 from identity_and_access.core.role_service import RoleService
 from identity_and_access.core.saml_federation_service import SamlFederationService
 from identity_and_access.core.scim_token_service import ScimTokenService
@@ -37,6 +38,10 @@ def build_identity_registry_service(repository: IdentityAccessRepository) -> Ide
 
 def build_role_service(repository: IdentityAccessRepository) -> RoleService:
     return RoleService(repository)
+
+
+def build_role_binding_service(repository: IdentityAccessRepository) -> RoleBindingService:
+    return RoleBindingService(repository)
 
 
 def build_token_service(repository: IdentityAccessRepository, ctx: AppContext) -> TokenService:
