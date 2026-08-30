@@ -60,6 +60,13 @@ from typing import Any
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "test-data" / "subscription-tiers"
 FIXTURE_ORDER = ["starter.json", "growth.json", "enterprise.json", "custom.json", "demo.json"]
 
+# Matches identity_and_access.core.domain.PLATFORM_TENANT_ID (IAM v2 foundation:
+# roles are tenant-scoped now, with this sentinel marking a platform-wide default
+# a caller can pass instead of a real tenant_id). TENANT_ADMIN_ROLE is exactly
+# that case -- one shared role, created once before any tenant exists, assigned to
+# every tier's own separately-created tenant below.
+PLATFORM_TENANT_ID = "__platform__"
+
 MULTI_TENANCY_URL = os.environ.get("MULTI_TENANCY_URL", "http://localhost:8109")
 BILLING_URL = os.environ.get("BILLING_URL", "http://localhost:8112")
 IDENTITY_ACCESS_URL = os.environ.get("IDENTITY_ACCESS_URL", "http://localhost:8110")
@@ -124,7 +131,10 @@ def call(
 
 def ensure_tenant_admin_role() -> None:
     try:
-        call("POST", f"{IDENTITY_ACCESS_URL}/v1/identity-access/roles", audience="identity-access", json_body=TENANT_ADMIN_ROLE)
+        call(
+            "POST", f"{IDENTITY_ACCESS_URL}/v1/identity-access/roles", audience="identity-access",
+            tenant_id=PLATFORM_TENANT_ID, json_body=TENANT_ADMIN_ROLE,
+        )
         print(f"  [identity-access] created role {TENANT_ADMIN_ROLE['name']!r}")
     except ApiError as exc:
         # Not idempotent by design (core/role_service.py) -- a second run hitting a

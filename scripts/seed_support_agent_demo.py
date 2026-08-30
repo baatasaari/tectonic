@@ -134,9 +134,21 @@ def call(
         raise ApiError(method, url, exc.code, body) from exc
 
 
-def ensure_role(role: dict) -> None:
+def ensure_role(role: dict, *, tenant_id: str) -> None:
+    """Creates this role scoped to `tenant_id` (IAM v2 foundation: roles
+    are tenant-scoped now, `POST /roles` resolves the same X-Tenant-Id
+    header every other tenant-scoped route here does) -- must match the
+    tenant identities are later registered under, or role assignment
+    fails with a 404 (a real gap this exact seed script surfaced when
+    that fix first shipped: role creation and identity registration
+    silently used two different tenants -- the module's own default and
+    the real Acme tenant -- since only the latter call passed
+    tenant_id)."""
     try:
-        call("POST", f"{IDENTITY_ACCESS_URL}/v1/identity-access/roles", audience="identity-access", json_body=role)
+        call(
+            "POST", f"{IDENTITY_ACCESS_URL}/v1/identity-access/roles", audience="identity-access",
+            tenant_id=tenant_id, json_body=role,
+        )
         print(f"  [identity-access] created role {role['name']!r}")
     except ApiError as exc:
         print(f"  [identity-access] role {role['name']!r} already exists or rejected ({exc.status}), continuing")
@@ -190,8 +202,8 @@ def phase1() -> dict:
     )
     print(f"  [billing-and-metering] pricing plan created ({len(SLICE_MODULE_NAMES)} metered resources)")
 
-    ensure_role(ADMIN_ROLE)
-    ensure_role(CUSTOMER_ROLE)
+    ensure_role(ADMIN_ROLE, tenant_id=tenant_id)
+    ensure_role(CUSTOMER_ROLE, tenant_id=tenant_id)
 
     end_user = call(
         "POST", f"{IDENTITY_ACCESS_URL}/v1/identity-access/identities", audience="identity-access",
