@@ -42,6 +42,18 @@ async def test_register_with_a_real_role(harness):
     assert identity.role_names == ["reader"]
 
 
+async def test_register_rejects_a_role_that_only_exists_for_a_different_tenant(harness):
+    """The IAM v2 tenant-scoped-roles fix's own regression test: a role
+    created for one tenant (not the platform-wide default) must not be
+    assignable when registering an identity in a different tenant."""
+    await harness.role_service.create(tenant_id="globex", name="reader", scopes=["cards:read"])
+
+    with pytest.raises(RoleNotFoundError):
+        await harness.identity_registry_service.register(
+            tenant_id="acme", name="agent-1", role_names=["reader"],
+        )
+
+
 async def test_get_raises_when_missing(harness):
     with pytest.raises(IdentityNotFoundError):
         await harness.identity_registry_service.get("does-not-exist")

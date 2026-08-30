@@ -13,6 +13,7 @@ from identity_and_access.core.group_service import GroupService
 from identity_and_access.core.identity_provider_service import IdentityProviderService
 from identity_and_access.core.identity_registry_service import IdentityRegistryService
 from identity_and_access.core.oidc_federation_service import OidcFederationService
+from identity_and_access.core.role_binding_service import RoleBindingService
 from identity_and_access.core.role_service import RoleService
 from identity_and_access.core.saml_federation_service import SamlFederationService
 from identity_and_access.core.scim_service import ScimGroupService, ScimUserService
@@ -33,6 +34,7 @@ class Harness:
 
         self.identity_registry_service = IdentityRegistryService(self.repository)
         self.role_service = RoleService(self.repository)
+        self.role_binding_service = RoleBindingService(self.repository)
         self.token_service = TokenService(
             self.repository, self.signer, default_ttl_seconds=kwargs.get("default_ttl_seconds", 3600),
         )

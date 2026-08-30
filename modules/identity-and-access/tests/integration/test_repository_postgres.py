@@ -13,10 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from alembic import command
 from identity_and_access.core.domain import (
+    PLATFORM_TENANT_ID,
     AuthDecisionRecord,
     IdentityRecord,
     IdentityStatus,
     IdentityType,
+    RoleBindingRecord,
     RoleRecord,
     new_id,
 )
@@ -43,8 +45,76 @@ async def test_role_scopes_array_round_trips(migrated_url):
                 RoleRecord(name=f"reader-{new_id()[:8]}", scopes=["cards:read", "cards:list"], description="ro")
             )
 
-            fetched = await repo.get_role(created.name)
+            fetched = await repo.get_role(created.tenant_id, created.name)
             assert fetched.scopes == ["cards:read", "cards:list"]
+    finally:
+        await engine.dispose()
+
+
+async def test_two_tenants_can_own_a_role_with_the_same_name(migrated_url):
+    """Real-Postgres proof of the IAM v2 tenant-scoped-roles fix: the
+    unique constraint is on (tenant_id, name), not on name alone."""
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyIdentityAccessRepository(session)
+            role_name = f"admin-{new_id()[:8]}"
+            acme_role = await repo.create_role(
+                RoleRecord(tenant_id="acme-pg", name=role_name, scopes=["cards:admin"])
+            )
+            globex_role = await repo.create_role(
+                RoleRecord(tenant_id="globex-pg", name=role_name, scopes=["cards:read"])
+            )
+
+            assert acme_role.id != globex_role.id
+            assert (await repo.get_role("acme-pg", role_name)).scopes == ["cards:admin"]
+            assert (await repo.get_role("globex-pg", role_name)).scopes == ["cards:read"]
+    finally:
+        await engine.dispose()
+
+
+async def test_get_role_falls_back_to_the_platform_wide_default(migrated_url):
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyIdentityAccessRepository(session)
+            role_name = f"viewer-{new_id()[:8]}"
+            await repo.create_role(RoleRecord(tenant_id=PLATFORM_TENANT_ID, name=role_name, scopes=["cards:read"]))
+
+            fetched = await repo.get_role("some-tenant-with-no-custom-role", role_name)
+            assert fetched is not None
+            assert fetched.tenant_id == PLATFORM_TENANT_ID
+    finally:
+        await engine.dispose()
+
+
+async def test_role_binding_grant_and_revoke_round_trip(migrated_url):
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyIdentityAccessRepository(session)
+            identity_id = new_id()
+            binding = await repo.create_role_binding(
+                RoleBindingRecord(
+                    id=new_id(), tenant_id="acme-pg", identity_id=identity_id,
+                    role_name="reader", granted_by="operator-1",
+                )
+            )
+            assert binding.revoked_at is None
+
+            active = await repo.get_active_role_binding(identity_id=identity_id, role_name="reader")
+            assert active is not None
+            assert active.id == binding.id
+
+            revoked = await repo.revoke_role_binding(binding.id)
+            assert revoked.revoked_at is not None
+
+            assert await repo.get_active_role_binding(identity_id=identity_id, role_name="reader") is None
+
+            bindings, total = await repo.list_role_bindings(identity_id=identity_id)
+            assert total == 1
+            assert bindings[0].granted_by == "operator-1"
+            assert bindings[0].revoked_at is not None
     finally:
         await engine.dispose()
 

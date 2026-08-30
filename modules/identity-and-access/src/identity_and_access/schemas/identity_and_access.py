@@ -13,6 +13,8 @@ class CreateRoleRequest(BaseModel):
 
 
 class RoleSchema(BaseModel):
+    id: str
+    tenant_id: str
     name: str
     scopes: list[str]
     description: str
@@ -21,6 +23,28 @@ class RoleSchema(BaseModel):
 
 class RoleListResponse(BaseModel):
     items: list[RoleSchema]
+    total: int
+    limit: int
+    offset: int
+
+
+class GrantRoleRequest(BaseModel):
+    role_name: str
+    granted_by: str = ""
+
+
+class RoleBindingSchema(BaseModel):
+    id: str
+    tenant_id: str
+    identity_id: str
+    role_name: str
+    granted_by: str
+    granted_at: datetime
+    revoked_at: datetime | None = None
+
+
+class RoleBindingListResponse(BaseModel):
+    items: list[RoleBindingSchema]
     total: int
     limit: int
     offset: int

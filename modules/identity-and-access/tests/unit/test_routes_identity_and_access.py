@@ -53,17 +53,19 @@ def _headers(**extra):
 
 def test_create_role_and_register_identity():
     app = _app(InMemoryIdentityAccessRepository())
+    headers = _headers(**{"X-Tenant-Id": "acme"})
 
     with TestClient(app) as client:
         role = client.post(
-            "/v1/identity-access/roles", json={"name": "reader", "scopes": ["cards:read"]}, headers=_headers(),
+            "/v1/identity-access/roles", json={"name": "reader", "scopes": ["cards:read"]}, headers=headers,
         ).json()
         assert role["scopes"] == ["cards:read"]
+        assert role["tenant_id"] == "acme"
 
         identity = client.post(
             "/v1/identity-access/identities",
             json={"name": "agent-1", "type": "agent", "role_names": ["reader"]},
-            headers=_headers(**{"X-Tenant-Id": "acme"}),
+            headers=headers,
         ).json()
 
     assert identity["tenant_id"] == "acme"
@@ -246,3 +248,116 @@ def test_list_scim_tokens_rejects_a_null_byte_in_tenant_id_with_a_clean_422():
         )
 
     assert resp.status_code == 422
+
+
+def test_list_roles_rejects_a_null_byte_in_tenant_id_with_a_clean_422():
+    app = _app(InMemoryIdentityAccessRepository())
+
+    with TestClient(app) as client:
+        resp = client.get(
+            "/v1/identity-access/roles", params={"tenant_id": "a\x00b"}, headers=_headers(),
+        )
+
+    assert resp.status_code == 422
+
+
+def test_creating_the_same_role_name_twice_for_one_tenant_returns_409():
+    app = _app(InMemoryIdentityAccessRepository())
+    headers = _headers(**{"X-Tenant-Id": "acme"})
+
+    with TestClient(app) as client:
+        client.post("/v1/identity-access/roles", json={"name": "reader", "scopes": ["cards:read"]}, headers=headers)
+        resp = client.post(
+            "/v1/identity-access/roles", json={"name": "reader", "scopes": ["cards:read"]}, headers=headers,
+        )
+
+    assert resp.status_code == 409
+
+
+def test_two_tenants_can_each_create_a_role_with_the_same_name():
+    """IAM v2 foundation: this used to fail outright -- `roles.name` was the
+    sole, platform-global primary key, so a second tenant could never
+    create a role with a name any other tenant already used."""
+    app = _app(InMemoryIdentityAccessRepository())
+
+    with TestClient(app) as client:
+        acme = client.post(
+            "/v1/identity-access/roles", json={"name": "admin", "scopes": ["cards:admin"]},
+            headers=_headers(**{"X-Tenant-Id": "acme"}),
+        )
+        globex = client.post(
+            "/v1/identity-access/roles", json={"name": "admin", "scopes": ["cards:read"]},
+            headers=_headers(**{"X-Tenant-Id": "globex"}),
+        )
+
+    assert acme.status_code == 201
+    assert globex.status_code == 201
+    assert acme.json()["id"] != globex.json()["id"]
+
+
+def test_grant_and_revoke_a_role_on_an_already_registered_identity():
+    """The other IAM v2 foundation gap this fixes: before this, a role
+    could only ever be set once, at registration -- there was no way to
+    grant or revoke a single role on an existing identity at all."""
+    app = _app(InMemoryIdentityAccessRepository())
+    headers = _headers(**{"X-Tenant-Id": "acme"})
+
+    with TestClient(app) as client:
+        client.post("/v1/identity-access/roles", json={"name": "reader", "scopes": ["cards:read"]}, headers=headers)
+        identity = client.post(
+            "/v1/identity-access/identities", json={"name": "agent-1"}, headers=headers,
+        ).json()
+        assert identity["role_names"] == []
+
+        granted = client.post(
+            f"/v1/identity-access/identities/{identity['id']}/roles",
+            json={"role_name": "reader", "granted_by": "operator-1"}, headers=headers,
+        )
+        assert granted.status_code == 201
+        assert granted.json()["role_names"] == ["reader"]
+
+        bindings = client.get(
+            f"/v1/identity-access/identities/{identity['id']}/role-bindings", headers=headers,
+        ).json()
+        assert bindings["total"] == 1
+        assert bindings["items"][0]["granted_by"] == "operator-1"
+        assert bindings["items"][0]["revoked_at"] is None
+
+        revoked = client.post(
+            f"/v1/identity-access/identities/{identity['id']}/roles/reader/revoke", headers=headers,
+        )
+        assert revoked.status_code == 200
+        assert revoked.json()["role_names"] == []
+
+        bindings_after = client.get(
+            f"/v1/identity-access/identities/{identity['id']}/role-bindings", headers=headers,
+        ).json()
+        assert bindings_after["total"] == 1  # same row, updated in place -- not a second row
+        assert bindings_after["items"][0]["revoked_at"] is not None
+
+
+def test_granting_an_unknown_role_returns_404():
+    app = _app(InMemoryIdentityAccessRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        identity = client.post("/v1/identity-access/identities", json={"name": "agent-1"}, headers=headers).json()
+        resp = client.post(
+            f"/v1/identity-access/identities/{identity['id']}/roles",
+            json={"role_name": "does-not-exist"}, headers=headers,
+        )
+
+    assert resp.status_code == 404
+
+
+def test_revoking_a_role_the_identity_does_not_hold_returns_404():
+    app = _app(InMemoryIdentityAccessRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        identity = client.post("/v1/identity-access/identities", json={"name": "agent-1"}, headers=headers).json()
+        resp = client.post(
+            f"/v1/identity-access/identities/{identity['id']}/roles/never-granted/revoke", headers=headers,
+        )
+
+    assert resp.status_code == 404

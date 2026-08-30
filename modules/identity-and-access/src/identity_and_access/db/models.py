@@ -7,7 +7,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CHAR, JSON, Boolean, DateTime, String, Text, func
+from sqlalchemy import CHAR, JSON, Boolean, DateTime, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -44,12 +44,35 @@ class Identity(Base):
 
 
 class Role(Base):
-    __tablename__ = "roles"
+    """Tenant-scoped (IAM v2 foundation) -- `name` was this table's own
+    primary key before, making every role platform-global; see domain.py's
+    PLATFORM_TENANT_ID docstring for the migration and reasoning."""
 
-    name: Mapped[str] = mapped_column(String(255), primary_key=True)
+    __tablename__ = "roles"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_roles_tenant_name"),)
+
+    id: Mapped[str] = mapped_column(UUIDType, primary_key=True, default=_new_id)
+    tenant_id: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(String(255))
     scopes: Mapped[list[str]] = mapped_column(StringArray, default=list)
     description: Mapped[str] = mapped_column(Text(), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RoleBinding(Base):
+    """One row per grant event (IAM v2 foundation) -- see
+    RoleBindingRecord's own docstring in core/domain.py for why revoke
+    updates this same row's revoked_at rather than adding a second row."""
+
+    __tablename__ = "role_bindings"
+
+    id: Mapped[str] = mapped_column(UUIDType, primary_key=True, default=_new_id)
+    tenant_id: Mapped[str] = mapped_column(String(255))
+    identity_id: Mapped[str] = mapped_column(String(255))
+    role_name: Mapped[str] = mapped_column(String(255))
+    granted_by: Mapped[str] = mapped_column(String(255), default="")
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AuthDecision(Base):
