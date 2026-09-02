@@ -2,6 +2,7 @@
 (LLD §3)."""
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select
@@ -21,6 +22,24 @@ def _as_utc(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+
+
+def _is_valid_uuid(value: str) -> bool:
+    """`id` columns are Postgres `UUID`; an externally-supplied `str`
+    that isn't a syntactically valid UUID by definition names no row,
+    but handing it to `asyncpg` regardless raises an unhandled
+    `DataError` deep in the driver instead of the caller's own
+    `None`/404 path (found by this module's own new OpenAPI
+    contract-test tier -- see Identity and Access's/Multi-tenancy's own
+    `db/repository.py` for the original instances of this exact fix).
+    Callers to a `get_*`/lookup-by-externally-supplied-id method must
+    check this first; `record.id` values this repository generates
+    itself (always via `core.domain.new_id()`) never need it."""
+    try:
+        uuid.UUID(value)
+        return True
+    except ValueError:
+        return False
 
 
 def _run_to_domain(m: models.EvalRun) -> EvalRunRecord:
@@ -79,6 +98,8 @@ class SQLAlchemyEvaluationFrameworkRepository:
         return _run_to_domain(m)
 
     async def get_eval_run(self, tenant_id: str, eval_run_id: str) -> EvalRunRecord | None:
+        if not _is_valid_uuid(eval_run_id):
+            return None
         m = await self.session.get(models.EvalRun, eval_run_id)
         if m is None or m.tenant_id != tenant_id:
             return None

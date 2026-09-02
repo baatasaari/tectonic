@@ -218,6 +218,65 @@ src/evaluation_framework/
   agent_ref)`, migration `0002`) backs the query; scores aren't included
   in list responses (an N+1 a caller resolving a bare id doesn't need).
 
+- **Contract-test tier (new; ticket #73/#80's rollout continued).**
+  `tests/contract/` — real OpenAPI-schema-driven fuzzing (schemathesis +
+  Hypothesis) against a live app instance and real Postgres, ported from
+  Identity and Access's own reference `conftest.py`. Picked as the next
+  module for this rollout specifically because this session's own
+  evaluation-gated-release-path work just added a never-fuzzed route
+  (`GET /eval-runs`) and made this module's `/gate` verdict load-bearing
+  for both PromptOps' and LLMOps' own release gates. Its first several
+  runs found four real, previously-invisible bugs:
+  - **NUL bytes in Pydantic *body* fields**, not just the raw `Query()`
+    string parameters ticket #82's sweep already covered — `POST
+    /evaluate`'s `tenant_id`/`agent_ref`/`trigger_source`/`metric_set`
+    items, `POST /gate`'s `tenant_id`/`eval_run_id`/`environment`, `POST
+    /domain-packs`'s `tenant_id`/`pack_name`, `POST /sample`'s
+    `tenant_id`/`agent_ref`/`metric_set` items all reached
+    `session.execute()` raw instead of a clean `422` — fixed with the
+    established `_reject_null_byte` `field_validator` pattern (LLM
+    Gateway's `schemas/admin.py`).
+  - **A NUL byte survives inside a `dict` *key* too** — `POST
+    /domain-packs`'s `custom_thresholds` round-trips as a real `jsonb`
+    column, and jsonb's own text-based storage rejects an embedded NUL
+    exactly like `text`/`varchar` does, even nested inside an object key.
+    Fixed with the same per-key validator Billing and Metering's own
+    `unit_prices` already established.
+  - **A syntactically-invalid UUID handed straight to `session.get()`**
+    — `POST /gate`'s `eval_run_id` crashed with an unhandled
+    `asyncpg.DataError` instead of a clean `404` (`GateEngine.gate`
+    already had a documented not-found path; nothing reached it). Fixed
+    with `db/repository.py`'s own `_is_valid_uuid` guard, the same
+    pattern Identity and Access's `get_identity`/`get_group`/etc.
+    already established.
+  - **The platform's own "unbounded offset" class** (this repo's
+    `CLAUDE.md`-documented recurring bug: already fixed for Billing and
+    Metering's, LLM Gateway's, Multi-tenancy's and Workflow Engine's own
+    `offset` query params) — `GET /eval-runs`'s and `GET /scores`'s
+    `offset` had no upper bound, so a value past Postgres `bigint` range
+    crashed instead of a clean `422`. Fixed with the same `le=
+    1_000_000_000` bound those modules use. **Left deliberately
+    unfixed/out of scope of this pass**: this same gap is still open on
+    every *other* module's `offset` query params that don't yet have an
+    `le=` bound (most of the platform, Identity and Access included,
+    despite already having its own contract tier — schemathesis's
+    integer strategy doesn't reliably generate an overflow value every
+    run, so this can pass by chance) — a real, sourced next candidate
+    for this same mechanical-leverage backlog item, not silently swept
+    here since it's a platform-wide change well beyond this module.
+  All four were unreachable from `pytest tests/unit` (SQLite's fake
+  can't reproduce a real Postgres encoding/type error) — `tests/
+  integration/test_repository_postgres.py`'s new
+  `test_a_non_uuid_eval_run_id_returns_none_instead_of_crashing` is the
+  one that needed real Postgres; the other three got route-level unit
+  regressions since `InMemoryEvaluationFrameworkRepository` never
+  reaches the database at all. Hypothesis's randomized example
+  generation means a single green contract-tier run doesn't fully prove
+  the absence of further bugs of this shape — this pass reran it
+  repeatedly (4 consecutive clean runs after all four fixes) rather than
+  trusting one pass, the same discipline this repo's own `CLAUDE.md`
+  documents for this tier.
+
 ## Running locally
 
 ```bash

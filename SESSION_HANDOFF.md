@@ -280,16 +280,33 @@ default). Neither is a production credential.
 ## 12. Backlog (P0/P1/P2/P3)
 
 - **P0**: Two closed this session (see the "P0 -- DONE" entries below);
-  several remain open from the reassessment's own Phase 1A backlog (IAM
-  v2's own contract-test-tier rollout to the ~29 modules that don't have
-  it, provisioning-saga reconciliation, universal operation-level
-  authorization, a real external access gateway, event-backbone
-  consumer/inbox pattern, image supply-chain build/scan/sign/admission
-  gates, branch-protection required-status-check configuration -- no
-  GitHub MCP tool found for that last one this session). Nothing is
-  currently broken or blocking merge; all touched modules are green
-  (including in real GitHub Actions CI, not just this sandbox -- see the
-  note on `TECTONIC_TEST_POSTGRES_URL`-vs-CI-credentials below).
+  several remain open from the reassessment's own Phase 1A backlog (the
+  contract-test-tier rollout to the ~28 modules that still don't have
+  it -- 7 of 34 now do, Evaluation Framework the newest, per the P1
+  entry below; provisioning-saga reconciliation, universal
+  operation-level authorization, a real external access gateway,
+  event-backbone consumer/inbox pattern, image supply-chain
+  build/scan/sign/admission gates, branch-protection required-status-
+  check configuration -- no GitHub MCP tool found for that last one
+  this session). Nothing is currently broken or blocking merge; all
+  touched modules are green (including in real GitHub Actions CI, not
+  just this sandbox -- see the note on
+  `TECTONIC_TEST_POSTGRES_URL`-vs-CI-credentials below).
+- **P1 -- new, found this session, not yet fixed.** The platform's own
+  "unbounded offset" class (already fixed once for Billing and
+  Metering, LLM Gateway, Multi-tenancy, Workflow Engine) is still open
+  on nearly every *other* module's `offset` query params -- confirmed
+  by grep after Evaluation Framework's own contract tier found it
+  there too (see that P1 "DONE" entry below for the full finding).
+  `grep -rn "offset: int = Query" modules/*/src/*/api/*.py` and check
+  which lack `le=` — Identity and Access is a notable case: it already
+  has a contract tier, but Hypothesis's randomized integer generation
+  doesn't reliably produce an overflow value every run, so this gap
+  can pass by chance. A pure mechanical grep-and-fix (add
+  `le=1_000_000_000` + a regression test per route), not a per-module
+  contract-tier rollout -- much cheaper per bug found than continuing
+  the rollout to a brand-new module, and arguably the single highest
+  mechanical-leverage item left in the backlog right now.
 - **P1 -- DONE (this session).** The platform-wide NUL-byte-in-a-raw-
   `Query()`-string-parameter bug class (originally surfaced for real by
   the new CI job's own first run, against Multi-tenancy's and Billing
@@ -607,6 +624,74 @@ default). Neither is a production credential.
   unit (+3 new: same three cases), 3 integration tests green. All
   three modules' migrations/repositories verified against this
   sandbox's real local Postgres, not SQLite fakes alone.
+- **P1 -- DONE (this session).** Asked how to prioritize the numbered
+  Tier A/B/C backlog presented after the evaluation-gated-release-path
+  work, the user chose "mechanical leverage first" over risk-ranking or
+  working straight down the list -- so this continued the contract-
+  test-tier rollout (ticket #73/#80) rather than starting a new backlog
+  category. 6 of 34 modules had the tier before this (Billing and
+  Metering, Identity and Access, LLM Gateway, Multi-tenancy, Vector DB,
+  Workflow Engine); **Evaluation Framework** picked as the 7th
+  specifically because this same session's own evaluation-gated-
+  release-path work had just made it load-bearing for both PromptOps'
+  and LLMOps' release gates, and its new `GET /eval-runs` route had
+  never been fuzzed. `tests/contract/`, ported from Identity and
+  Access's own reference `conftest.py`. Found four real,
+  previously-invisible bugs on the first several runs (not caught in
+  one pass -- see below):
+  1. **NUL bytes in Pydantic *body* fields** -- ticket #82's original
+     sweep only ever covered raw `Query()` string parameters; this
+     module's own `POST /evaluate` (`tenant_id`/`agent_ref`/
+     `trigger_source`/`metric_set` items), `/gate` (`tenant_id`/
+     `eval_run_id`/`environment`), `/domain-packs` (`tenant_id`/
+     `pack_name`), `/sample` (`tenant_id`/`agent_ref`/`metric_set`
+     items) all reached `session.execute()` raw instead of a clean
+     `422`. Fixed with LLM Gateway's own established
+     `_reject_null_byte` `field_validator` pattern.
+  2. **A NUL byte survives inside a `dict` *key* too** -- `POST
+     /domain-packs`'s `custom_thresholds` round-trips as real `jsonb`,
+     and jsonb's own text-based storage rejects an embedded NUL exactly
+     like `text`/`varchar` does, even nested inside an object key. Not
+     caught by (1)'s top-level field validators -- needed its own
+     per-key validator, the same pattern Billing and Metering's own
+     `unit_prices` already established.
+  3. **A syntactically-invalid UUID handed straight to
+     `session.get()`** -- `POST /gate`'s `eval_run_id` crashed with an
+     unhandled `asyncpg.DataError` instead of the route's own clean
+     `404` path (`GateEngine.gate` already had a documented
+     `EvalRunNotFoundError` -> `404` handler; nothing upstream of the
+     DB call ever reached it). Fixed with `db/repository.py`'s own new
+     `_is_valid_uuid` guard on `get_eval_run`, the identical pattern
+     Identity and Access's `get_identity`/`get_group`/etc. established.
+  4. **The platform's own "unbounded offset" class** (this repo's own
+     `CLAUDE.md`-documented recurring bug -- previously fixed only for
+     Billing and Metering, LLM Gateway, Multi-tenancy, Workflow Engine)
+     -- `GET /eval-runs`'s and `GET /scores`'s `offset` had no upper
+     bound, so a value past Postgres `bigint` range crashed instead of
+     a clean `422`. Fixed with the identical `le=1_000_000_000` bound.
+     **Left deliberately unfixed, out of this pass's scope**: grepping
+     confirmed this same gap is still open on every *other* module's
+     `offset` query params that lack an `le=` bound -- almost the whole
+     platform, Identity and Access included despite already having its
+     own contract tier (Hypothesis's randomized integer generation
+     doesn't reliably produce an overflow value every run, so it can
+     pass by chance). This is a real, sourced, ready-to-go next
+     mechanical-leverage candidate -- a platform-wide grep-and-fix, not
+     a per-module contract-tier rollout -- flagged rather than silently
+     swept here since it reaches ~25+ files well beyond this module.
+  All four fixes verified: ruff clean; 78 unit tests green (was 74,
+  +4 new: NUL-byte-in-body-field on `/evaluate`, NUL-byte-in-dict-key
+  on `/domain-packs`, clean-404-for-non-UUID on `/gate`,
+  offset-bound-422 on `/eval-runs`); 6 integration tests green against
+  real Postgres (was 5, +1: `test_a_non_uuid_eval_run_id_returns_none_
+  instead_of_crashing`, the one regression SQLite's fake genuinely
+  can't reproduce). The contract tier itself reran clean 4 consecutive
+  times after all four fixes landed -- Hypothesis's own randomized
+  example generation means a single green run doesn't fully prove a
+  bug class's absence, the same discipline that caught bugs (2) and (4)
+  in the first place (both only surfaced on a *later* rerun, not the
+  first green-looking pass). Root README's running narrative and this
+  module's own README both updated with the full account.
 - **P1**: Fix Agentic RAG's own Graph DB/Knowledge-Base-symbolic-lookup
   client wire shapes properly (currently sidestepped via
   `hybrid_retrieval_enabled=false` for this slice only) once Knowledge

@@ -192,3 +192,25 @@ async def test_gate_result_blocking_failures_round_trip_as_real_jsonb(migrated_u
             assert gate.overall_passed is False
     finally:
         await engine.dispose()
+
+
+async def test_a_non_uuid_eval_run_id_returns_none_instead_of_crashing(migrated_url):
+    """The "non-UUID path/query-param" bug class this platform has already
+    hit repeatedly (ticket #82's own sweep, Identity and Access's
+    `_is_valid_uuid` fix) recurred here too: `EvalRun.id` is a Postgres
+    `UUID` column, so handing a syntactically-invalid one straight to
+    `session.get()` raises an unhandled `asyncpg.exceptions.DataError`
+    instead of `get_eval_run`'s own clean `None`/`/gate`'s 404 path --
+    SQLite's unit-tier fake can't reproduce this (a dict lookup never
+    crashes on a malformed key), so this is real-Postgres-only coverage,
+    found by this module's own brand-new OpenAPI contract-test tier's
+    very first run against `POST /gate`."""
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyEvaluationFrameworkRepository(session)
+
+            assert await repo.get_eval_run("acme", "not-a-uuid") is None
+            assert await repo.get_eval_run("acme", "") is None
+    finally:
+        await engine.dispose()

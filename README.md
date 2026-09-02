@@ -1225,6 +1225,49 @@ not a failure" convention `list_scores` already established platform-wide,
 not a new, stricter one invented for this. Full account in each of the
 three modules' own READMEs.
 
+**Next: continuing the contract-test-tier rollout, picked by mechanical
+leverage** — the platform's own backlog still names rolling the
+schemathesis-fuzzing tier out to the modules that don't have it (~28
+remaining after this), and every rollout so far has found real,
+previously-invisible bugs on its very first run; asked how to prioritize
+the open backlog, the user chose "mechanical leverage first" over
+risk-ranking or working straight down a list. **Evaluation Framework**
+next specifically because this session's own evaluation-gated-release-
+path work just made it load-bearing for both PromptOps' and LLMOps' own
+release gates, and its new `GET /eval-runs` route had never been fuzzed.
+`tests/contract/`, ported from Identity and Access's own reference
+`conftest.py`. Found four real bugs, not one: **(1)** NUL bytes in
+Pydantic *body* fields ticket #82's original sweep never reached (that
+sweep only ever covered raw `Query()` string parameters) — `POST
+/evaluate`, `/gate`, `/domain-packs`, `/sample` all reached
+`session.execute()` raw instead of a clean `422`; **(2)** a NUL byte
+survives inside a `dict` *key* too — `custom_thresholds` round-trips as
+real `jsonb`, and jsonb's own text-based storage rejects an embedded NUL
+exactly like `text`/`varchar` does, even nested inside an object key
+(the same per-key validator Billing and Metering's own `unit_prices`
+already established); **(3)** `POST /gate`'s `eval_run_id`, a
+syntactically-invalid UUID handed straight to `session.get()`, crashed
+with an unhandled `asyncpg.DataError` instead of a clean `404` — this
+platform's own recurring non-UUID-lookup class, fixed the same
+`_is_valid_uuid`-repository-guard way Identity and Access already
+established; **(4)** the platform's own "unbounded offset" class (this
+repo's own `CLAUDE.md`-documented recurring bug, previously fixed only
+for Billing and Metering, LLM Gateway, Multi-tenancy and Workflow
+Engine) recurred on `GET /eval-runs`'s and `GET /scores`'s `offset`,
+fixed with the identical `le=1_000_000_000` bound. That fourth finding
+surfaces a real, sourced, and explicitly **not yet fixed** gap: most of
+the platform's other `offset` query parameters — Identity and Access's
+own included, despite it already having a contract tier, since
+Hypothesis's randomized integer generation doesn't reliably produce an
+overflow value on every run — still lack this bound; a genuine next
+mechanical-leverage candidate, not silently swept here since it's a
+platform-wide change well beyond this one module. All four fixes were
+re-verified with four consecutive clean contract-tier runs, not one —
+Hypothesis's own randomization means a single green run doesn't fully
+prove a bug class's absence. Full account, including the two body-field
+sub-cases the top-level `CLAUDE.md` didn't yet document, in that
+module's own README.
+
 ## Modules
 
 ### Module 1: Workflow Engine
