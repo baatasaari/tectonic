@@ -37,6 +37,7 @@ dev = [
   "fakeredis>=2.24",
   "respx>=0.21",
   "ruff>=0.7",
+  "anyio<4.15",
   "schemathesis>=3.35",
   "testcontainers[postgres,redis]>=4.8",
 ]

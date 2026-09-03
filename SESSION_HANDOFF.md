@@ -288,10 +288,49 @@ default). Neither is a production credential.
   event-backbone consumer/inbox pattern, image supply-chain
   build/scan/sign/admission gates, branch-protection required-status-
   check configuration -- no GitHub MCP tool found for that last one
-  this session). Nothing is currently broken or blocking merge; all
-  touched modules are green (including in real GitHub Actions CI, not
-  just this sandbox -- see the note on
-  `TECTONIC_TEST_POSTGRES_URL`-vs-CI-credentials below).
+  this session). All touched modules are green as of this session's
+  latest work (see the `anyio` P1 entry immediately below for a CI
+  break that briefly affected all seven contract-tier modules at once,
+  now fixed).
+- **P1 -- DONE (this session, after PR #13 merged).** All seven
+  contract-tier modules' real GitHub Actions CI started failing at once
+  -- `anyio` 4.15.0 (released the day this was found) dropped/broke the
+  `start_blocking_portal` lazy-import alias `starlette-testclient`
+  0.4.1 depends on, so a fresh `uv pip install -e ".[dev]"` (CI's own
+  install path; none of the seven pinned `anyio`) resolved the broken
+  release while every module's own pre-existing local `.venv` (created
+  before that release) stayed on the working `4.14.2` and never showed
+  it locally. Root-caused as genuine upstream drift, not this repo's own
+  code, via three independent checks: identical failure correlated 100%
+  with contract-tier presence across the full 34-module CI matrix;
+  reproduced identically on the base branch's own separate CI run; PyPI
+  confirmed the `4.15.0` release date. Fixed by pinning `anyio<4.15` in
+  all seven modules' `pyproject.toml` dev deps. That pin let LLM
+  Gateway's and Multi-tenancy's contract tiers actually complete a run
+  for the first time (both had previously only ever failed at import
+  once the drift landed) -- each immediately found a real bug: the same
+  unbounded-integer class as the `offset` sweep below, but against
+  Postgres's narrower `INTEGER` (int4, max `2_147_483_647`) rather than
+  `BIGINT`, and on a request-body field rather than a `Query()`
+  parameter, so neither the original four-module fix nor the 23-module
+  sweep would have caught it. LLM Gateway's `POST /admin/providers`
+  `priority` and Multi-tenancy's `expected_version` (four request
+  schemas: `SuspendRequest`, `VersionedRequest`,
+  `ApproveResourceAllocationRequest`, `RejectResourceAllocationRequest`)
+  were both bare, unbounded `int` fields bound straight into a Postgres
+  `INTEGER` column comparison; `2**31` crashed both with an unhandled
+  `asyncpg.DataError` instead of a clean `422`. Fixed with `Field(ge=0,
+  le=...)` bounds and a pinned regression test each. All seven modules
+  re-verified from a genuinely fresh `.venv` (`rm -rf .venv` first, to
+  force real dependency resolution rather than trusting a stale local
+  environment) across every tier: `ruff check`, `pytest tests/unit`,
+  `pytest tests/integration` (real Postgres), and `pytest
+  tests/contract` (real Postgres, re-run 3x per module for Hypothesis
+  randomization discipline) -- all clean. Not yet committed/pushed/PR'd
+  as of this entry; see §13/§15 for the exact next step. Full account in
+  each of the seven modules' own READMEs and the root README's running
+  narrative; LLM Gateway's and Multi-tenancy's own READMEs carry the two
+  new bug fixes in full.
 - **P1 -- DONE (this session).** The platform's own "unbounded offset"
   class (already fixed once for Billing and Metering, LLM Gateway,
   Multi-tenancy, Workflow Engine) was confirmed still open on nearly
@@ -719,6 +758,25 @@ default). Neither is a production credential.
 - **P3**: LLM Gateway `tokens_per_minute` quota accounting design.
 
 ## 13. Recommended Next Task
+
+**Newest work first (post-dates the rest of this section, which predates
+PR #12/#13 merging and the `anyio` incident -- read §12's two newest P1
+entries above for the full account before this stale-by-comparison
+summary below):** PR #12 (Evaluation Framework contract tier) and PR #13
+(platform-wide `offset` sweep) have both merged. Immediately after,
+`anyio` 4.15.0 broke all seven contract-tier modules' real CI at once
+(genuine upstream drift, not this repo's code) and, once fixed, exposed
+two more real bugs (LLM Gateway's `priority`, Multi-tenancy's
+`expected_version`) — see §12. That fix is fully verified locally
+(fresh `.venv` per module, all four tiers green, contract tier re-run 3x
+each) but as of this snapshot is **not yet committed, pushed, or PR'd**.
+Confirm with `git status`/`git log` on
+`claude/practical-wozniak-l1723c-rw7pp0` before assuming otherwise, then
+finish that: commit, push, open a PR, subscribe to it, and resume the
+standing PR-babysitting posture (merge once approved and CI green) —
+same as PR #12/#13. After that PR lands, return to the mechanical-
+leverage backlog below (contract-tier rollout to the remaining ~27
+modules is the standing next candidate).
 
 **Two assessment documents exist now, reviewing two different commits --
 read this carefully before trusting either one's "current state" claims.**

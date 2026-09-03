@@ -1,7 +1,7 @@
 """Admin-scoped request/response models (LLD §3.3)."""
 from __future__ import annotations
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 def _reject_null_byte(value: str) -> str:
@@ -78,11 +78,23 @@ class CreateProviderConfigRequest(BaseModel):
     no way at all -- through its own real API -- to provision a provider a
     tenant's completions could actually route to; `list_provider_configs`/
     `update_provider_config` both assumed a row already existed via some
-    other, never-built mechanism (not even a data migration seeded one)."""
+    other, never-built mechanism (not even a data migration seeded one).
+
+    `priority` was a bare `int` -- schema-valid per OpenAPI (`type: integer`
+    says nothing about range) but `ProviderConfigRecord.priority` is a
+    Postgres `INTEGER` (int4, max 2_147_483_647), so any value at or above
+    2**31 crashed with an unhandled `asyncpg.DataError` instead of a clean
+    `422` (found by this module's own contract-test tier -- the same
+    unbounded-integer shape as the platform's `offset` class documented
+    elsewhere in this README, but against int4's narrower range rather than
+    int8's). `router.py`'s own scoring treats 0 as the best priority and
+    divides by the largest priority present, so negative values are also
+    nonsensical here; bounded to `ge=0, le=1_000_000` -- comfortably past
+    any real ranking need, comfortably under the int4 overflow."""
 
     provider_name: str
     endpoint: str
-    priority: int = 0
+    priority: int = Field(default=0, ge=0, le=1_000_000)
 
     @field_validator("provider_name", "endpoint")
     @classmethod
