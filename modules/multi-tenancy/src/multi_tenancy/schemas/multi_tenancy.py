@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 def _reject_null_byte(value: str) -> str:
@@ -66,19 +66,32 @@ class SuspendRequest(BaseModel):
     deliberately doesn't -- see `core/domain.py`). The caller's last-
     known version is required, not optional: mutating a resource blind,
     with no idea whether it changed since you last read it, isn't a
-    request this API accepts."""
+    request this API accepts.
+
+    `expected_version` was a bare `int` -- schema-valid per OpenAPI
+    (`type: integer` says nothing about range) but `repository.py`'s own
+    `_compare_and_swap` binds it straight into a `WHERE version =
+    :expected_version` against `Organisation`/`Workspace`/`Environment`'s
+    `version` column, a Postgres `INTEGER` (int4, max 2_147_483_647); any
+    value at or above 2**31 crashed with an unhandled `asyncpg.DataError`
+    instead of a clean `422` (found alongside LLM Gateway's identical
+    unbounded-int4-column shape on its own `priority` field -- see that
+    module's README). Bounded to `ge=0, le=1_000_000_000`, the same bound
+    this platform's `offset` class already uses -- comfortably past any
+    real version count, comfortably under the int4 overflow."""
 
     reason: str
-    expected_version: int
+    expected_version: int = Field(ge=0, le=1_000_000_000)
 
 
 class VersionedRequest(BaseModel):
     """Body for Organisation/Workspace/Environment's reactivate/delete
     endpoints -- no other field needed, but `expected_version` is still
     required for the same real optimistic-concurrency reason
-    `SuspendRequest` carries it."""
+    `SuspendRequest` carries it. Bounded for the same int4-overflow reason
+    documented on `SuspendRequest`."""
 
-    expected_version: int
+    expected_version: int = Field(ge=0, le=1_000_000_000)
 
 
 class TenantSchema(BaseModel):
@@ -352,8 +365,12 @@ class ResourceAllocationListResponse(BaseModel):
 
 
 class ApproveResourceAllocationRequest(BaseModel):
+    """`expected_version` bounded for the same int4-overflow reason
+    documented on `SuspendRequest` -- `ResourceAllocation.version` is the
+    same kind of Postgres `INTEGER` column."""
+
     approved_by: str
-    expected_version: int
+    expected_version: int = Field(ge=0, le=1_000_000_000)
 
     @field_validator("approved_by")
     @classmethod
@@ -362,8 +379,11 @@ class ApproveResourceAllocationRequest(BaseModel):
 
 
 class RejectResourceAllocationRequest(BaseModel):
+    """`expected_version` bounded for the same reason as
+    `ApproveResourceAllocationRequest`."""
+
     reason: str
-    expected_version: int
+    expected_version: int = Field(ge=0, le=1_000_000_000)
 
     @field_validator("reason")
     @classmethod

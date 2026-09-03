@@ -235,6 +235,41 @@ src/llm_gateway/
   regressions; comprehensive route coverage remains a real,
   separately-scoped gap.
 
+- **`anyio` 4.15.0 (released the day this was found) broke every
+  contract-tier module's dev install.** It dropped/broke the
+  `start_blocking_portal` lazy-import alias `starlette-testclient` 0.4.1
+  depends on, so a fresh `uv pip install -e ".[dev]"` (this module's own
+  pre-existing local `.venv`s, created before that release, were
+  unaffected) started resolving the broken version and every contract
+  test failed at import (`AttributeError: module 'anyio' has no
+  attribute 'start_blocking_portal'`) rather than at any real assertion.
+  Confirmed as upstream dependency drift unrelated to this repo's own
+  history: identical failure on all seven contract-tier modules, on the
+  base branch's own CI run, and PyPI's own release date for 4.15.0.
+  Pinned `anyio<4.15` in `pyproject.toml`'s dev deps, resolving back to
+  the known-good `4.14.2`.
+
+- **The platform's own "unbounded integer" class recurred against a
+  narrower Postgres range than `offset`'s.** Re-running this module's
+  contract tier with the `anyio` pin in place (rather than failing at
+  import) surfaced a real bug the tier had never gotten the chance to
+  run against before: `POST /admin/providers`'s `priority` was a bare
+  `int` — schema-valid per OpenAPI (`type: integer` says nothing about
+  range) — but `ProviderConfigRecord.priority` is a Postgres `INTEGER`
+  (int4, max `2_147_483_647`), so a value at or above `2**31` crashed
+  with an unhandled `asyncpg.DataError` instead of a clean `422`. This
+  is the identical unbounded-integer shape as the platform's `offset`
+  class, but against int4's narrower range rather than `offset`'s int8
+  one — the same grep-for-`Query(0, ge=0)` sweep would not have found
+  it, since `priority` is a request body field, not a query parameter.
+  `router.py`'s own routing score treats 0 as the best priority and
+  divides by the largest priority present, so negative values are also
+  nonsensical; bounded to `Field(ge=0, le=1_000_000)` — comfortably past
+  any real ranking need, comfortably under the int4 overflow. The
+  identical shape was found and fixed the same way in Multi-tenancy's
+  `expected_version` (see that module's own README) while checking
+  sibling modules for the same bug class.
+
 ## Running locally
 
 ```bash

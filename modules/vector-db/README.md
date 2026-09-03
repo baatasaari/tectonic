@@ -210,6 +210,22 @@ data plane itself.
   site (`vector_service.py`, `migration_manager.py`) — invisible before
   because every prior test stubbed this call.
 
+- **`anyio` 4.15.0 (released the day this was found) broke every
+  contract-tier module's dev install.** It dropped/broke the
+  `start_blocking_portal` lazy-import alias `starlette-testclient` 0.4.1
+  depends on, so a fresh `uv pip install -e ".[dev]"` (this module's own
+  pre-existing local `.venv`, created before that release, was
+  unaffected) started resolving the broken version and every contract
+  test failed at import (`AttributeError: module 'anyio' has no
+  attribute 'start_blocking_portal'`) rather than at any real assertion.
+  Confirmed as upstream dependency drift unrelated to this repo's own
+  history: identical failure on all seven contract-tier modules, on the
+  base branch's own CI run, and PyPI's own release date for 4.15.0.
+  Pinned `anyio<4.15` in `pyproject.toml`'s dev deps, resolving back to
+  the known-good `4.14.2`. (LLM Gateway's and Multi-tenancy's own
+  READMEs document the same pin alongside a real bug it let their own
+  contract tiers actually run against for the first time.)
+
 ## Running locally
 
 ```bash

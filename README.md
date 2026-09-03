@@ -1300,6 +1300,49 @@ and the real regression coverage is each of those modules eventually
 gaining its own contract tier. Full account, including the complete
 per-module route list, in each of the 23 modules' own READMEs.
 
+**Then: CI red on every contract-tier module at once, root-caused as
+upstream, and the real bug it had been hiding.** All seven contract-tier
+modules' CI runs started failing the same way —
+`AttributeError: module 'anyio' has no attribute 'start_blocking_portal'`
+— with no code change of this repo's own in the diff that triggered it.
+Root-caused via three independent lines of evidence: **(1)** 100%
+correlation between the failure and contract-tier presence across all 34
+modules' CI matrix; **(2)** the identical failure reproducing on the base
+branch's own separate CI run, with no code difference; **(3)** PyPI
+confirming `anyio` 4.15.0 released the day before, breaking the
+`start_blocking_portal` lazy-import alias `starlette-testclient` 0.4.1
+depends on. None of the seven modules pinned `anyio` in dev deps, so a
+fresh `uv pip install -e ".[dev]"` (CI's own install path) started
+resolving the broken release while each module's own pre-existing local
+`.venv` — created before that release — stayed on the working `4.14.2`
+and never showed the failure locally. Fixed by pinning `anyio<4.15` in
+all seven modules' `pyproject.toml`.
+
+That pin let two of the seven modules' contract tiers actually run
+end-to-end for the first time rather than failing at import — and each
+immediately found a real bug: the platform's own unbounded-integer class,
+recurred against Postgres's narrower `INTEGER` (int4, max
+`2_147_483_647`) range rather than `offset`'s `BIGINT` one, so the
+existing `Query(0, ge=0, le=1_000_000_000)` sweep above — which only ever
+targeted query parameters — didn't cover it. **LLM Gateway**'s `POST
+/admin/providers` `priority` and **Multi-tenancy**'s `expected_version`
+(on `SuspendRequest`, `VersionedRequest`,
+`ApproveResourceAllocationRequest`, and `RejectResourceAllocationRequest`)
+were both bare, unbounded `int` request-body fields bound straight into a
+Postgres `INTEGER` column by a raw SQL comparison — a value at or above
+`2**31` crashed both with an unhandled `asyncpg.DataError` instead of a
+clean `422`. Each found independently by its own module's contract tier,
+then confirmed as the same bug class while checking sibling modules per
+this repo's own established convention; both fixed with a `Field(ge=0,
+le=...)` bound and a pinned regression test. All seven modules
+re-verified from a genuinely fresh `.venv` (not a stale local one) across
+every tier: `ruff check` clean, `pytest tests/unit` green, `pytest
+tests/integration` green against real Postgres, and `pytest
+tests/contract` green across repeated runs (Hypothesis randomization
+discipline, per this session's own established practice). Full account
+in each of the seven modules' own READMEs; LLM Gateway's and
+Multi-tenancy's carry the two new bug fixes in full.
+
 ## Modules
 
 ### Module 1: Workflow Engine

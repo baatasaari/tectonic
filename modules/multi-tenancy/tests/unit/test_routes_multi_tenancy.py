@@ -230,6 +230,33 @@ def test_list_isolation_probes_rejects_a_null_byte_in_target_name_with_a_clean_4
     assert resp.status_code == 422
 
 
+def test_suspend_organisation_rejects_an_expected_version_past_int4_range_with_a_clean_422():
+    """Found alongside LLM Gateway's identical unbounded-int4-column shape
+    on its own `priority` field (see that module's README): `expected_
+    version` was a bare `int` -- schema-valid per OpenAPI -- but
+    `repository.py`'s own `_compare_and_swap` binds it into `WHERE
+    version = :expected_version` against a Postgres `INTEGER` (int4, max
+    2_147_483_647) column; `2**31` reached the database raw and crashed
+    with an unhandled `asyncpg.DataError` instead of a clean 422. Fixed
+    with `Field(ge=0, le=1_000_000_000)` on the schema (see
+    `schemas/multi_tenancy.py`) -- the same bound this module's own
+    `offset` query params already use."""
+    app = _app(InMemoryMultiTenancyRepository())
+    headers = _headers()
+
+    with TestClient(app) as client:
+        org = client.post(
+            "/v1/multi-tenancy/organisations", json={"name": "Acme Holdings"}, headers=headers,
+        ).json()
+
+        resp = client.post(
+            f"/v1/multi-tenancy/organisations/{org['id']}/suspend",
+            json={"reason": "review", "expected_version": 2_147_483_648}, headers=headers,
+        )
+
+    assert resp.status_code == 422
+
+
 # --- Organisation / Workspace / Environment (platform hierarchy control plane) ---
 
 

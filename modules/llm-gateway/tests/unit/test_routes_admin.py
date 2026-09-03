@@ -99,3 +99,22 @@ def test_create_budget_policy_rejects_a_null_byte_in_tenant_id_with_a_clean_422(
         )
 
     assert resp.status_code == 422
+
+
+def test_create_provider_config_rejects_a_priority_past_int4_range_with_a_clean_422():
+    """This module's own OpenAPI contract-test tier found this one too:
+    `priority` was a bare `int` -- schema-valid per OpenAPI -- but
+    `ProviderConfigRecord.priority` is a Postgres `INTEGER` (int4, max
+    2_147_483_647); `2**31` reached the database raw and crashed with an
+    unhandled `asyncpg.DataError` instead of a clean 422. Fixed with
+    `Field(ge=0, le=1_000_000)` on the schema (see `schemas/admin.py`)."""
+    app = _app(InMemoryGatewayRepository())
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/v1/llm-gateway/admin/providers",
+            json={"provider_name": "openai", "endpoint": "https://api.openai.com", "priority": 2_147_483_648},
+            headers=_headers(),
+        )
+
+    assert resp.status_code == 422
