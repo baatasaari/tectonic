@@ -222,6 +222,21 @@ src/regulatory_compliance/
   regressions; comprehensive route coverage remains a real,
   separately-scoped gap.
 
+- **The platform's own "unbounded offset" class** (this repo's own
+  `CLAUDE.md`-documented recurring bug — already fixed for Billing and
+  Metering's, LLM Gateway's, Multi-tenancy's and Workflow Engine's own
+  `offset` query params; found again, still open here, when Evaluation
+  Framework's own new contract-test tier hit the identical gap and a
+  platform-wide grep confirmed it recurred everywhere else that hadn't
+  already fixed it). `GET /mappings`'s `offset` had no upper bound, so a
+  value past Postgres's `bigint` range (`> 9223372036854775807`) crashed
+  with an unhandled `asyncpg.DataError` instead of a clean `422`. Fixed
+  with the identical `le=1_000_000_000` bound those four modules already
+  use — comfortably past any real pagination need, comfortably under the
+  overflow. Mechanical, not contract-tier-discovered here (this module
+  has no contract tier of its own yet) — found by the platform-wide grep
+  instead.
+
 ## Running locally
 
 ```bash

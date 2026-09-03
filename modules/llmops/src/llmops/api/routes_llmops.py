@@ -79,7 +79,7 @@ async def list_model_versions(
     tenant_id: str | None = Query(None),
     model_name: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: LLMOpsRepository = Depends(get_repository),
 ) -> ModelVersionListResponse:
     _reject_null_byte_query(tenant_id=tenant_id, model_name=model_name)

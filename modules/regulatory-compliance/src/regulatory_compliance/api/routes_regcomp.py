@@ -82,7 +82,7 @@ async def list_mappings(
     control_name: str | None = Query(None),
     framework_name: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: RegulatoryComplianceRepository = Depends(get_repository),
 ) -> ControlMappingListResponse:
     _reject_null_byte_query(control_name=control_name, framework_name=framework_name)

@@ -64,7 +64,7 @@ async def list_tools(
     request: Request,
     status: str | None = None,
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: ToolRepository = Depends(get_repository),
 ) -> ToolDefinitionListResponse:

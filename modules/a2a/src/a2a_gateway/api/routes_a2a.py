@@ -82,7 +82,7 @@ async def list_tasks(
     tenant_id: str | None = Query(None),
     direction: TaskDirection | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: A2AGatewayRepository = Depends(get_repository),
 ) -> TaskListResponse:
     # `direction` typed as TaskDirection | None: FastAPI/Pydantic validates and

@@ -68,7 +68,7 @@ async def discover_cards(
     tenant_id: str | None = Query(None),
     skill_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: AgentCardsRepository = Depends(get_repository),
 ) -> AgentCardListResponse:

@@ -95,7 +95,7 @@ async def register_developer(
 async def list_developers(
     status: DeveloperStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: PortalRepository = Depends(get_repository),
 ) -> DeveloperAccountListResponse:
@@ -192,7 +192,7 @@ async def sync_catalog(
 @router.get("/catalog", response_model=ModuleCatalogListResponse)
 async def list_catalog(
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: PortalRepository = Depends(get_repository),
 ) -> ModuleCatalogListResponse:
@@ -236,7 +236,7 @@ async def list_sdks(
     module_name: str | None = Query(None),
     language: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: PortalRepository = Depends(get_repository),
 ) -> SdkPackageListResponse:

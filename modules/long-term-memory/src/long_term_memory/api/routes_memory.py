@@ -144,7 +144,7 @@ async def list_reflections(
     agent_ref: str,
     request: Request,
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: LongTermMemoryRepository = Depends(get_repository),
 ) -> ReflectionEntryListResponse:

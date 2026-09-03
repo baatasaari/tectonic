@@ -128,7 +128,7 @@ async def create_role(
 async def list_roles(
     tenant_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: IdentityAccessRepository = Depends(get_repository),
 ) -> RoleListResponse:
     _reject_null_byte_query(tenant_id=tenant_id)
@@ -158,7 +158,7 @@ async def list_identities(
     tenant_id: str | None = Query(None),
     status: IdentityStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: IdentityAccessRepository = Depends(get_repository),
 ) -> IdentityListResponse:
     _reject_null_byte_query(tenant_id=tenant_id)
@@ -248,7 +248,7 @@ async def revoke_role(
 async def list_identity_role_bindings(
     identity_id: str,
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: IdentityAccessRepository = Depends(get_repository),
 ) -> RoleBindingListResponse:
     service = build_role_binding_service(repository)
@@ -262,7 +262,7 @@ async def list_identity_role_bindings(
 async def list_auth_decisions(
     identity_id: str,
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: IdentityAccessRepository = Depends(get_repository),
 ) -> AuthDecisionListResponse:
     decisions, total = await repository.list_auth_decisions(identity_id=identity_id, limit=limit, offset=offset)
@@ -340,7 +340,7 @@ async def register_identity_provider(
 async def list_identity_providers(
     tenant_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: IdentityAccessRepository = Depends(get_repository),
 ) -> IdentityProviderListResponse:
     _reject_null_byte_query(tenant_id=tenant_id)
@@ -447,7 +447,7 @@ async def list_groups(
     tenant_id: str | None = Query(None),
     provider_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: IdentityAccessRepository = Depends(get_repository),
 ) -> GroupListResponse:
     _reject_null_byte_query(tenant_id=tenant_id, provider_id=provider_id)
@@ -500,7 +500,7 @@ async def create_scim_token(
 async def list_scim_tokens(
     tenant_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: IdentityAccessRepository = Depends(get_repository),
 ) -> ScimTokenListResponse:
     _reject_null_byte_query(tenant_id=tenant_id)

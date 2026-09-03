@@ -67,7 +67,7 @@ async def list_extractions(
     tenant_id: str | None = Query(None),
     modality: Modality | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: MultiModalityRepository = Depends(get_repository),
 ) -> ExtractionListResponse:
     _reject_null_byte_query(tenant_id=tenant_id)
