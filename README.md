@@ -1152,6 +1152,122 @@ a third entity would only restate `tenant_id`. Full design, including
 the exact reasoning for both deliberate omissions, in that module's own
 README.
 
+**Immediately following that: Identity and Access's own contract-test
+tier** (P0 Phase 1A closure item — the reassessment's own backlog names
+rolling the schemathesis-fuzzing tier out to the ~29 modules that don't
+have it yet; started with this module since it was the one this
+session had just made the most changes to). `tests/contract/`, ported
+from Multi-tenancy's own reference implementation (ticket #73/#80).
+Its very first run found three real, previously-invisible gaps: a NUL
+byte in a request body field (`POST /roles` and others) crashing with
+an unhandled 500 instead of a clean 422 — this module's own body
+fields had never been swept by ticket #82, which only ever covered
+raw `Query()` parameters platform-wide; two body fields
+(`RegisterIdentityRequest.type`, `RegisterIdentityProviderRequest.
+provider_type`) hand-converting a bare `str` to an Enum at the route,
+the identical sibling bug class already fixed for `IdentityStatus` on
+the query-param side but never caught on these; and four `GET`/`POST`
+routes handing a syntactically-invalid UUID path parameter straight to
+`session.get()`, crashing instead of returning a clean 404 — this
+platform's own recurring "non-UUID path/query-param" class (first
+found in Multi-tenancy/Billing and Metering), fixed the same
+`_is_valid_uuid`-repository-guard way. All three now have regression
+tests; full account in that module's own README.
+
+**Next: Long-Term Memory's own memory governance foundation** — moving
+from the P0 Phase 1A backlog to Phase 2, per the user's own direction
+this session. The independent architecture assessment named this
+finding directly: "no ... consent/purpose/legal-hold ... currently zero
+coverage." Two real gaps closed. **Legal holds**, the one piece with
+real enforcement teeth: new `core/legal_hold_service.py`
+(`POST /legal-holds`, `.../release`, `GET /legal-holds`), and
+`ForgettingEngine.execute` now checks for an active hold on the target
+scope *before* deleting anything, refusing the whole request (`409`)
+rather than silently skipping held items or deleting anyway — a hold
+that doesn't block deletion isn't a hold. **Consent, enforced at query
+time, not store time**: new `core/consent_service.py`
+(`POST /consent-records`, `.../revoke`, `GET /consent-records`);
+`MemoryItemRecord` gained an optional `purpose` field, and
+`MemoryService.query` excludes an item whose `purpose` has no active
+consent covering exactly `(scope, purpose)` — enforced at read time
+rather than write time because nothing currently calls `POST /items`
+from another module (Long-Term Memory write-back is still a separately
+scoped gap), so gating retrieval gives revocation an immediate, live
+effect with no real caller to break. Both new record types follow the
+same one-row-per-grant, revoked/released-in-place shape this session's
+own Identity and Access `RoleBindingRecord` already established.
+Deliberately not built: purpose-limitation enforcement beyond the
+consent check itself, and a hard consent-at-store gate — reasonable
+next steps once a real `POST /items` caller exists to need them, not
+invented ahead of one. Full account in that module's own README.
+
+**Next: the evaluation-gated release path** — the second Phase 2
+candidate, picked after the user asked to keep going on Phase 2. Both
+PromptOps' `ABTestingService.conclude` and LLMOps' `RolloutService.promote`
+already had real, blocking release gates of their own (a two-proportion
+z-test between arms; a canary pass-rate-over-time check) — but neither
+ever called Evaluation Framework's own `POST /gate` engine, which existed
+with a real `GateResultRecord` audit trail and was, in effect, dead code
+from every other module's perspective. Closed in three parts. **Evaluation
+Framework**: a new `GET /eval-runs?tenant_id=&agent_ref=` endpoint (most-
+recent-first, paginated, new composite index) — the lookup neither
+consumer had a way to make, since `/gate` needs an `eval_run_id` and
+`/scores` returns individual score rows, not grouped by run. **PromptOps**:
+`conclude` now also gates the winner's latest eval run after the A/B
+significance check passes, refusing promotion (`EvaluationGateFailedError`,
+`409`) if Evaluation Framework's own verdict on that run failed a blocking
+metric threshold — a real, distinct failure mode from "not enough A/B
+signal yet." **LLMOps**: the identical pattern in `promote`, layered after
+the existing canary pass-rate gate, reusing `CanaryGateFailedError` rather
+than inventing a second gate-failure type. Both consumers treat "no eval
+run exists yet" as a pass-through, not a block — the same "no history is
+not a failure" convention `list_scores` already established platform-wide,
+not a new, stricter one invented for this. Full account in each of the
+three modules' own READMEs.
+
+**Next: continuing the contract-test-tier rollout, picked by mechanical
+leverage** — the platform's own backlog still names rolling the
+schemathesis-fuzzing tier out to the modules that don't have it (~28
+remaining after this), and every rollout so far has found real,
+previously-invisible bugs on its very first run; asked how to prioritize
+the open backlog, the user chose "mechanical leverage first" over
+risk-ranking or working straight down a list. **Evaluation Framework**
+next specifically because this session's own evaluation-gated-release-
+path work just made it load-bearing for both PromptOps' and LLMOps' own
+release gates, and its new `GET /eval-runs` route had never been fuzzed.
+`tests/contract/`, ported from Identity and Access's own reference
+`conftest.py`. Found four real bugs, not one: **(1)** NUL bytes in
+Pydantic *body* fields ticket #82's original sweep never reached (that
+sweep only ever covered raw `Query()` string parameters) — `POST
+/evaluate`, `/gate`, `/domain-packs`, `/sample` all reached
+`session.execute()` raw instead of a clean `422`; **(2)** a NUL byte
+survives inside a `dict` *key* too — `custom_thresholds` round-trips as
+real `jsonb`, and jsonb's own text-based storage rejects an embedded NUL
+exactly like `text`/`varchar` does, even nested inside an object key
+(the same per-key validator Billing and Metering's own `unit_prices`
+already established); **(3)** `POST /gate`'s `eval_run_id`, a
+syntactically-invalid UUID handed straight to `session.get()`, crashed
+with an unhandled `asyncpg.DataError` instead of a clean `404` — this
+platform's own recurring non-UUID-lookup class, fixed the same
+`_is_valid_uuid`-repository-guard way Identity and Access already
+established; **(4)** the platform's own "unbounded offset" class (this
+repo's own `CLAUDE.md`-documented recurring bug, previously fixed only
+for Billing and Metering, LLM Gateway, Multi-tenancy and Workflow
+Engine) recurred on `GET /eval-runs`'s and `GET /scores`'s `offset`,
+fixed with the identical `le=1_000_000_000` bound. That fourth finding
+surfaces a real, sourced, and explicitly **not yet fixed** gap: most of
+the platform's other `offset` query parameters — Identity and Access's
+own included, despite it already having a contract tier, since
+Hypothesis's randomized integer generation doesn't reliably produce an
+overflow value on every run — still lack this bound; a genuine next
+mechanical-leverage candidate, not silently swept here since it's a
+platform-wide change well beyond this one module. All four fixes were
+re-verified with four consecutive clean contract-tier runs, not one —
+Hypothesis's own randomization means a single green run doesn't fully
+prove a bug class's absence. Full account, including the two body-field
+sub-cases the top-level `CLAUDE.md` didn't yet document, in that
+module's own README.
+
 ## Modules
 
 ### Module 1: Workflow Engine

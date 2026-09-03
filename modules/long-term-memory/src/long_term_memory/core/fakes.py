@@ -6,11 +6,14 @@ from __future__ import annotations
 import copy
 
 from long_term_memory.core.domain import (
+    ConsentRecord,
     ConsolidationRunRecord,
     DeletionRecord,
+    LegalHoldRecord,
     MemoryItemRecord,
     MemoryType,
     ReflectionEntryRecord,
+    now,
 )
 from long_term_memory.core.ports import GraphHit, VectorHit
 
@@ -21,6 +24,8 @@ class InMemoryLongTermMemoryRepository:
         self.consolidation_runs: list[ConsolidationRunRecord] = []
         self.reflections: list[ReflectionEntryRecord] = []
         self.deletion_records: dict[str, DeletionRecord] = {}
+        self.consent_records: dict[str, ConsentRecord] = {}
+        self.legal_holds: dict[str, LegalHoldRecord] = {}
 
     async def create_item(self, record: MemoryItemRecord) -> MemoryItemRecord:
         self.items[record.id] = copy.deepcopy(record)
@@ -80,6 +85,56 @@ class InMemoryLongTermMemoryRepository:
         if rec is None or rec.tenant_id != tenant_id:
             return None
         return copy.deepcopy(rec)
+
+    async def create_consent_record(self, record: ConsentRecord) -> ConsentRecord:
+        self.consent_records[record.id] = copy.deepcopy(record)
+        return copy.deepcopy(record)
+
+    async def get_active_consent(self, tenant_id: str, scope: str, purpose: str) -> ConsentRecord | None:
+        candidates = [
+            r for r in self.consent_records.values()
+            if r.tenant_id == tenant_id and r.scope == scope and r.purpose == purpose and r.revoked_at is None
+        ]
+        if not candidates:
+            return None
+        return copy.deepcopy(max(candidates, key=lambda r: r.granted_at))
+
+    async def revoke_consent(self, tenant_id: str, consent_id: str) -> ConsentRecord | None:
+        rec = self.consent_records.get(consent_id)
+        if rec is None or rec.tenant_id != tenant_id:
+            return None
+        rec.revoked_at = now()
+        return copy.deepcopy(rec)
+
+    async def list_consents(self, tenant_id: str, scope: str) -> list[ConsentRecord]:
+        matching = [r for r in self.consent_records.values() if r.tenant_id == tenant_id and r.scope == scope]
+        matching.sort(key=lambda r: r.granted_at, reverse=True)
+        return [copy.deepcopy(r) for r in matching]
+
+    async def create_legal_hold(self, record: LegalHoldRecord) -> LegalHoldRecord:
+        self.legal_holds[record.id] = copy.deepcopy(record)
+        return copy.deepcopy(record)
+
+    async def get_active_legal_hold(self, tenant_id: str, scope: str) -> LegalHoldRecord | None:
+        candidates = [
+            h for h in self.legal_holds.values()
+            if h.tenant_id == tenant_id and h.scope == scope and h.released_at is None
+        ]
+        if not candidates:
+            return None
+        return copy.deepcopy(max(candidates, key=lambda h: h.placed_at))
+
+    async def release_legal_hold(self, tenant_id: str, hold_id: str) -> LegalHoldRecord | None:
+        hold = self.legal_holds.get(hold_id)
+        if hold is None or hold.tenant_id != tenant_id:
+            return None
+        hold.released_at = now()
+        return copy.deepcopy(hold)
+
+    async def list_legal_holds(self, tenant_id: str, scope: str) -> list[LegalHoldRecord]:
+        matching = [h for h in self.legal_holds.values() if h.tenant_id == tenant_id and h.scope == scope]
+        matching.sort(key=lambda h: h.placed_at, reverse=True)
+        return [copy.deepcopy(h) for h in matching]
 
 
 class StubVectorDBClient:

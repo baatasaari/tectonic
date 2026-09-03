@@ -70,6 +70,19 @@ class NoActivePromptVersionError(Exception):
         super().__init__(f"No active prompt version for '{prompt_name}'")
 
 
+class EvaluationGateFailedError(Exception):
+    """Raised by `conclude` when Evaluation Framework's own `/gate` rejects
+    the winning version's most recent eval run -- distinct from
+    `ABTestNotConclusiveError` (a statistics problem: not enough signal
+    yet to trust either arm) since this is a quality problem: there is a
+    clear winner, but its own most recent evaluation run itself failed
+    one or more blocking metric thresholds."""
+
+    def __init__(self, blocking_failures: list[str]) -> None:
+        super().__init__(f"Evaluation gate failed: {', '.join(blocking_failures)}")
+        self.blocking_failures = blocking_failures
+
+
 @dataclass
 class PromptVersionRecord:
     id: str

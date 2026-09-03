@@ -2,7 +2,12 @@
 significance test"): a real two-proportion z-test between two prompt
 versions' Evaluation Framework score histories. `evaluate` never picks
 a winner on a sample too small to mean anything; `conclude` always
-re-runs it fresh -- it never trusts an earlier verdict.
+re-runs it fresh -- it never trusts an earlier verdict. `conclude` also
+blocks promotion on Evaluation Framework's own `POST /gate` verdict for
+the winner's most recent eval run -- the evaluation-gated release path
+(this module's own "publish" moment; a winner failing its own most
+recent evaluation is a real, separately-scoped failure mode from "not
+enough A/B signal yet").
 """
 from __future__ import annotations
 
@@ -12,6 +17,7 @@ from promptops.core.domain import (
     ABTestRecord,
     ABTestResult,
     ABTestStatus,
+    EvaluationGateFailedError,
     InvalidTransitionError,
     PromptVersionNotFoundError,
     PromptVersionRecord,
@@ -132,6 +138,20 @@ class ABTestingService:
 
         winner = await self._get_version(winner_id)
         loser = await self._get_version(loser_id)
+
+        # A clear statistical winner can still have failed its own most recent real
+        # evaluation run (e.g. a faithfulness regression the A/B pass-rate comparison
+        # alone wouldn't catch) -- Evaluation Framework's own `/gate` is the platform's
+        # single source of truth for "did this version's evaluation actually pass,"
+        # so `conclude` always re-checks it fresh here, the same as it always re-runs
+        # `evaluate()` above rather than trusting an earlier verdict. `None` means no
+        # eval run exists yet for this version -- not a failure, since there's nothing
+        # to gate on.
+        gate_result = await self._evaluation_framework.gate_latest_run(
+            tenant_id=ab_test.tenant_id, agent_ref=evaluation_ref(winner.prompt_name, winner.version),
+        )
+        if gate_result is not None and not gate_result.get("overall_passed", True):
+            raise EvaluationGateFailedError(gate_result.get("blocking_failures", []))
 
         previous_active = await self._repository.get_active_prompt_version(
             tenant_id=ab_test.tenant_id, prompt_name=ab_test.prompt_name,

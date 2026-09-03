@@ -34,6 +34,7 @@ class MemoryItem(Base):
     memory_type: Mapped[str] = mapped_column(String(16))
     content: Mapped[str] = mapped_column(Text())
     visibility_policy_ref: Mapped[str] = mapped_column(String(255), default="")
+    purpose: Mapped[str] = mapped_column(String(255), default="")
     vector_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     graph_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="active")
@@ -77,3 +78,38 @@ class DeletionRecordModel(Base):
     deletion_proof_hash: Mapped[str] = mapped_column(String(64), default="")
     requested_by: Mapped[str] = mapped_column(String(255), default="")
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ConsentRecordModel(Base):
+    """Memory governance: one row per consent grant, revoked in place
+    (`revoked_at` set on this same row) -- see core/domain.py's
+    ConsentRecord docstring."""
+
+    __tablename__ = "consent_records"
+    __table_args__ = (Index("ix_consent_records_tenant_scope_purpose", "tenant_id", "scope", "purpose"),)
+
+    id: Mapped[str] = mapped_column(UUIDType, primary_key=True, default=_new_id)
+    tenant_id: Mapped[str] = mapped_column(String(255))
+    scope: Mapped[str] = mapped_column(String(255))
+    purpose: Mapped[str] = mapped_column(String(255))
+    basis: Mapped[str] = mapped_column(String(32))
+    granted_by: Mapped[str] = mapped_column(String(255), default="")
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class LegalHoldModel(Base):
+    """Memory governance: one row per hold, released in place
+    (`released_at` set on this same row) -- see core/domain.py's
+    LegalHoldRecord docstring."""
+
+    __tablename__ = "legal_holds"
+    __table_args__ = (Index("ix_legal_holds_tenant_scope", "tenant_id", "scope"),)
+
+    id: Mapped[str] = mapped_column(UUIDType, primary_key=True, default=_new_id)
+    tenant_id: Mapped[str] = mapped_column(String(255))
+    scope: Mapped[str] = mapped_column(String(255))
+    reason: Mapped[str] = mapped_column(Text(), default="")
+    placed_by: Mapped[str] = mapped_column(String(255), default="")
+    placed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

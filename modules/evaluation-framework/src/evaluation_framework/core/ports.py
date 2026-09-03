@@ -27,6 +27,15 @@ class EvaluationFrameworkRepository(Protocol):
         self, tenant_id: str, *, agent_ref: str | None = None, limit: int = 50, offset: int = 0,
     ) -> tuple[list[MetricScoreRecord], int]: ...
 
+    async def list_eval_runs_for_agent_ref(
+        self, tenant_id: str, agent_ref: str, *, limit: int = 50, offset: int = 0,
+    ) -> tuple[list[EvalRunRecord], int]:
+        """Most-recent-first (by `started_at`). Backs `GET /eval-runs` --
+        the lookup a release-gating caller (PromptOps' `conclude`, LLMOps'
+        `promote`) needs to find the `eval_run_id` its own gate check
+        should reference, since neither module tracks that id itself."""
+        ...
+
     async def create_gate_result(self, record: GateResultRecord) -> GateResultRecord: ...
 
     async def create_domain_pack(self, record: DomainMetricPackRecord) -> DomainMetricPackRecord: ...

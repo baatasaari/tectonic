@@ -62,6 +62,21 @@ src/promptops/
   `draft → testing` (via `start`) → `active`/`archived` (via
   `conclude`); `active → archived` on the next promotion. Anything
   outside that legal set is a `409` (`InvalidTransitionError`).
+- **The evaluation-gated release path (new).** `conclude` already had a
+  real, blocking gate — the two-proportion z-test above — but it only
+  ever asked "does the winner beat the loser," never "did the winner's
+  own most recent evaluation run actually pass." Evaluation Framework's
+  own `POST /gate` engine existed and had a real `GateResultRecord` audit
+  trail, but nothing in the platform ever called it — every consumer had
+  built its own bespoke pass/fail policy instead of delegating to it.
+  `conclude` now also resolves the winner's latest eval run (via
+  Evaluation Framework's new `GET /eval-runs`) and gates it; a winner
+  that is statistically ahead but whose own most recent run failed a
+  blocking metric threshold is refused with `EvaluationGateFailedError`
+  (`409`), not silently promoted. A version with no eval run yet is not
+  blocked — the same "no history is not a failure" convention
+  `list_scores` already established, not a new, stricter one. See
+  LLMOps' README for the identical pattern applied to canary promotion.
 
 - **Enforces its own subscription entitlement via `EntitlementGateMiddleware`**
   (`security/entitlement_gate.py`) — see Agent Cards' README and the rollout

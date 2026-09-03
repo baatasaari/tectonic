@@ -22,17 +22,68 @@ src/long_term_memory/
     memory_service.py             Mem0-based Memory Manager — store + retrieval fan-out
     visibility.py                  Cross-Agent Visibility Policy
     consolidation.py                Consolidation Engine — dedup + decay
-    forgetting.py                    Forgetting Engine — verifiable cross-store deletion
+    forgetting.py                    Forgetting Engine — verifiable cross-store deletion, blocked by an active legal hold
     reflection.py                     Reflection Loop
+    consent_service.py                 Consent Service — grant/revoke consent per (scope, purpose)
+    legal_hold_service.py               Legal Hold Service — place/release a hold that blocks erasure
   db/                      SQLAlchemy 2.0 async models + repository (this module's own facts/episodes/reflections/deletion records)
   clients/                 HTTP clients for Vector DB (Module 10), Graph DB (Module 11), LLM Gateway, Guardrails
   security/                 Service-to-service JWT bearer auth (shared signing key), the entitlement gate, real OpenAPI security scheme declarations
   telemetry/                OTel tracing, Prometheus metrics, structlog logging
-  api/                       FastAPI router — items, query, reflections, erasure-requests, consolidation-runs
+  api/                       FastAPI router — items, query, reflections, erasure-requests, consolidation-runs, consent-records, legal-holds
   schemas/                    Pydantic request/response models
 ```
 
 ## Design notes vs. the LLD
+
+- **Memory governance foundation: consent, purpose, and legal hold.**
+  (Independent architecture assessment's own finding: "no ...
+  consent/purpose/legal-hold ... currently zero coverage.") Before this,
+  `MemoryItemRecord` carried no notion of why an item was collected, and
+  `ForgettingEngine.execute` deleted everything matching a subject's
+  scope unconditionally — there was no way to even mark data exempt
+  from erasure (active litigation, a regulatory retention requirement).
+  Two real gaps closed:
+  - **Legal holds — the one piece with real teeth.** New
+    `core/legal_hold_service.py` (`POST /legal-holds`,
+    `POST /legal-holds/{id}/release`, `GET /legal-holds`), backed by a
+    durable `LegalHoldRecord` (one row per hold, released in place).
+    `ForgettingEngine.execute` now checks for an active hold on the
+    target scope *before* deleting anything and refuses the whole
+    request (`LegalHoldActiveError` → `409`) rather than silently
+    skipping held items or silently deleting anyway — a hold that
+    doesn't actually block deletion isn't a hold.
+  - **Consent, enforced at query time, not store time.** New
+    `core/consent_service.py` (`POST /consent-records`,
+    `POST /consent-records/{id}/revoke`, `GET /consent-records`), backed
+    by a durable `ConsentRecord` (same one-row-per-grant,
+    revoked-in-place shape as `LegalHoldRecord` and Identity and
+    Access's own `RoleBindingRecord`). `MemoryItemRecord` gained a
+    `purpose` field (what an item was collected for, optional, recorded
+    at store time). `MemoryService.query` is where consent actually has
+    an effect: an item with a `purpose` set is excluded from results
+    unless an active `ConsentRecord` covers exactly `(scope, purpose)`;
+    an item with no purpose is never gated. Deliberately enforced at
+    query, not store — nothing currently calls `POST /items` from
+    another module (this module's own "Long-Term Memory write-back" gap
+    is still separately scoped), so there is no real caller a hard
+    consent-at-store check would even affect today; gating at read time
+    instead gives revocation an immediate, live effect the same way
+    `AuthorizationService.authorize`'s own revocation check is live
+    rather than trusting a stale token.
+  - **Deliberately not built in this pass**: purpose-limitation
+    enforcement beyond the consent check itself (e.g. validating
+    `purpose` against some external taxonomy, or blocking storage
+    outright without a consent basis) — recording and query-time gating
+    is the real, bounded slice; a hard consent-at-store check is a
+    reasonable next step once a real caller of `POST /items` exists to
+    actually need it, not invented ahead of one. Every new endpoint's
+    string fields are NUL-byte-guarded (`_reject_null_byte`, ticket
+    #82's established pattern) and `GrantConsentRequest.basis` is typed
+    as the real `ConsentBasis` enum directly rather than a bare `str`
+    hand-converted at the route — the identical sibling bug class this
+    same session found and fixed on Identity and Access, applied here
+    proactively rather than repeated.
 
 - **Resiliency.** Every outbound HTTP call this module makes to a peer module goes through `ResilientHTTPClient` (`clients/resilience.py`): exponential-backoff retry on network errors and 5xx responses (never 4xx — a client error means the peer already processed the request and rejected it, so retrying just repeats the mistake), and a circuit breaker (`aiobreaker`) that opens after repeated failures so a struggling peer gets a break instead of a retry storm, and this module fails fast instead of piling up requests against a peer that's already down.
 

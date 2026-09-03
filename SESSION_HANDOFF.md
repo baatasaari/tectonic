@@ -280,16 +280,33 @@ default). Neither is a production credential.
 ## 12. Backlog (P0/P1/P2/P3)
 
 - **P0**: Two closed this session (see the "P0 -- DONE" entries below);
-  several remain open from the reassessment's own Phase 1A backlog (IAM
-  v2's own contract-test-tier rollout to the ~29 modules that don't have
-  it, provisioning-saga reconciliation, universal operation-level
-  authorization, a real external access gateway, event-backbone
-  consumer/inbox pattern, image supply-chain build/scan/sign/admission
-  gates, branch-protection required-status-check configuration -- no
-  GitHub MCP tool found for that last one this session). Nothing is
-  currently broken or blocking merge; all touched modules are green
-  (including in real GitHub Actions CI, not just this sandbox -- see the
-  note on `TECTONIC_TEST_POSTGRES_URL`-vs-CI-credentials below).
+  several remain open from the reassessment's own Phase 1A backlog (the
+  contract-test-tier rollout to the ~28 modules that still don't have
+  it -- 7 of 34 now do, Evaluation Framework the newest, per the P1
+  entry below; provisioning-saga reconciliation, universal
+  operation-level authorization, a real external access gateway,
+  event-backbone consumer/inbox pattern, image supply-chain
+  build/scan/sign/admission gates, branch-protection required-status-
+  check configuration -- no GitHub MCP tool found for that last one
+  this session). Nothing is currently broken or blocking merge; all
+  touched modules are green (including in real GitHub Actions CI, not
+  just this sandbox -- see the note on
+  `TECTONIC_TEST_POSTGRES_URL`-vs-CI-credentials below).
+- **P1 -- new, found this session, not yet fixed.** The platform's own
+  "unbounded offset" class (already fixed once for Billing and
+  Metering, LLM Gateway, Multi-tenancy, Workflow Engine) is still open
+  on nearly every *other* module's `offset` query params -- confirmed
+  by grep after Evaluation Framework's own contract tier found it
+  there too (see that P1 "DONE" entry below for the full finding).
+  `grep -rn "offset: int = Query" modules/*/src/*/api/*.py` and check
+  which lack `le=` — Identity and Access is a notable case: it already
+  has a contract tier, but Hypothesis's randomized integer generation
+  doesn't reliably produce an overflow value every run, so this gap
+  can pass by chance. A pure mechanical grep-and-fix (add
+  `le=1_000_000_000` + a regression test per route), not a per-module
+  contract-tier rollout -- much cheaper per bug found than continuing
+  the rollout to a brand-new module, and arguably the single highest
+  mechanical-leverage item left in the backlog right now.
 - **P1 -- DONE (this session).** The platform-wide NUL-byte-in-a-raw-
   `Query()`-string-parameter bug class (originally surfaced for real by
   the new CI job's own first run, against Multi-tenancy's and Billing
@@ -448,7 +465,233 @@ default). Neither is a production credential.
   end-to-end through real routes); 13 integration tests green against
   real Postgres including two brand-new role-binding/tenant-scoping
   tests and the real Alembic `0003` migration itself running end-to-end
-  (backfill included).
+  (backfill included). **Merged**: PR #11
+  (`claude/practical-wozniak-l1723c-rw7pp0` -> `claude/practical-wozniak-l1723c`,
+  merge commit `8a763df`) -- but not cleanly: PR #11's own CI run found a
+  real regression this exact tenant-scoped-roles change caused in two
+  seed scripts (`seed_support_agent_demo.py`/`seed_subscription_tiers.py`
+  posted to `POST /roles` with no `X-Tenant-Id`, silently relying on the
+  old platform-global role namespace); root-caused from the real CI job
+  logs, fixed (`72b38a2`), and verified by actually re-running the full
+  15-module product-slice stack locally in this sandbox before pushing --
+  see that commit's own message for the full account. Not a fix left for
+  a future session: this was caught and closed within the same PR before
+  merge.
+- **P0 -- DONE (this session, continued immediately after IAM v2
+  merged).** Contract-test tier rolled out to Identity and Access
+  (`tests/contract/`, ported from Multi-tenancy's own reference
+  implementation, ticket #73/#80) -- the specific next P0 Phase 1A item
+  this session's own §13 already flagged as most relevant ("including
+  Identity and Access itself, which still has none"). Its very first
+  run found three real, previously-invisible bugs (this module had
+  never had a contract tier before, so none of these were ever
+  exercised):
+  - A NUL byte in a request body field (`POST /roles`'s own `name`,
+    first found; then `POST /authorize`'s `required_scope`, found on
+    the very next run once the first was fixed -- it's persisted into
+    `AuthDecisionRecord`, the audit trail, on every call, allowed or
+    denied) crashed with an unhandled 500 instead of a clean 422. Ticket
+    #82's own platform-wide sweep never covered this module's body
+    fields (only ever covered raw `Query()` params platform-wide, and
+    this module had no contract tier to surface the body-field version
+    until now). Fixed with the same `_reject_null_byte` field-validator
+    pattern applied across every persisted string field in
+    `schemas/identity_and_access.py`.
+  - `RegisterIdentityRequest.type` / `RegisterIdentityProviderRequest.
+    provider_type` were bare `str` fields hand-converted to
+    `IdentityType`/`IdentityProviderType` at the route -- the identical
+    sibling bug class already fixed for `IdentityStatus` on the
+    query-param side (ticket #82), never caught on these two body
+    fields. Now typed directly on the request schema.
+  - `GET /identities/{id}`, `GET /identity-providers/{id}`, `GET
+    /groups/{id}`, `POST /scim-tokens/{id}/revoke` all handed a
+    syntactically-invalid UUID path param straight to `session.get()`,
+    crashing with an unhandled `DataError` instead of a clean 404 --
+    this platform's own recurring "non-UUID path/query-param" class
+    (first found in Multi-tenancy/Billing and Metering), fixed with the
+    identical `_is_valid_uuid`-repository-guard pattern.
+  All three have regression tests (schema-level ones provable with the
+  in-memory fake in `tests/unit/`; the UUID-format one is real-Postgres-
+  only, in `tests/integration/`, since a dict lookup in the fake never
+  crashes on a malformed key the way `asyncpg` does). No `ci.yml` change
+  needed -- the contract job is opt-in by directory existence, already
+  wired platform-wide. Ruff clean; 174 unit (+5), 14 integration (+1),
+  1 contract test green (internally fuzzes every non-SCIM operation
+  this module's real OpenAPI schema declares). Full account in that
+  module's own README and root README's own P0 narrative.
+- **P1 (Phase 2) -- DONE (this session).** After PR #12 (contract-test
+  tier), the user redirected from the P0 Phase 1A backlog toward Phase
+  2 and asked to just continue rather than pick a specific slice
+  from a list -- Long-Term Memory's "memory governance" gap was chosen
+  as the most concrete, already-flagged Phase 2 candidate (this
+  session's own §13 repeatedly named it "currently zero coverage", and
+  it directly follows the identity-context-recall work already shipped
+  in Conversational Engine this session). Two real gaps closed, both
+  evidence-based from direct inspection (no consent/purpose/legal-hold
+  concept existed anywhere in `core/domain.py` before this):
+  - **Legal holds -- the one piece with real enforcement teeth**: new
+    `core/legal_hold_service.py`, `POST /legal-holds` /
+    `.../release` / `GET /legal-holds`, backed by a durable
+    `LegalHoldRecord` (one row per hold, released in place).
+    `ForgettingEngine.execute` -- which previously deleted everything
+    matching a subject's scope completely unconditionally, no way to
+    even mark data exempt -- now checks for an active hold first and
+    refuses the whole erasure request (`LegalHoldActiveError` -> `409`)
+    rather than silently skipping held items or deleting anyway.
+  - **Consent, enforced at query time, not store time**: new
+    `core/consent_service.py`, `POST /consent-records` /
+    `.../revoke` / `GET /consent-records`, backed by a durable
+    `ConsentRecord` (same one-row-per-grant, revoked-in-place shape as
+    `LegalHoldRecord` and this session's own Identity and Access
+    `RoleBindingRecord`). `MemoryItemRecord` gained an optional
+    `purpose` field; `MemoryService.query` excludes an item whose
+    `purpose` has no active consent covering exactly `(scope,
+    purpose)` -- deliberately gated at read time, not write time,
+    since nothing currently calls `POST /items` from another module
+    (Long-Term Memory write-back is still separately scoped), so a
+    hard consent-at-store check would have no real caller to affect
+    today; gating retrieval instead gives revocation an immediate,
+    live effect the same way `AuthorizationService.authorize`'s own
+    revocation check is live rather than trusting a stale token.
+  - **Applied a lesson from this session's own earlier work
+    immediately**: `GrantConsentRequest.basis` is typed as the real
+    `ConsentBasis` enum directly, not a bare `str` hand-converted at
+    the route -- the identical sibling bug class found and fixed on
+    Identity and Access's `RegisterIdentityRequest.type` earlier this
+    same session, applied here proactively instead of repeated. Every
+    new endpoint's string fields are `_reject_null_byte`-guarded
+    (ticket #82's pattern) and the new repository lookup-by-id methods
+    (`revoke_consent`, `release_legal_hold`) get the
+    `_is_valid_uuid`-repository-guard pattern proactively too, even
+    though this module has no contract tier yet to have found it the
+    hard way.
+  - **Deliberately not built**: purpose-limitation enforcement beyond
+    the consent check itself (e.g. validating `purpose` against an
+    external taxonomy), and a hard consent-at-store gate -- reasonable
+    next steps once a real `POST /items` caller exists to actually
+    need them.
+  Real Alembic migration (`0002`), manually verified end-to-end against
+  real Postgres (upgrade, downgrade, re-upgrade). Ruff clean; 91 unit
+  tests green (was 61, +30 new: `test_consent_service.py`,
+  `test_legal_hold_service.py` new files, extended
+  `test_forgetting.py`/`test_memory_service.py`/`test_routes_memory.py`
+  coverage for hold enforcement, consent-at-query gating including
+  semantic/vector hits, and every new route including the enum/NUL-byte
+  regression tests); 7 integration tests green against real Postgres
+  (was 3, +4 new, including the non-UUID-id regression). Pushed to
+  `claude/practical-wozniak-l1723c-rw7pp0` (a Stop hook forced the push
+  before PR #12's own review state was resolved, overriding the
+  original plan to hold it off that PR's diff) -- landed in PR #12
+  alongside the contract-test-tier commit; PR #12's title/body were
+  updated to honestly describe both bodies of work as separate
+  commits/sections.
+- **P1 (Phase 2) -- DONE (this session).** Second Phase 2 slice, picked
+  after the user said to keep going on Phase 2 without naming a specific
+  item. The evaluation-gated release path: PromptOps' `conclude` and
+  LLMOps' `promote` each already had a real, blocking gate of their own
+  (A/B significance; canary pass-rate-over-time), but neither ever
+  called Evaluation Framework's own `POST /gate` engine -- it existed,
+  had a real `GateResultRecord` audit trail, and was effectively dead
+  code from every other module's perspective. Three-module change:
+  - **Evaluation Framework**: new `GET /eval-runs?tenant_id=&agent_ref=`
+    (most-recent-first, paginated, new `ix_eval_runs_tenant_agent`
+    composite index, migration `0002`) -- the lookup neither consumer
+    had a way to make (`/gate` needs an `eval_run_id`; `/scores` returns
+    individual score rows, not grouped by run).
+  - **PromptOps**: `ABTestingService.conclude` now also gates the
+    winner's latest eval run after the A/B significance check passes,
+    via a new `EvaluationFrameworkClient.gate_latest_run` port method
+    the real HTTP client implements by chaining `GET /eval-runs` into
+    `POST /gate`. Refuses promotion with a new `EvaluationGateFailedError`
+    (`409`) when Evaluation Framework's own verdict on that run failed a
+    blocking metric threshold -- a real, distinct failure mode from "not
+    enough A/B signal yet" (`ABTestNotConclusiveError`).
+  - **LLMOps**: the identical `gate_latest_run` pattern wired into
+    `RolloutService.promote`, layered *after* the existing canary
+    pass-rate gate (both must pass), reusing `CanaryGateFailedError`
+    rather than inventing a second gate-failure type.
+  - Both consumers treat "no eval run exists yet" (`gate_latest_run`
+    returns `None`) as a pass-through, not a block -- the same "no
+    history is not a failure" convention `list_scores` already
+    established platform-wide, applied consistently rather than
+    reinvented stricter.
+  Ruff clean across all three modules. Evaluation Framework: 74 unit
+  (+3 new: filtering/ordering, NUL-byte-in-`agent_ref` regression), 5
+  integration tests green against real Postgres (+1 new: filters to
+  the right (tenant_id, agent_ref), most-recent-first). PromptOps: 73
+  unit (+5 new: gate blocks, gate passes, no-eval-run-yet passes
+  through, route-level 409), 4 integration tests green. LLMOps: 60
+  unit (+3 new: same three cases), 3 integration tests green. All
+  three modules' migrations/repositories verified against this
+  sandbox's real local Postgres, not SQLite fakes alone.
+- **P1 -- DONE (this session).** Asked how to prioritize the numbered
+  Tier A/B/C backlog presented after the evaluation-gated-release-path
+  work, the user chose "mechanical leverage first" over risk-ranking or
+  working straight down the list -- so this continued the contract-
+  test-tier rollout (ticket #73/#80) rather than starting a new backlog
+  category. 6 of 34 modules had the tier before this (Billing and
+  Metering, Identity and Access, LLM Gateway, Multi-tenancy, Vector DB,
+  Workflow Engine); **Evaluation Framework** picked as the 7th
+  specifically because this same session's own evaluation-gated-
+  release-path work had just made it load-bearing for both PromptOps'
+  and LLMOps' release gates, and its new `GET /eval-runs` route had
+  never been fuzzed. `tests/contract/`, ported from Identity and
+  Access's own reference `conftest.py`. Found four real,
+  previously-invisible bugs on the first several runs (not caught in
+  one pass -- see below):
+  1. **NUL bytes in Pydantic *body* fields** -- ticket #82's original
+     sweep only ever covered raw `Query()` string parameters; this
+     module's own `POST /evaluate` (`tenant_id`/`agent_ref`/
+     `trigger_source`/`metric_set` items), `/gate` (`tenant_id`/
+     `eval_run_id`/`environment`), `/domain-packs` (`tenant_id`/
+     `pack_name`), `/sample` (`tenant_id`/`agent_ref`/`metric_set`
+     items) all reached `session.execute()` raw instead of a clean
+     `422`. Fixed with LLM Gateway's own established
+     `_reject_null_byte` `field_validator` pattern.
+  2. **A NUL byte survives inside a `dict` *key* too** -- `POST
+     /domain-packs`'s `custom_thresholds` round-trips as real `jsonb`,
+     and jsonb's own text-based storage rejects an embedded NUL exactly
+     like `text`/`varchar` does, even nested inside an object key. Not
+     caught by (1)'s top-level field validators -- needed its own
+     per-key validator, the same pattern Billing and Metering's own
+     `unit_prices` already established.
+  3. **A syntactically-invalid UUID handed straight to
+     `session.get()`** -- `POST /gate`'s `eval_run_id` crashed with an
+     unhandled `asyncpg.DataError` instead of the route's own clean
+     `404` path (`GateEngine.gate` already had a documented
+     `EvalRunNotFoundError` -> `404` handler; nothing upstream of the
+     DB call ever reached it). Fixed with `db/repository.py`'s own new
+     `_is_valid_uuid` guard on `get_eval_run`, the identical pattern
+     Identity and Access's `get_identity`/`get_group`/etc. established.
+  4. **The platform's own "unbounded offset" class** (this repo's own
+     `CLAUDE.md`-documented recurring bug -- previously fixed only for
+     Billing and Metering, LLM Gateway, Multi-tenancy, Workflow Engine)
+     -- `GET /eval-runs`'s and `GET /scores`'s `offset` had no upper
+     bound, so a value past Postgres `bigint` range crashed instead of
+     a clean `422`. Fixed with the identical `le=1_000_000_000` bound.
+     **Left deliberately unfixed, out of this pass's scope**: grepping
+     confirmed this same gap is still open on every *other* module's
+     `offset` query params that lack an `le=` bound -- almost the whole
+     platform, Identity and Access included despite already having its
+     own contract tier (Hypothesis's randomized integer generation
+     doesn't reliably produce an overflow value every run, so it can
+     pass by chance). This is a real, sourced, ready-to-go next
+     mechanical-leverage candidate -- a platform-wide grep-and-fix, not
+     a per-module contract-tier rollout -- flagged rather than silently
+     swept here since it reaches ~25+ files well beyond this module.
+  All four fixes verified: ruff clean; 78 unit tests green (was 74,
+  +4 new: NUL-byte-in-body-field on `/evaluate`, NUL-byte-in-dict-key
+  on `/domain-packs`, clean-404-for-non-UUID on `/gate`,
+  offset-bound-422 on `/eval-runs`); 6 integration tests green against
+  real Postgres (was 5, +1: `test_a_non_uuid_eval_run_id_returns_none_
+  instead_of_crashing`, the one regression SQLite's fake genuinely
+  can't reproduce). The contract tier itself reran clean 4 consecutive
+  times after all four fixes landed -- Hypothesis's own randomized
+  example generation means a single green run doesn't fully prove a
+  bug class's absence, the same discipline that caught bugs (2) and (4)
+  in the first place (both only surfaced on a *later* rerun, not the
+  first green-looking pass). Root README's running narrative and this
+  module's own README both updated with the full account.
 - **P1**: Fix Agentic RAG's own Graph DB/Knowledge-Base-symbolic-lookup
   client wire shapes properly (currently sidestepped via
   `hybrid_retrieval_enabled=false` for this slice only) once Knowledge
@@ -481,26 +724,32 @@ pasted both directly into the conversation. If a future session needs
 either one again and doesn't have it in context, ask the user to paste it
 again rather than trying to reconstruct it from README prose.
 
-**This session's own work**: closed two of the reassessment's P0 Phase
-1A items in sequence — the `EntitlementGateMiddleware` bounded-staleness
-cache, then (this same session, continued) Identity and Access's IAM v2
-foundation (tenant-scoped roles + a real role-binding lifecycle). See
-§12's two newest "P0 -- DONE" entries above for the full account of
-each. Confirm current push/PR state with `git log`/`git status` on
-`claude/practical-wozniak-l1723c-rw7pp0` and a live check of open PRs
-before assuming either is or isn't merged yet — this file is a
-point-in-time snapshot, not a live source of truth for that.
+**This session's own work**: closed three of the reassessment's P0
+Phase 1A items in sequence — the `EntitlementGateMiddleware`
+bounded-staleness cache; Identity and Access's IAM v2 foundation
+(tenant-scoped roles + a real role-binding lifecycle), merged as PR #11
+(with a real seed-script regression found by that PR's own CI and
+fixed before merge — see §12's own account); and, immediately after,
+Identity and Access's own contract-test tier (§12's newest "P0 -- DONE"
+entry), which itself found and fixed three more real bugs (NUL-byte
+body fields, two enum-hand-conversion body fields, four non-UUID
+path-param lookups). Confirm current push/PR state with `git log`/
+`git status` on `claude/practical-wozniak-l1723c-rw7pp0` and a live
+check of open PRs before assuming any of this is or isn't merged yet —
+this file is a point-in-time snapshot, not a live source of truth for
+that; the contract-tier work in particular may still be uncommitted/
+un-PR'd depending on exactly when this snapshot was taken relative to
+that work finishing.
 
 **Remaining P0 Phase 1A closure items from the reassessment's own
-backlog, not yet started** (the other two options offered alongside IAM
-v2 foundation, plus items the reassessment's own backlog named that were
-never offered as a discrete choice):
+backlog, not yet started**:
 
-- Contract-test tier (schemathesis/Hypothesis, per
-  `modules/multi-tenancy/tests/contract/conftest.py`'s established
-  harness fixes) rolled out to the remaining ~29 modules that don't have
-  it yet — including Identity and Access itself, which still has none
-  (this session's IAM v2 work only extended its unit/integration tiers).
+- Contract-test tier rolled out further — Identity and Access is now
+  done (this session); ~28 modules still don't have it. Multi-tenancy's
+  own `tests/contract/conftest.py` remains the reference implementation
+  to copy (the two established harness fixes: swap the real `lifespan`
+  for a no-op before schemathesis drives the ASGI app, and use a
+  `NullPool`-backed engine for the contract-test app context).
 - Provisioning-saga/resource-allocation reconciliation.
 - Universal operation-level authorization; a real external access
   gateway; event-backbone consumer/inbox pattern; image supply-chain
@@ -516,14 +765,19 @@ from Agent Cards/Conversational Engine to the other 26 modules
 `QuotaEnforcementService`'s fail-open consumers (LLM Gateway, Vector DB)
 — a related but distinct gap, a quota check rather than a binary gate.
 
+**Phase 2 candidates closed this session**: memory governance
+(Long-Term Memory's consent/purpose/legal-hold gap) and the
+evaluation-gated release path (wiring Evaluation Framework's own
+`/gate` into PromptOps' `conclude` and LLMOps' `promote` — see §12's
+own "P1 (Phase 2) -- DONE" entries for both).
+
 **Still-open Phase 2 candidates from the earlier assessment, not picked
-yet**: memory governance (Long-Term Memory's consent/purpose/legal-hold
-gap, currently zero coverage), the evaluation-gated release path (wiring
-Evaluation Framework's own `/gate` as an actual blocking check before
-PromptOps publish / LLMOps canary promotion), PromptOps' own full
-review/approve/publish lifecycle. Ask the user which comes next rather
-than assuming — this session's pattern has been to offer options via
-`AskUserQuestion` and let the user pick.
+yet**: PromptOps' own full review/approve/publish lifecycle (the A/B
+test + evaluation-gate flow now closes most of "is this version good
+enough" — a human review/approval step before `conclude` is a distinct,
+still-open gap). Ask the user which comes next rather than assuming —
+this session's pattern has been to offer options via `AskUserQuestion`
+and let the user pick.
 
 ## 14. Important Context for Next Claude Session
 

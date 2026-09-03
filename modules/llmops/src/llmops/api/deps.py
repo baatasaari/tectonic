@@ -37,4 +37,4 @@ def build_canary_evaluation_service(ctx: AppContext) -> CanaryEvaluationService:
 
 
 def build_rollout_service(repository: LLMOpsRepository, ctx: AppContext) -> RolloutService:
-    return RolloutService(repository, build_canary_evaluation_service(ctx))
+    return RolloutService(repository, build_canary_evaluation_service(ctx), ctx.evaluation_framework)

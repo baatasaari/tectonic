@@ -40,6 +40,18 @@ class EvaluationFrameworkClient(Protocol):
         version has no evaluation history yet."""
         ...
 
+    async def gate_latest_run(self, *, tenant_id: str, agent_ref: str) -> dict[str, Any] | None:
+        """Resolves the most recent eval run for `agent_ref` (via
+        Evaluation Framework's `GET /eval-runs`) and gates it (`POST
+        /gate`), returning that endpoint's own verdict:
+        `{"overall_passed": bool, "blocking_failures": list[str]}`.
+        `None`, not an error, when no eval run exists yet for this
+        agent_ref -- the same "no history yet is not a failure"
+        convention `list_scores` already establishes, since a version
+        that has never been evaluated has nothing for this gate to
+        block on."""
+        ...
+
 
 class LLMGatewayClient(Protocol):
     async def generate(self, *, tenant_id: str, model: str, prompt: str) -> str:

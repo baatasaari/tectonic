@@ -8,8 +8,10 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from long_term_memory.core.domain import (
+    ConsentRecord,
     ConsolidationRunRecord,
     DeletionRecord,
+    LegalHoldRecord,
     MemoryItemRecord,
     MemoryType,
     ReflectionEntryRecord,
@@ -40,6 +42,31 @@ class LongTermMemoryRepository(Protocol):
     async def create_deletion_record(self, record: DeletionRecord) -> DeletionRecord: ...
 
     async def get_deletion_record(self, tenant_id: str, deletion_id: str) -> DeletionRecord | None: ...
+
+    # -- Memory governance: consent records and legal holds --
+
+    async def create_consent_record(self, record: ConsentRecord) -> ConsentRecord: ...
+
+    async def get_active_consent(self, tenant_id: str, scope: str, purpose: str) -> ConsentRecord | None:
+        """The most recent not-yet-revoked consent for this (scope, purpose),
+        if any -- what MemoryService.query and ConsentService.revoke both
+        need."""
+        ...
+
+    async def revoke_consent(self, tenant_id: str, consent_id: str) -> ConsentRecord | None: ...
+
+    async def list_consents(self, tenant_id: str, scope: str) -> list[ConsentRecord]: ...
+
+    async def create_legal_hold(self, record: LegalHoldRecord) -> LegalHoldRecord: ...
+
+    async def get_active_legal_hold(self, tenant_id: str, scope: str) -> LegalHoldRecord | None:
+        """The most recent not-yet-released hold on this scope, if any --
+        what ForgettingEngine.execute checks before deleting anything."""
+        ...
+
+    async def release_legal_hold(self, tenant_id: str, hold_id: str) -> LegalHoldRecord | None: ...
+
+    async def list_legal_holds(self, tenant_id: str, scope: str) -> list[LegalHoldRecord]: ...
 
 
 @dataclass

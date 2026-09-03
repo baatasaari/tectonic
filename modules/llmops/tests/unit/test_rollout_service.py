@@ -67,6 +67,54 @@ async def test_promote_succeeds_when_the_gate_passes(harness_factory):
     assert persisted_version.status == ModelVersionStatus.ACTIVE
 
 
+async def test_promote_blocks_when_evaluation_framework_gate_fails(harness_factory):
+    """A version whose canary traffic passed the local pass-rate gate can
+    still have a failing most recent evaluation run -- Evaluation
+    Framework's own `/gate` is the platform's single source of truth for
+    that, so `promote` must not promote around it."""
+    evalfw = StubEvaluationFrameworkClient(
+        scores=_PASSING_SCORES, gate_result={"overall_passed": False, "blocking_failures": ["faithfulness"]},
+    )
+    harness = harness_factory(evaluation_framework=evalfw)
+    version = await harness.model_registry_service.register(tenant_id="acme", model_name="m", version="1", artifact_ref="a")
+    deployment = await harness.rollout_service.start_canary(tenant_id="acme", model_version_id=version.id, target="prod")
+
+    with pytest.raises(CanaryGateFailedError) as exc_info:
+        await harness.rollout_service.promote(deployment.id)
+    assert "faithfulness" in exc_info.value.reason
+
+    persisted = await harness.repository.get_deployment(deployment.id)
+    assert persisted.stage == DeploymentStage.CANARY
+
+
+async def test_promote_succeeds_when_evaluation_framework_gate_passes(harness_factory):
+    evalfw = StubEvaluationFrameworkClient(
+        scores=_PASSING_SCORES, gate_result={"overall_passed": True, "blocking_failures": []},
+    )
+    harness = harness_factory(evaluation_framework=evalfw)
+    version = await harness.model_registry_service.register(tenant_id="acme", model_name="m", version="1", artifact_ref="a")
+    deployment = await harness.rollout_service.start_canary(tenant_id="acme", model_version_id=version.id, target="prod")
+
+    promoted = await harness.rollout_service.promote(deployment.id)
+
+    assert promoted.stage == DeploymentStage.ACTIVE
+    assert evalfw.gate_calls
+
+
+async def test_promote_succeeds_when_no_eval_run_exists_yet(harness_factory):
+    """`gate_latest_run` returning `None` (no eval run yet) must not block
+    promotion -- the same "no history is not a failure" convention
+    `list_scores` already establishes, not a new, stricter one."""
+    evalfw = StubEvaluationFrameworkClient(scores=_PASSING_SCORES)
+    harness = harness_factory(evaluation_framework=evalfw)
+    version = await harness.model_registry_service.register(tenant_id="acme", model_name="m", version="1", artifact_ref="a")
+    deployment = await harness.rollout_service.start_canary(tenant_id="acme", model_version_id=version.id, target="prod")
+
+    promoted = await harness.rollout_service.promote(deployment.id)
+
+    assert promoted.stage == DeploymentStage.ACTIVE
+
+
 async def test_promoting_a_new_version_supersedes_the_previously_active_one(harness_factory):
     evalfw = StubEvaluationFrameworkClient(scores=_PASSING_SCORES)
     harness = harness_factory(evaluation_framework=evalfw)

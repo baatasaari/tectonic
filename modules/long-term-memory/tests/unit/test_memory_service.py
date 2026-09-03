@@ -1,4 +1,4 @@
-from long_term_memory.core.domain import MemoryType
+from long_term_memory.core.domain import ConsentBasis, MemoryType
 
 
 async def test_store_fact_item_no_downstream_call(harness):
@@ -89,3 +89,73 @@ async def test_query_allowed_cross_agent_when_sharing_enabled_and_guardrails_all
     )
     assert len(results) == 1
     assert harness.guardrails.calls[0]["requesting_agent"] == "agent:b"
+
+
+# Consent enforcement at query time (memory governance foundation): an item
+# with a `purpose` is only returned while an active ConsentRecord covers
+# exactly (scope, purpose); an item with no purpose is never gated.
+
+
+async def test_item_with_no_purpose_is_never_gated_by_consent(harness):
+    await harness.memory_service.store(
+        tenant_id="t1", scope="user:alice", memory_type=MemoryType.FACT, content="Alice's favourite colour is blue",
+    )
+    results = await harness.memory_service.query(tenant_id="t1", scope="user:alice", query="favourite colour")
+    assert len(results) == 1
+
+
+async def test_item_with_a_purpose_and_no_consent_is_excluded_from_query(harness):
+    await harness.memory_service.store(
+        tenant_id="t1", scope="user:alice", memory_type=MemoryType.FACT,
+        content="Alice's favourite colour is blue", purpose="personalization",
+    )
+    results = await harness.memory_service.query(tenant_id="t1", scope="user:alice", query="favourite colour")
+    assert results == []
+
+
+async def test_item_with_a_purpose_and_active_consent_is_returned(harness):
+    await harness.consent_service.grant(
+        tenant_id="t1", scope="user:alice", purpose="personalization", basis=ConsentBasis.EXPLICIT,
+    )
+    await harness.memory_service.store(
+        tenant_id="t1", scope="user:alice", memory_type=MemoryType.FACT,
+        content="Alice's favourite colour is blue", purpose="personalization",
+    )
+    results = await harness.memory_service.query(tenant_id="t1", scope="user:alice", query="favourite colour")
+    assert len(results) == 1
+
+
+async def test_revoking_consent_immediately_stops_the_item_being_returned(harness):
+    consent = await harness.consent_service.grant(
+        tenant_id="t1", scope="user:alice", purpose="personalization", basis=ConsentBasis.EXPLICIT,
+    )
+    await harness.memory_service.store(
+        tenant_id="t1", scope="user:alice", memory_type=MemoryType.FACT,
+        content="Alice's favourite colour is blue", purpose="personalization",
+    )
+    assert len(await harness.memory_service.query(tenant_id="t1", scope="user:alice", query="favourite")) == 1
+
+    await harness.consent_service.revoke(tenant_id="t1", consent_id=consent.id)
+
+    assert await harness.memory_service.query(tenant_id="t1", scope="user:alice", query="favourite") == []
+
+
+async def test_consent_for_a_different_purpose_does_not_cover_this_item(harness):
+    await harness.consent_service.grant(
+        tenant_id="t1", scope="user:alice", purpose="support", basis=ConsentBasis.EXPLICIT,
+    )
+    await harness.memory_service.store(
+        tenant_id="t1", scope="user:alice", memory_type=MemoryType.FACT,
+        content="Alice's favourite colour is blue", purpose="personalization",
+    )
+    results = await harness.memory_service.query(tenant_id="t1", scope="user:alice", query="favourite colour")
+    assert results == []
+
+
+async def test_consent_gating_also_applies_to_semantic_vector_hits(harness):
+    await harness.memory_service.store(
+        tenant_id="t1", scope="user:alice", memory_type=MemoryType.SEMANTIC,
+        content="Alice enjoys hiking on weekends", purpose="personalization",
+    )
+    results = await harness.memory_service.query(tenant_id="t1", scope="user:alice", query="hiking")
+    assert results == []

@@ -9,6 +9,22 @@ scored by query/content term overlap (this platform's usual lightweight-
 fallback approach to similarity elsewhere); semantic items are scored by
 Vector DB's own similarity search, which is where embedding-based
 retrieval actually adds value over a keyword match.
+
+**Consent enforcement at query time** (memory governance foundation):
+`query` is where consent actually has teeth, deliberately, not at
+`store` -- nothing currently calls `POST /items` from another module
+(this module's own "Long-Term Memory write-back" gap is still
+separately scoped), so there is no real caller today a hard
+consent-at-store check would even affect; enforcing at read time
+instead gives an immediate, live effect the same way
+`AuthorizationService.authorize`'s own revocation check is live rather
+than trusting a stale token. An item with a `purpose` set is excluded
+from results unless an active `ConsentRecord` covers exactly
+`(scope, purpose)` -- an item with no `purpose` at all (the default,
+and every item stored before this feature existed) is never gated,
+since there is nothing to check consent *for*. Consent revocation is
+therefore immediate: the very next query stops returning that item,
+without anything having to re-touch the item itself.
 """
 from __future__ import annotations
 
@@ -60,10 +76,11 @@ class MemoryService:
 
     async def store(
         self, *, tenant_id: str, scope: str, memory_type: MemoryType, content: str, visibility_policy_ref: str = "",
+        purpose: str = "",
     ) -> MemoryItemRecord:
         item = MemoryItemRecord(
             id=new_id(), tenant_id=tenant_id, scope=scope, memory_type=memory_type, content=content,
-            visibility_policy_ref=visibility_policy_ref,
+            visibility_policy_ref=visibility_policy_ref, purpose=purpose,
         )
         item = await self._repository.create_item(item)
 
@@ -85,6 +102,7 @@ class MemoryService:
             return []
 
         active_items = [i for i in await self._repository.list_active(tenant_id, memory_types) if i.scope == scope]
+        active_items = await self._filter_by_consent(tenant_id, scope, active_items)
 
         results: list[RankedMemoryItem] = []
         for item in active_items:
@@ -109,3 +127,16 @@ class MemoryService:
             await self._repository.update_item(ranked.item)
 
         return top
+
+    async def _filter_by_consent(
+        self, tenant_id: str, scope: str, items: list[MemoryItemRecord],
+    ) -> list[MemoryItemRecord]:
+        purposes = {i.purpose for i in items if i.purpose}
+        if not purposes:
+            return items  # nothing to check consent for -- the common case today
+
+        active_purposes = {
+            purpose for purpose in purposes
+            if await self._repository.get_active_consent(tenant_id, scope, purpose) is not None
+        }
+        return [i for i in items if not i.purpose or i.purpose in active_purposes]

@@ -56,13 +56,23 @@ class InMemoryLLMOpsRepository:
 
 
 class StubEvaluationFrameworkClient:
-    def __init__(self, *, scores: list[dict[str, Any]] | None = None) -> None:
+    def __init__(
+        self, *, scores: list[dict[str, Any]] | None = None, gate_result: dict[str, Any] | None = None,
+    ) -> None:
         self.calls: list[dict] = []
+        self.gate_calls: list[dict] = []
         self._scores = scores if scores is not None else []
+        # None (the default) means "no eval run exists yet" -- matching the real
+        # client's own convention -- not "the gate failed."
+        self._gate_result = gate_result
 
     async def list_scores(self, *, tenant_id: str, agent_ref: str) -> list[dict[str, Any]]:
         self.calls.append({"tenant_id": tenant_id, "agent_ref": agent_ref})
         return self._scores
+
+    async def gate_latest_run(self, *, tenant_id: str, agent_ref: str) -> dict[str, Any] | None:
+        self.gate_calls.append({"tenant_id": tenant_id, "agent_ref": agent_ref})
+        return self._gate_result
 
 
 __all__ = ["InMemoryLLMOpsRepository", "StubEvaluationFrameworkClient"]

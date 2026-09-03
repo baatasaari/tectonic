@@ -25,9 +25,7 @@ from identity_and_access.core.domain import (
     IdentityNotActiveError,
     IdentityNotFoundError,
     IdentityProviderNotFoundError,
-    IdentityProviderType,
     IdentityStatus,
-    IdentityType,
     InvalidTransitionError,
     RoleAlreadyExistsError,
     RoleNotFoundError,
@@ -148,7 +146,7 @@ async def register_identity(
     service = build_identity_registry_service(repository)
     try:
         identity = await service.register(
-            tenant_id=tenant_id, name=body.name, type=IdentityType(body.type), role_names=body.role_names,
+            tenant_id=tenant_id, name=body.name, type=body.type, role_names=body.role_names,
         )
     except RoleNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -330,7 +328,7 @@ async def register_identity_provider(
 ) -> IdentityProviderSchema:
     service = build_identity_provider_service(repository)
     provider = await service.register(
-        tenant_id=tenant_id, name=body.name, provider_type=IdentityProviderType(body.provider_type),
+        tenant_id=tenant_id, name=body.name, provider_type=body.provider_type,
         issuer=body.issuer, client_id=body.client_id, jwks_uri=body.jwks_uri, sso_url=body.sso_url,
         x509_certificate=body.x509_certificate, email_claim=body.email_claim, groups_claim=body.groups_claim,
         name_claim=body.name_claim,

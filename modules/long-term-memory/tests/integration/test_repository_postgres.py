@@ -18,7 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from alembic import command
 from long_term_memory.core.domain import (
+    ConsentBasis,
+    ConsentRecord,
     DeletionRecord,
+    LegalHoldRecord,
     MemoryItemRecord,
     MemoryItemStatus,
     MemoryType,
@@ -124,5 +127,98 @@ async def test_memory_item_real_uuid_pk_round_trips_through_update(migrated_url)
             assert fetched.status == MemoryItemStatus.CONSOLIDATED
             assert fetched.relevance_score == 0.42
             assert fetched.vector_ref == "vec-99"
+    finally:
+        await engine.dispose()
+
+
+async def test_memory_item_purpose_round_trips(migrated_url):
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyLongTermMemoryRepository(session)
+            item = await repo.create_item(
+                MemoryItemRecord(
+                    id=new_id(), tenant_id="acme", scope="user-1", memory_type=MemoryType.FACT,
+                    content="favourite colour is blue", purpose="personalization",
+                )
+            )
+            fetched = await repo.get_item("acme", item.id)
+            assert fetched is not None
+            assert fetched.purpose == "personalization"
+    finally:
+        await engine.dispose()
+
+
+async def test_consent_record_grant_and_revoke_round_trip(migrated_url):
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyLongTermMemoryRepository(session)
+            created = await repo.create_consent_record(
+                ConsentRecord(
+                    id=new_id(), tenant_id="acme", scope="user-1", purpose="personalization",
+                    basis=ConsentBasis.EXPLICIT, granted_by="user-1",
+                )
+            )
+            assert created.revoked_at is None
+
+            active = await repo.get_active_consent("acme", "user-1", "personalization")
+            assert active is not None
+            assert active.id == created.id
+
+            revoked = await repo.revoke_consent("acme", created.id)
+            assert revoked is not None
+            assert revoked.revoked_at is not None
+
+            assert await repo.get_active_consent("acme", "user-1", "personalization") is None
+
+            records = await repo.list_consents("acme", "user-1")
+            assert len(records) == 1
+            assert records[0].basis == ConsentBasis.EXPLICIT
+    finally:
+        await engine.dispose()
+
+
+async def test_legal_hold_place_and_release_round_trip(migrated_url):
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyLongTermMemoryRepository(session)
+            created = await repo.create_legal_hold(
+                LegalHoldRecord(
+                    id=new_id(), tenant_id="acme", scope="user-1", reason="active litigation",
+                    placed_by="legal-team",
+                )
+            )
+            assert created.released_at is None
+
+            active = await repo.get_active_legal_hold("acme", "user-1")
+            assert active is not None
+            assert active.id == created.id
+
+            released = await repo.release_legal_hold("acme", created.id)
+            assert released is not None
+            assert released.released_at is not None
+
+            assert await repo.get_active_legal_hold("acme", "user-1") is None
+
+            holds = await repo.list_legal_holds("acme", "user-1")
+            assert len(holds) == 1
+    finally:
+        await engine.dispose()
+
+
+async def test_a_non_uuid_id_returns_none_instead_of_crashing_for_consent_and_hold_lookups(migrated_url):
+    """The same "non-UUID path/query-param" bug class this platform has
+    hit repeatedly (ticket #82's own sweep, and this same session's own
+    Identity and Access contract-tier fix) -- SQLite's unit-tier fake
+    can't reproduce this (a dict lookup never crashes on a malformed
+    key), so this is real-Postgres-only coverage."""
+    engine = create_async_engine(migrated_url)
+    try:
+        async with engine.connect() as conn, AsyncSession(conn) as session:
+            repo = SQLAlchemyLongTermMemoryRepository(session)
+            assert await repo.revoke_consent("acme", "not-a-uuid") is None
+            assert await repo.release_legal_hold("acme", "not-a-uuid") is None
     finally:
         await engine.dispose()

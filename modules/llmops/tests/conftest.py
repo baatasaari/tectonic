@@ -18,7 +18,9 @@ class Harness:
             self.evaluation_framework, min_sample_size=kwargs.get("min_sample_size", 3),
             min_pass_rate=kwargs.get("min_pass_rate", 0.8),
         )
-        self.rollout_service = RolloutService(self.repository, self.canary_evaluation_service)
+        self.rollout_service = RolloutService(
+            self.repository, self.canary_evaluation_service, self.evaluation_framework,
+        )
 
 
 @pytest.fixture

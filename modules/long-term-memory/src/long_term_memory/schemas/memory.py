@@ -3,7 +3,21 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+from long_term_memory.core.domain import ConsentBasis
+
+
+def _reject_null_byte(value: str) -> str:
+    """Postgres's `text`/`varchar` columns are UTF-8 and reject the NUL
+    byte outright -- a value `str` is happy to hold but the database is
+    not. Applied to the memory-governance fields added alongside this
+    validator (`purpose`, consent/legal-hold request fields), matching
+    the `_reject_null_byte` pattern ticket #82 already established
+    elsewhere on this platform's other request schemas."""
+    if "\x00" in value:
+        raise ValueError("must not contain a NUL byte (unsupported by Postgres's text encoding)")
+    return value
 
 
 class StoreItemRequest(BaseModel):
@@ -11,6 +25,16 @@ class StoreItemRequest(BaseModel):
     memory_type: str
     content: str
     visibility_policy_ref: str = ""
+    # Memory governance: what this item was collected for -- see
+    # core/domain.py's MemoryItemRecord.purpose docstring. Optional and
+    # unenforced at store time by design; MemoryService.query is where
+    # it pairs with an active ConsentRecord to actually gate retrieval.
+    purpose: str = ""
+
+    @field_validator("purpose")
+    @classmethod
+    def _validate_no_null_byte(cls, value: str) -> str:
+        return _reject_null_byte(value)
 
 
 class MemoryItemSchema(BaseModel):
@@ -19,6 +43,7 @@ class MemoryItemSchema(BaseModel):
     memory_type: str
     content: str
     visibility_policy_ref: str
+    purpose: str
     vector_ref: str | None
     graph_ref: str | None
     status: str
@@ -83,3 +108,59 @@ class ConsolidationRunSchema(BaseModel):
     items_merged_count: int
     items_decayed_count: int
     run_at: datetime
+
+
+class GrantConsentRequest(BaseModel):
+    # `basis` is typed as the real ConsentBasis enum, not a bare `str` hand-
+    # converted at the route -- ticket #82's own sibling bug class (an
+    # invalid value raising an unhandled ValueError/500 instead of a clean
+    # 422), learned the hard way on Identity and Access's own
+    # RegisterIdentityRequest.type this same session and applied directly
+    # here rather than repeating it.
+    scope: str
+    purpose: str
+    basis: ConsentBasis
+    granted_by: str = ""
+
+    @field_validator("scope", "purpose", "granted_by")
+    @classmethod
+    def _validate_no_null_byte(cls, value: str) -> str:
+        return _reject_null_byte(value)
+
+
+class ConsentRecordSchema(BaseModel):
+    id: str
+    scope: str
+    purpose: str
+    basis: str
+    granted_by: str
+    granted_at: datetime
+    revoked_at: datetime | None
+
+
+class ConsentRecordListResponse(BaseModel):
+    items: list[ConsentRecordSchema]
+
+
+class PlaceLegalHoldRequest(BaseModel):
+    scope: str
+    reason: str
+    placed_by: str = ""
+
+    @field_validator("scope", "reason", "placed_by")
+    @classmethod
+    def _validate_no_null_byte(cls, value: str) -> str:
+        return _reject_null_byte(value)
+
+
+class LegalHoldSchema(BaseModel):
+    id: str
+    scope: str
+    reason: str
+    placed_by: str
+    placed_at: datetime
+    released_at: datetime | None
+
+
+class LegalHoldListResponse(BaseModel):
+    items: list[LegalHoldSchema]

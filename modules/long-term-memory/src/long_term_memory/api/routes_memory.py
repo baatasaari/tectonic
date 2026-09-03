@@ -11,22 +11,35 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from long_term_memory.api.deps import (
+    build_consent_service,
     build_consolidation_engine,
     build_forgetting_engine,
+    build_legal_hold_service,
     build_memory_service,
     build_reflection_loop,
     get_ctx,
     get_repository,
 )
 from long_term_memory.app_context import AppContext
-from long_term_memory.core.domain import MemoryType
+from long_term_memory.core.domain import (
+    ConsentRecordNotFoundError,
+    LegalHoldActiveError,
+    LegalHoldNotFoundError,
+    MemoryType,
+)
 from long_term_memory.core.ports import LongTermMemoryRepository
 from long_term_memory.schemas.memory import (
+    ConsentRecordListResponse,
+    ConsentRecordSchema,
     ConsolidationRunSchema,
     DeletionRecordSchema,
     ErasureRequest,
     GenerateReflectionRequest,
+    GrantConsentRequest,
+    LegalHoldListResponse,
+    LegalHoldSchema,
     MemoryItemSchema,
+    PlaceLegalHoldRequest,
     QueryRequest,
     RankedMemoryItemSchema,
     ReflectionEntryListResponse,
@@ -61,9 +74,23 @@ def _tenant_id(request: Request, ctx: AppContext) -> str:
 def _item_schema(item) -> MemoryItemSchema:
     return MemoryItemSchema(
         id=item.id, scope=item.scope, memory_type=item.memory_type.value, content=item.content,
-        visibility_policy_ref=item.visibility_policy_ref, vector_ref=item.vector_ref, graph_ref=item.graph_ref,
-        status=item.status.value, relevance_score=item.relevance_score, created_at=item.created_at,
-        last_accessed_at=item.last_accessed_at,
+        visibility_policy_ref=item.visibility_policy_ref, purpose=item.purpose, vector_ref=item.vector_ref,
+        graph_ref=item.graph_ref, status=item.status.value, relevance_score=item.relevance_score,
+        created_at=item.created_at, last_accessed_at=item.last_accessed_at,
+    )
+
+
+def _consent_schema(record) -> ConsentRecordSchema:
+    return ConsentRecordSchema(
+        id=record.id, scope=record.scope, purpose=record.purpose, basis=record.basis.value,
+        granted_by=record.granted_by, granted_at=record.granted_at, revoked_at=record.revoked_at,
+    )
+
+
+def _legal_hold_schema(record) -> LegalHoldSchema:
+    return LegalHoldSchema(
+        id=record.id, scope=record.scope, reason=record.reason, placed_by=record.placed_by,
+        placed_at=record.placed_at, released_at=record.released_at,
     )
 
 
@@ -82,7 +109,7 @@ async def store_item(
 
     item = await service.store(
         tenant_id=_tenant_id(request, ctx), scope=body.scope, memory_type=memory_type, content=body.content,
-        visibility_policy_ref=body.visibility_policy_ref,
+        visibility_policy_ref=body.visibility_policy_ref, purpose=body.purpose,
     )
     return _item_schema(item)
 
@@ -161,7 +188,10 @@ async def create_erasure_request(
     repository: LongTermMemoryRepository = Depends(get_repository),
 ) -> DeletionRecordSchema:
     engine = build_forgetting_engine(ctx, repository)
-    record = await engine.execute(_tenant_id(request, ctx), body.subject_ref, body.requested_by)
+    try:
+        record = await engine.execute(_tenant_id(request, ctx), body.subject_ref, body.requested_by)
+    except LegalHoldActiveError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return DeletionRecordSchema(
         id=record.id, subject_ref=record.subject_ref, status="completed",
         memory_items_deleted=record.memory_items_deleted, deletion_proof_hash=record.deletion_proof_hash,
@@ -198,3 +228,88 @@ async def run_consolidation(
         id=run.id, items_merged_count=run.items_merged_count, items_decayed_count=run.items_decayed_count,
         run_at=run.run_at,
     )
+
+
+@router.post("/consent-records", response_model=ConsentRecordSchema, status_code=201)
+async def grant_consent(
+    body: GrantConsentRequest,
+    request: Request,
+    ctx: AppContext = Depends(get_ctx),
+    repository: LongTermMemoryRepository = Depends(get_repository),
+) -> ConsentRecordSchema:
+    service = build_consent_service(repository)
+    record = await service.grant(
+        tenant_id=_tenant_id(request, ctx), scope=body.scope, purpose=body.purpose, basis=body.basis,
+        granted_by=body.granted_by,
+    )
+    return _consent_schema(record)
+
+
+@router.get("/consent-records", response_model=ConsentRecordListResponse)
+async def list_consent_records(
+    scope: str,
+    request: Request,
+    ctx: AppContext = Depends(get_ctx),
+    repository: LongTermMemoryRepository = Depends(get_repository),
+) -> ConsentRecordListResponse:
+    _reject_null_byte_query(scope=scope)
+    service = build_consent_service(repository)
+    records = await service.list_for_scope(_tenant_id(request, ctx), scope)
+    return ConsentRecordListResponse(items=[_consent_schema(r) for r in records])
+
+
+@router.post("/consent-records/{consent_id}/revoke", response_model=ConsentRecordSchema)
+async def revoke_consent(
+    consent_id: str,
+    request: Request,
+    ctx: AppContext = Depends(get_ctx),
+    repository: LongTermMemoryRepository = Depends(get_repository),
+) -> ConsentRecordSchema:
+    service = build_consent_service(repository)
+    try:
+        record = await service.revoke(tenant_id=_tenant_id(request, ctx), consent_id=consent_id)
+    except ConsentRecordNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _consent_schema(record)
+
+
+@router.post("/legal-holds", response_model=LegalHoldSchema, status_code=201)
+async def place_legal_hold(
+    body: PlaceLegalHoldRequest,
+    request: Request,
+    ctx: AppContext = Depends(get_ctx),
+    repository: LongTermMemoryRepository = Depends(get_repository),
+) -> LegalHoldSchema:
+    service = build_legal_hold_service(repository)
+    record = await service.place(
+        tenant_id=_tenant_id(request, ctx), scope=body.scope, reason=body.reason, placed_by=body.placed_by,
+    )
+    return _legal_hold_schema(record)
+
+
+@router.get("/legal-holds", response_model=LegalHoldListResponse)
+async def list_legal_holds(
+    scope: str,
+    request: Request,
+    ctx: AppContext = Depends(get_ctx),
+    repository: LongTermMemoryRepository = Depends(get_repository),
+) -> LegalHoldListResponse:
+    _reject_null_byte_query(scope=scope)
+    service = build_legal_hold_service(repository)
+    records = await service.list_for_scope(_tenant_id(request, ctx), scope)
+    return LegalHoldListResponse(items=[_legal_hold_schema(r) for r in records])
+
+
+@router.post("/legal-holds/{hold_id}/release", response_model=LegalHoldSchema)
+async def release_legal_hold(
+    hold_id: str,
+    request: Request,
+    ctx: AppContext = Depends(get_ctx),
+    repository: LongTermMemoryRepository = Depends(get_repository),
+) -> LegalHoldSchema:
+    service = build_legal_hold_service(repository)
+    try:
+        record = await service.release(tenant_id=_tenant_id(request, ctx), hold_id=hold_id)
+    except LegalHoldNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return _legal_hold_schema(record)
