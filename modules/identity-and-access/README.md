@@ -321,6 +321,28 @@ src/identity_and_access/
   a dict lookup in the unit tier's own fake never crashes on a
   malformed key the way `asyncpg` does).
 
+- **The platform's own "unbounded offset" class** (this repo's own
+  `CLAUDE.md`-documented recurring bug — already fixed for Billing and
+  Metering's, LLM Gateway's, Multi-tenancy's and Workflow Engine's own
+  `offset` query params; found again, still open here, when Evaluation
+  Framework's own new contract-test tier hit the identical gap and a
+  platform-wide grep confirmed it recurred everywhere else that hadn't
+  already fixed it). Every one of `GET /roles`, `GET /identities`,
+  `GET /identities/{identity_id}/role-bindings`,
+  `GET /identities/{identity_id}/auth-decisions`, `GET /identity-providers`,
+  `GET /groups`, `GET /scim-tokens`'s `offset` had no upper bound, so a
+  value past Postgres's `bigint` range (`> 9223372036854775807`) crashed
+  with an unhandled `asyncpg.DataError` instead of a clean `422`. Fixed
+  with the identical `le=1_000_000_000` bound those four modules already
+  use — comfortably past any real pagination need, comfortably under the
+  overflow. Notably, this module already has its own contract-test tier
+  (the first one this platform's rollout added) — it simply hadn't
+  generated an offset value large enough to overflow on any run so far;
+  Hypothesis's randomized integer generation doesn't reliably produce an
+  overflow value every run, so a real gap can pass by chance. Found by
+  the platform-wide grep instead, once Evaluation Framework's own run
+  hit the same class and flagged it as still open elsewhere.
+
 ## Running locally
 
 ```bash

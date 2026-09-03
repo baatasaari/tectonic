@@ -110,7 +110,7 @@ async def list_sessions(
     channel: str | None = Query(None),
     user_ref: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: ConversationRepository = Depends(get_repository),
 ) -> SessionListResponse:

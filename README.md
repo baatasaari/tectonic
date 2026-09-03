@@ -1268,6 +1268,38 @@ prove a bug class's absence. Full account, including the two body-field
 sub-cases the top-level `CLAUDE.md` didn't yet document, in that
 module's own README.
 
+**Immediately following: the unbounded-offset gap that finding flagged,
+closed everywhere it was found.** A platform-wide grep
+(`offset: int = Query(0, ge=0)` with no `le=`) confirmed exactly what
+that fourth Evaluation Framework finding predicted — 23 more modules
+(37 occurrences across `a2a`, Agent Cards, Agent Marketplace,
+Auditability, Conversational Engine, Data Source Plugins, Deployment
+Strategy, FinOps, Guardrails, Human Oversight, Identity and Access
+(7 endpoints), Intent Detection, Knowledge Base, LLMOps, Long-Term
+Memory, MCP, Multi-Modality, Observability (4 endpoints), PromptOps,
+Regulatory Compliance, SDK and Developer Portal (3 endpoints), Secrets
+and Credential Management (3 endpoints), Sentinel Agents, Tool
+Orchestration) still had the identical unbounded `offset` — every one
+fixed with the same `le=1_000_000_000` bound Billing and Metering, LLM
+Gateway, Multi-tenancy and Workflow Engine already established, applied
+mechanically rather than rediscovered module-by-module via a contract
+tier none of these 23 have. Identity and Access is the one genuinely
+interesting case: it already has its own contract tier and had run it
+repeatedly across this whole session, yet never happened to generate an
+offset value large enough to trip the overflow — concrete proof that a
+green contract-tier run is evidence of an absence, not proof of one,
+for any bug class Hypothesis's randomized generation doesn't reliably
+hit every run. All 23 modules re-verified: `ruff check` clean and
+`pytest tests/unit` green on every one (no regressions — the bound only
+narrows what was already-invalid input into a slightly-earlier clean
+rejection). No dedicated regression test was added per module for this
+specific fix, matching this exact fix's own precedent in the four
+modules that fixed it originally — none of them added one either; the
+fix is native FastAPI/Pydantic `Query()` validation, not custom code,
+and the real regression coverage is each of those modules eventually
+gaining its own contract tier. Full account, including the complete
+per-module route list, in each of the 23 modules' own READMEs.
+
 ## Modules
 
 ### Module 1: Workflow Engine

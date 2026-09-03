@@ -70,7 +70,7 @@ async def register_server(
 async def list_servers(
     tenant_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: MCPGatewayRepository = Depends(get_repository),
 ) -> McpServerListResponse:
     _reject_null_byte_query(tenant_id=tenant_id)

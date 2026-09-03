@@ -144,7 +144,7 @@ async def list_chunks(
     policy_tag: str | None = Query(None),
     tenant_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: KnowledgeBaseRepository = Depends(get_repository),
 ) -> ChunkListResponse:
     _reject_null_byte_query(document_version_id=document_version_id, policy_tag=policy_tag, tenant_id=tenant_id)

@@ -83,7 +83,7 @@ async def list_prompt_versions(
     tenant_id: str | None = Query(None),
     prompt_name: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: PromptOpsRepository = Depends(get_repository),
 ) -> PromptVersionListResponse:
     _reject_null_byte_query(tenant_id=tenant_id, prompt_name=prompt_name)

@@ -87,7 +87,7 @@ async def list_secrets(
     namespace: str | None = Query(None),
     status: SecretStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: SecretsRepository = Depends(get_repository),
 ) -> SecretListResponse:
@@ -103,7 +103,7 @@ async def list_secrets(
 async def list_due_for_rotation(
     tenant_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     ctx: AppContext = Depends(get_ctx),
     repository: SecretsRepository = Depends(get_repository),
 ) -> SecretListResponse:
@@ -191,7 +191,7 @@ async def retrieve_secret(
 async def list_access_log(
     secret_id: str,
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: SecretsRepository = Depends(get_repository),
 ) -> AccessRecordListResponse:
     records, total = await repository.list_access_records(secret_id=secret_id, limit=limit, offset=offset)

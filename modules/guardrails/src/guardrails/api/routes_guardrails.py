@@ -128,7 +128,7 @@ async def create_policy_profile(
 async def list_red_team_runs(
     tenant_id: str = Query(...),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: GuardrailsRepository = Depends(get_repository),
 ) -> RedTeamRunListResponse:
     _reject_null_byte_query(tenant_id=tenant_id)

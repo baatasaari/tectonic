@@ -80,7 +80,7 @@ async def search_listings(
     tenant_id: str | None = Query(None),
     status: ListingStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: AgentMarketplaceRepository = Depends(get_repository),
 ) -> ListingListResponse:
     # `status` typed as ListingStatus | None: FastAPI/Pydantic validates and

@@ -95,7 +95,7 @@ async def list_events(
     occurred_after: datetime | None = Query(None),
     occurred_before: datetime | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: AuditabilityRepository = Depends(get_repository),
 ) -> AuditEventListResponse:
     _reject_null_byte_query(

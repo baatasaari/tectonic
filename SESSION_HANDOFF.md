@@ -292,21 +292,37 @@ default). Neither is a production credential.
   touched modules are green (including in real GitHub Actions CI, not
   just this sandbox -- see the note on
   `TECTONIC_TEST_POSTGRES_URL`-vs-CI-credentials below).
-- **P1 -- new, found this session, not yet fixed.** The platform's own
-  "unbounded offset" class (already fixed once for Billing and
-  Metering, LLM Gateway, Multi-tenancy, Workflow Engine) is still open
-  on nearly every *other* module's `offset` query params -- confirmed
-  by grep after Evaluation Framework's own contract tier found it
-  there too (see that P1 "DONE" entry below for the full finding).
-  `grep -rn "offset: int = Query" modules/*/src/*/api/*.py` and check
-  which lack `le=` — Identity and Access is a notable case: it already
-  has a contract tier, but Hypothesis's randomized integer generation
-  doesn't reliably produce an overflow value every run, so this gap
-  can pass by chance. A pure mechanical grep-and-fix (add
-  `le=1_000_000_000` + a regression test per route), not a per-module
-  contract-tier rollout -- much cheaper per bug found than continuing
-  the rollout to a brand-new module, and arguably the single highest
-  mechanical-leverage item left in the backlog right now.
+- **P1 -- DONE (this session).** The platform's own "unbounded offset"
+  class (already fixed once for Billing and Metering, LLM Gateway,
+  Multi-tenancy, Workflow Engine) was confirmed still open on nearly
+  every *other* module's `offset` query params by
+  `grep -rln "offset: int = Query(0, ge=0)" modules/*/src/*/api/*.py`
+  (no `le=`) -- 23 modules, 37 occurrences (`a2a`, agent-cards,
+  agent-marketplace, auditability, conversational-engine,
+  data-source-plugins, deployment-strategy, finops, guardrails,
+  human-oversight, identity-and-access [7], intent-detection,
+  knowledge-base, llmops, long-term-memory, mcp, multi-modality,
+  observability [4], promptops, regulatory-compliance,
+  sdk-and-developer-portal [3], secrets-and-credential-management [3],
+  sentinel-agents, tool-orchestration). Fixed every one with the
+  identical `le=1_000_000_000` bound via `sed` (safe exact-string
+  match, verified against the diff before running). Identity and
+  Access is the notable case: it already has its own contract tier and
+  had run repeatedly all session, yet never generated an offset large
+  enough to overflow -- real evidence that a green contract-tier run
+  doesn't prove a bug class's absence when Hypothesis's randomized
+  generation doesn't reliably hit it every run. Re-verified: `ruff
+  check` clean and `pytest tests/unit` green on all 23 modules (one
+  module, `data-source-plugins`, needed its `.venv` created first;
+  every other 22 already had one from earlier session work). No
+  regression test added per module -- matching this exact fix's own
+  precedent in the four modules that originally added the bound
+  (Billing and Metering/LLM Gateway/Multi-tenancy/Workflow Engine none
+  of which added one either); it's native FastAPI/Pydantic `Query()`
+  validation, not custom code, so the real regression coverage is each
+  module eventually gaining its own contract tier. All 23 module
+  READMEs and the root README's running narrative updated with the
+  full per-route account.
 - **P1 -- DONE (this session).** The platform-wide NUL-byte-in-a-raw-
   `Query()`-string-parameter bug class (originally surfaced for real by
   the new CI job's own first run, against Multi-tenancy's and Billing

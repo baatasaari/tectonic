@@ -151,7 +151,7 @@ async def evaluate_budget_policy(
 async def list_optimisation_actions(
     budget_policy_id: str,
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: FinOpsRepository = Depends(get_repository),
 ) -> OptimisationActionListResponse:
     actions, total = await repository.list_optimisation_actions(budget_policy_id=budget_policy_id, limit=limit, offset=offset)

@@ -179,7 +179,7 @@ async def list_traces(
     tenant_id: str = Query(...),
     workflow_type: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: ObservabilityRepository = Depends(get_repository),
 ) -> TraceListResponse:
     _reject_null_byte_query(tenant_id=tenant_id, workflow_type=workflow_type)
@@ -223,7 +223,7 @@ async def create_slo(
 async def list_slos(
     tenant_id: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: ObservabilityRepository = Depends(get_repository),
 ) -> SLOListResponse:
     _reject_null_byte_query(tenant_id=tenant_id)
@@ -283,7 +283,7 @@ async def list_alert_rules(
     tenant_id: str | None = Query(None),
     enabled: bool | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: ObservabilityRepository = Depends(get_repository),
 ) -> AlertRuleListResponse:
     _reject_null_byte_query(tenant_id=tenant_id)
@@ -336,7 +336,7 @@ async def list_alert_events(
     tenant_id: str | None = Query(None),
     status: AlertStatus | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: ObservabilityRepository = Depends(get_repository),
 ) -> AlertEventListResponse:
     _reject_null_byte_query(tenant_id=tenant_id)

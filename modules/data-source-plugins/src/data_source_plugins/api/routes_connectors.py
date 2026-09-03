@@ -105,7 +105,7 @@ async def get_quality(
 async def list_drift_incidents(
     connector_id: str,
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: ConnectorRepository = Depends(get_repository),
 ) -> DriftIncidentListResponse:
     incidents, total = await repository.list_drift_incidents(connector_id, limit=limit, offset=offset)

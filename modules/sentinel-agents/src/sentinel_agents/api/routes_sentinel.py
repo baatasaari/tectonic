@@ -74,7 +74,7 @@ async def list_alerts(
     tenant_id: str = Query(...),
     severity: str | None = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0, le=1_000_000_000),
     repository: SentinelRepository = Depends(get_repository),
 ) -> AlertListResponse:
     _reject_null_byte_query(tenant_id=tenant_id, severity=severity)
