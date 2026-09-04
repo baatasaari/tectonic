@@ -15,9 +15,9 @@ name: CI
 
 on:
   push:
-    branches: ["claude/**"]
+    branches: ["main", "claude/**"]
   pull_request:
-    branches: ["claude/**"]
+    branches: ["main", "claude/**"]
   workflow_dispatch:
 
 concurrency:
@@ -312,7 +312,11 @@ jobs:
           --of json -o sbom.cyclonedx.json .sbom-venv/bin/python
 
       - name: Sign SBOM (Sigstore, keyless via this run's GitHub Actions OIDC identity)
-        run: uvx --from sigstore sigstore sign --bundle sbom.cyclonedx.json.sigstore --overwrite sbom.cyclonedx.json
+        run: >-
+          ../../scripts/sign_sbom_with_retry.sh
+          uvx --from sigstore sigstore sign
+          --bundle sbom.cyclonedx.json.sigstore
+          --overwrite sbom.cyclonedx.json
 
       - name: Upload SBOM + signature
         uses: actions/upload-artifact@v4
