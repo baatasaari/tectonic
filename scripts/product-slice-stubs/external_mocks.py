@@ -31,13 +31,23 @@ this slice:
 Zero third-party dependencies beyond fastapi/uvicorn (already a
 transitive dependency of every module in this slice).
 """
+
 from __future__ import annotations
 
 import re
 import uuid
 from typing import Any
 
+import httpx
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from provider_adapter import (
+    ProviderConfigurationError,
+    ProviderResponseError,
+    ProviderSettings,
+    real_chat_completion,
+    real_embedding,
+)
 
 app = FastAPI(title="Support-agent slice: external-systems mock")
 
@@ -75,7 +85,9 @@ def _compose_content(model: str, prompt_context: dict) -> dict[str, Any]:
     """Deterministic per-agent behavior, keyed on `model` (this slice's own
     workflow definition passes its `agent_ref` straight through as the
     ChatCompletionRequest.model field)."""
-    message = prompt_context.get("message", "") if isinstance(prompt_context, dict) else ""
+    message = (
+        prompt_context.get("message", "") if isinstance(prompt_context, dict) else ""
+    )
 
     if model == "order-lookup-agent":
         match = _ORDER_ID_RE.search(message)
@@ -100,19 +112,38 @@ def _compose_content(model: str, prompt_context: dict) -> dict[str, Any]:
         # groundedness score above always clears the threshold on hop 1),
         # kept real and deterministic anyway rather than left broken, per
         # this repo's own "fix the whole gap class once found" discipline.
-        query = prompt_context.get("query", "") if isinstance(prompt_context, dict) else ""
+        query = (
+            prompt_context.get("query", "") if isinstance(prompt_context, dict) else ""
+        )
         return {"content": "", "revised_query": query}
 
     if model == "compose-response-agent":
         tool_result = _find_key(prompt_context, "tool_results")
         if tool_result:
             order_status = _find_key(tool_result, "result") or tool_result
-            status = _find_key(order_status, "status", ) if isinstance(order_status, dict) else None
-            eta = _find_key(order_status, "eta") if isinstance(order_status, dict) else None
+            status = (
+                _find_key(
+                    order_status,
+                    "status",
+                )
+                if isinstance(order_status, dict)
+                else None
+            )
+            eta = (
+                _find_key(order_status, "eta")
+                if isinstance(order_status, dict)
+                else None
+            )
             order_id = _find_key(prompt_context, "order_id") or "your order"
             if status:
-                return {"content": f"Your order #{order_id} {status}, arriving {eta}." if eta else f"Your order #{order_id} is {status}."}
-            return {"content": "I looked up your order but couldn't read the result -- please try again shortly."}
+                return {
+                    "content": f"Your order #{order_id} {status}, arriving {eta}."
+                    if eta
+                    else f"Your order #{order_id} is {status}."
+                }
+            return {
+                "content": "I looked up your order but couldn't read the result -- please try again shortly."
+            }
 
         synthesized_context = _find_key(prompt_context, "synthesized_context")
         if synthesized_context:
@@ -122,8 +153,12 @@ def _compose_content(model: str, prompt_context: dict) -> dict[str, Any]:
         decision = _find_key(prompt_context, "decision")
         if refund_amount is not None:
             if decision == "escalate":
-                return {"content": "Thanks for the details -- a specialist has reviewed and resolved your refund request."}
-            return {"content": f"Your refund of ${refund_amount:.2f} has been processed."}
+                return {
+                    "content": "Thanks for the details -- a specialist has reviewed and resolved your refund request."
+                }
+            return {
+                "content": f"Your refund of ${refund_amount:.2f} has been processed."
+            }
 
         return {"content": "I'm not sure how to help with that yet."}
 
@@ -135,6 +170,22 @@ def _compose_content(model: str, prompt_context: dict) -> dict[str, Any]:
 
 @app.post("/chat/completions")
 async def chat_completions(body: dict) -> dict:
+    try:
+        settings = ProviderSettings.from_env()
+        if settings.mode == "openai":
+            async with httpx.AsyncClient() as client:
+                return await real_chat_completion(body, settings, client)
+    except ProviderConfigurationError as exc:
+        return JSONResponse(
+            status_code=503,
+            content={"error": {"type": "configuration_error", "message": str(exc)}},
+        )
+    except (ProviderResponseError, httpx.HTTPError, ValueError) as exc:
+        return JSONResponse(
+            status_code=502,
+            content={"error": {"type": "provider_error", "message": str(exc)}},
+        )
+
     model = body.get("model", "")
     messages = body.get("messages", [])
     prompt_context: Any = {}
@@ -151,7 +202,15 @@ async def chat_completions(body: dict) -> dict:
     return {
         "id": f"mock-{uuid.uuid4().hex[:8]}",
         "model": model,
-        "choices": [{"index": 0, "message": {"role": "assistant", "content": _json_dump(content, result)}}],
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": _json_dump(content, result),
+                },
+            }
+        ],
         "usage": {"prompt_tokens": 10, "completion_tokens": 10, "cost": 0.0002},
     }
 
@@ -177,6 +236,22 @@ def _json_dump(content: str, extra: dict) -> str:
 
 @app.post("/embeddings")
 async def embeddings(body: dict) -> dict:
+    try:
+        settings = ProviderSettings.from_env()
+        if settings.mode == "openai" and settings.embedding_model:
+            async with httpx.AsyncClient() as client:
+                return await real_embedding(body, settings, client)
+    except ProviderConfigurationError as exc:
+        return JSONResponse(
+            status_code=503,
+            content={"error": {"type": "configuration_error", "message": str(exc)}},
+        )
+    except (ProviderResponseError, httpx.HTTPError, ValueError) as exc:
+        return JSONResponse(
+            status_code=502,
+            content={"error": {"type": "provider_error", "message": str(exc)}},
+        )
+
     text = body.get("input", "")
     # A deterministic, real-shaped (but not semantically trained) embedding:
     # stable per input string, non-degenerate (Vector DB's own contract
@@ -208,12 +283,17 @@ async def mcp_jsonrpc(payload: dict) -> dict:
         record = _ORDERS.get(order_id)
         if record is None:
             return {
-                "jsonrpc": "2.0", "id": payload.get("id"),
+                "jsonrpc": "2.0",
+                "id": payload.get("id"),
                 "error": {"code": -32001, "message": f"no such order '{order_id}'"},
             }
         return {"jsonrpc": "2.0", "id": payload.get("id"), "result": record}
 
-    return {"jsonrpc": "2.0", "id": payload.get("id"), "error": {"code": -32601, "message": f"unknown tool '{name}'"}}
+    return {
+        "jsonrpc": "2.0",
+        "id": payload.get("id"),
+        "error": {"code": -32601, "message": f"unknown tool '{name}'"},
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -244,4 +324,10 @@ async def extract_entities(body: dict) -> dict:
 
 @app.get("/healthz")
 async def healthz() -> dict:
-    return {"status": "ok"}
+    try:
+        mode = ProviderSettings.from_env().mode
+    except ProviderConfigurationError as exc:
+        return JSONResponse(
+            status_code=503, content={"status": "misconfigured", "error": str(exc)}
+        )
+    return {"status": "ok", "provider_mode": mode}
