@@ -1,0 +1,5 @@
+deploy/pilot/.env
+deploy/pilot/.env.runtime
+deploy/pilot/state/
+__pycache__/
+*.pyc
