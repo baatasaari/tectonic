@@ -1,0 +1,277 @@
+name: tectonic-pilot
+
+x-service: &service
+  restart: unless-stopped
+  environment: &common-environment
+    TECTONIC_JWT_SHARED_SECRET: ${TECTONIC_JWT_SHARED_SECRET}
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+x-healthcheck: &healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 20s
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tectonic
+      POSTGRES_PASSWORD: ${PILOT_POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/01-databases.sh:/docker-entrypoint-initdb.d/01-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tectonic -d postgres"]
+      <<: *healthcheck
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      <<: *healthcheck
+
+  external-mocks:
+    build:
+      context: ../..
+      dockerfile: deploy/pilot/external-mocks/Dockerfile
+    restart: unless-stopped
+    ports: ["127.0.0.1:9200:9200"]
+
+  identity-and-access:
+    <<: *service
+    build: ../../modules/identity-and-access
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn identity_and_access.main:app --host 0.0.0.0 --port 8110"]
+    ports: ["127.0.0.1:8110:8110"]
+    environment:
+      <<: *common-environment
+      IDENTITY_ACCESS_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/identity_and_access
+      IDENTITY_ACCESS_AUDITABILITY_BASE_URL: http://auditability:8099
+
+  multi-tenancy:
+    <<: *service
+    build: ../../modules/multi-tenancy
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn multi_tenancy.main:app --host 0.0.0.0 --port 8109"]
+    ports: ["127.0.0.1:8109:8109"]
+    environment:
+      <<: *common-environment
+      MULTI_TENANCY_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/multi_tenancy
+      MULTI_TENANCY_KAFKA_BOOTSTRAP_SERVERS: unavailable:19999
+      MULTI_TENANCY_AUDITABILITY_BASE_URL: http://auditability:8099
+      MULTI_TENANCY_PROBE_TARGETS: "[]"
+
+  llm-gateway:
+    <<: *service
+    build: ../../modules/llm-gateway
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn llm_gateway.main:app --host 0.0.0.0 --port 8082"]
+    ports: ["127.0.0.1:8082:8082"]
+    environment:
+      <<: *common-environment
+      LLM_GATEWAY_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/llm_gateway
+      LLM_GATEWAY_REDIS_URL: redis://redis:6379/1
+      LLM_GATEWAY_SECRETS_AND_CREDENTIAL_MANAGEMENT_BASE_URL: http://external-mocks:9200
+      LLM_GATEWAY_MULTI_TENANCY_BASE_URL: http://multi-tenancy:8109
+
+  intent-detection:
+    <<: *service
+    build: ../../modules/intent-detection
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn intent_detection.main:app --host 0.0.0.0 --port 8084"]
+    ports: ["127.0.0.1:8084:8084"]
+    environment:
+      <<: *common-environment
+      INTENT_DETECTION_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/intent_detection
+      INTENT_DETECTION_LLM_GATEWAY_BASE_URL: http://llm-gateway:8082
+      INTENT_DETECTION_MULTI_TENANCY_BASE_URL: http://multi-tenancy:8109
+
+  knowledge-base:
+    <<: *service
+    build: ../../modules/knowledge-base
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn knowledge_base.main:app --host 0.0.0.0 --port 8088"]
+    ports: ["127.0.0.1:8088:8088"]
+    environment:
+      <<: *common-environment
+      KNOWLEDGE_BASE_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/knowledge_base
+      KNOWLEDGE_BASE_VECTOR_DB_BASE_URL: http://vector-db:8089
+      KNOWLEDGE_BASE_GRAPH_DB_BASE_URL: http://external-mocks:9200
+      KNOWLEDGE_BASE_MULTI_TENANCY_BASE_URL: http://multi-tenancy:8109
+
+  tool-orchestration:
+    <<: *service
+    build: ../../modules/tool-orchestration
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn tool_orchestration.main:app --host 0.0.0.0 --port 8083"]
+    ports: ["127.0.0.1:8083:8083"]
+    environment:
+      <<: *common-environment
+      TOOL_ORCHESTRATION_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/tool_orchestration
+      TOOL_ORCHESTRATION_REDIS_URL: redis://redis:6379/2
+      TOOL_ORCHESTRATION_LLM_GATEWAY_BASE_URL: http://llm-gateway:8082
+      TOOL_ORCHESTRATION_GUARDRAILS_BASE_URL: http://guardrails:8093
+      TOOL_ORCHESTRATION_SENTINEL_AGENTS_BASE_URL: http://external-mocks:9200
+      TOOL_ORCHESTRATION_MULTI_TENANCY_BASE_URL: http://multi-tenancy:8109
+
+  guardrails:
+    <<: *service
+    build: ../../modules/guardrails
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn guardrails.main:app --host 0.0.0.0 --port 8093"]
+    ports: ["127.0.0.1:8093:8093"]
+    environment:
+      <<: *common-environment
+      GUARDRAILS_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/guardrails
+      GUARDRAILS_LLM_GATEWAY_BASE_URL: http://llm-gateway:8082
+      GUARDRAILS_SENTINEL_AGENTS_BASE_URL: http://external-mocks:9200
+      GUARDRAILS_MULTI_TENANCY_BASE_URL: http://multi-tenancy:8109
+
+  human-oversight:
+    <<: *service
+    build: ../../modules/human-oversight
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn human_oversight.main:app --host 0.0.0.0 --port 8095"]
+    ports: ["127.0.0.1:8095:8095"]
+    environment:
+      <<: *common-environment
+      HUMAN_OVERSIGHT_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/human_oversight
+      HUMAN_OVERSIGHT_AUDITABILITY_BASE_URL: http://auditability:8099
+      HUMAN_OVERSIGHT_NOTIFICATION_STUB_BASE_URL: http://external-mocks:9200
+      HUMAN_OVERSIGHT_MULTI_TENANCY_BASE_URL: http://multi-tenancy:8109
+      HUMAN_OVERSIGHT_SERVICE_URLS: '{"workflow-engine":"http://workflow-engine:8080"}'
+
+  billing-and-metering:
+    <<: *service
+    build: ../../modules/billing-and-metering
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn billing_and_metering.main:app --host 0.0.0.0 --port 8112"]
+    ports: ["127.0.0.1:8112:8112"]
+    environment:
+      <<: *common-environment
+      BILLING_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/billing_and_metering
+      BILLING_FINOPS_BASE_URL: http://external-mocks:9200
+      BILLING_AUDITABILITY_BASE_URL: http://auditability:8099
+      BILLING_MULTI_TENANCY_BASE_URL: http://multi-tenancy:8109
+
+  auditability:
+    <<: *service
+    build: ../../modules/auditability
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn auditability.main:app --host 0.0.0.0 --port 8099"]
+    ports: ["127.0.0.1:8099:8099"]
+    environment:
+      <<: *common-environment
+      AUDITABILITY_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/auditability
+      AUDITABILITY_LLM_GATEWAY_BASE_URL: http://llm-gateway:8082
+
+  observability:
+    <<: *service
+    build: ../../modules/observability
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn observability.main:app --host 0.0.0.0 --port 8098"]
+    ports: ["127.0.0.1:8098:8098"]
+    environment:
+      <<: *common-environment
+      OBSERVABILITY_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/observability
+      OBSERVABILITY_LLM_GATEWAY_BASE_URL: http://llm-gateway:8082
+      OBSERVABILITY_MULTI_TENANCY_BASE_URL: http://multi-tenancy:8109
+
+  conversational-engine:
+    <<: *service
+    build: ../../modules/conversational-engine
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn conversational_engine.main:app --host 0.0.0.0 --port 8081"]
+    ports: ["127.0.0.1:8081:8081"]
+    environment:
+      <<: *common-environment
+      CONVERSATIONAL_ENGINE_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/conversational_engine
+      CONVERSATIONAL_ENGINE_REDIS_URL: redis://redis:6379/3
+      CONVERSATIONAL_ENGINE_LLM_GATEWAY_BASE_URL: http://llm-gateway:8082
+      CONVERSATIONAL_ENGINE_GUARDRAILS_BASE_URL: http://guardrails:8093
+      CONVERSATIONAL_ENGINE_LONG_TERM_MEMORY_BASE_URL: http://external-mocks:9200
+      CONVERSATIONAL_ENGINE_HUMAN_OVERSIGHT_BASE_URL: http://human-oversight:8095
+      CONVERSATIONAL_ENGINE_OBSERVABILITY_BASE_URL: http://observability:8098
+      CONVERSATIONAL_ENGINE_AUDITABILITY_BASE_URL: http://auditability:8099
+      CONVERSATIONAL_ENGINE_MULTI_TENANCY_BASE_URL: http://multi-tenancy:8109
+      CONVERSATIONAL_ENGINE_WORKFLOW_ENGINE_BASE_URL: http://workflow-engine:8080
+      CONVERSATIONAL_ENGINE_WORKFLOW_ROUTING__ENABLED: "true"
+      CONVERSATIONAL_ENGINE_WORKFLOW_ROUTING__DEFINITION_ID: support-agent-v1
+
+  vector-db:
+    <<: *service
+    build: ../../modules/vector-db
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn vector_db.main:app --host 0.0.0.0 --port 8089"]
+    ports: ["127.0.0.1:8089:8089"]
+    environment:
+      <<: *common-environment
+      VECTOR_DB_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/vector_db
+      VECTOR_DB_QDRANT__EMBEDDED_IN_MEMORY: "true"
+      VECTOR_DB_LLM_GATEWAY_BASE_URL: http://llm-gateway:8082
+      VECTOR_DB_LLM_GATEWAY_VIRTUAL_KEY: ${LLM_GATEWAY_VIRTUAL_KEY:-not-seeded}
+      VECTOR_DB_MULTI_TENANCY_BASE_URL: http://multi-tenancy:8109
+
+  agentic-rag:
+    <<: *service
+    build: ../../modules/agentic-rag
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn agentic_rag.main:app --host 0.0.0.0 --port 8085"]
+    ports: ["127.0.0.1:8085:8085"]
+    environment:
+      <<: *common-environment
+      AGENTIC_RAG_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/agentic_rag
+      AGENTIC_RAG_VECTOR_DB_BASE_URL: http://vector-db:8089
+      AGENTIC_RAG_GRAPH_DB_BASE_URL: http://external-mocks:9200
+      AGENTIC_RAG_KNOWLEDGE_BASE_BASE_URL: http://knowledge-base:8088
+      AGENTIC_RAG_LLM_GATEWAY_BASE_URL: http://llm-gateway:8082
+      AGENTIC_RAG_LLM_GATEWAY_VIRTUAL_KEY: ${LLM_GATEWAY_VIRTUAL_KEY:-not-seeded}
+      AGENTIC_RAG_MULTI_TENANCY_BASE_URL: http://multi-tenancy:8109
+      AGENTIC_RAG_RETRIEVAL__HYBRID_RETRIEVAL_ENABLED: "false"
+
+  workflow-engine:
+    <<: *service
+    build: ../../modules/workflow-engine
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn workflow_engine.main:app --host 0.0.0.0 --port 8080"]
+    ports: ["127.0.0.1:8080:8080"]
+    environment:
+      <<: *common-environment
+      WORKFLOW_ENGINE_DATABASE_URL: postgresql+asyncpg://tectonic:${PILOT_POSTGRES_PASSWORD}@postgres:5432/workflow_engine
+      WORKFLOW_ENGINE_KAFKA_BOOTSTRAP_SERVERS: unavailable:19999
+      WORKFLOW_ENGINE_LLM_GATEWAY_BASE_URL: http://llm-gateway:8082
+      WORKFLOW_ENGINE_LLM_GATEWAY_VIRTUAL_KEY: ${LLM_GATEWAY_VIRTUAL_KEY:-not-seeded}
+      WORKFLOW_ENGINE_TOOL_ORCHESTRATION_BASE_URL: http://tool-orchestration:8083
+      WORKFLOW_ENGINE_GUARDRAILS_BASE_URL: http://guardrails:8093
+      WORKFLOW_ENGINE_HUMAN_OVERSIGHT_BASE_URL: http://human-oversight:8095
+      WORKFLOW_ENGINE_MULTI_TENANCY_BASE_URL: http://multi-tenancy:8109
+      WORKFLOW_ENGINE_INTENT_DETECTION_BASE_URL: http://intent-detection:8084
+      WORKFLOW_ENGINE_AGENTIC_RAG_BASE_URL: http://agentic-rag:8085
+
+  seed:
+    image: python:3.12-slim
+    profiles: ["tools"]
+    working_dir: /repo
+    entrypoint: ["python", "/repo/scripts/seed_support_agent_demo.py"]
+    volumes:
+      - ../..:/repo:ro
+      - ./state:/state
+    environment:
+      SUPPORT_AGENT_SEED_OUTPUT: /state/seed.json
+      TECTONIC_JWT_SHARED_SECRET: ${TECTONIC_JWT_SHARED_SECRET}
+      MULTI_TENANCY_URL: http://multi-tenancy:8109
+      IDENTITY_ACCESS_URL: http://identity-and-access:8110
+      LLM_GATEWAY_URL: http://llm-gateway:8082
+      TOOL_ORCHESTRATION_URL: http://tool-orchestration:8083
+      BILLING_URL: http://billing-and-metering:8112
+      KNOWLEDGE_BASE_URL: http://knowledge-base:8088
+      INTENT_DETECTION_URL: http://intent-detection:8084
+      MOCK_STUB_URL: http://external-mocks:9200
+
+  workflow-definition:
+    image: python:3.12-slim
+    profiles: ["tools"]
+    working_dir: /repo
+    entrypoint: ["python", "/repo/scripts/post_support_agent_definition.py"]
+    volumes:
+      - ../..:/repo:ro
+      - ./state:/state
+    environment:
+      SUPPORT_AGENT_SEED_OUTPUT: /state/seed.json
+      TECTONIC_JWT_SHARED_SECRET: ${TECTONIC_JWT_SHARED_SECRET}
+      WORKFLOW_ENGINE_URL: http://workflow-engine:8080
+
+volumes:
+  postgres-data:
