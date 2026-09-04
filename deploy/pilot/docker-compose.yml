@@ -43,6 +43,12 @@ services:
       dockerfile: deploy/pilot/external-mocks/Dockerfile
     restart: unless-stopped
     ports: ["127.0.0.1:9200:9200"]
+    environment:
+      PILOT_LLM_MODE: ${PILOT_LLM_MODE:-mock}
+      PILOT_LLM_BASE_URL: ${PILOT_LLM_BASE_URL:-}
+      PILOT_LLM_API_KEY: ${PILOT_LLM_API_KEY:-}
+      PILOT_LLM_CHAT_MODEL: ${PILOT_LLM_CHAT_MODEL:-}
+      PILOT_LLM_EMBEDDING_MODEL: ${PILOT_LLM_EMBEDDING_MODEL:-}
 
   identity-and-access:
     <<: *service

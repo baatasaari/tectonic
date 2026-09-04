@@ -26,7 +26,22 @@ make pilot-reset       # also deletes local pilot databases and credentials
 ```
 
 Generated credentials and seed state stay under `deploy/pilot/` and are git
-ignored. The external model is intentionally deterministic; the next pilot
-ticket adds an opt-in real OpenAI-compatible provider without changing this
-default.
+ignored. The external model is intentionally deterministic by default.
 
+## Use a real model provider
+
+Edit `deploy/pilot/.env` before startup:
+
+```dotenv
+PILOT_LLM_MODE=openai
+PILOT_LLM_BASE_URL=https://your-openai-compatible-provider.example/v1
+PILOT_LLM_API_KEY=your-provider-key
+PILOT_LLM_CHAT_MODEL=your-chat-model
+PILOT_LLM_EMBEDDING_MODEL=your-embedding-model
+```
+
+The API key is passed only to the provider-adapter container and is never
+written to seed state or logs. The adapter maps Tectonic's logical agents to
+the configured provider model, forces JSON-only task contracts, validates the
+returned structure and rejects malformed responses. Leave the embedding model
+empty to keep deterministic local embeddings while using a real chat model.
