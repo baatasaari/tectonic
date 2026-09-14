@@ -1,0 +1,6 @@
+# Pin used to build and execute adk_skills_routing_poc.ipynb.
+google-adk==2.9.0
+nbformat
+nbclient
+ipykernel
+pandas

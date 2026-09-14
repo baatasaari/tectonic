@@ -250,6 +250,8 @@ concern, out of scope for this fix.
 
 ```
 docs/                          Low-level design specs, the full module table
+pocs/                          Standalone proofs of concept — not deployable
+                                modules, not wired into anything under modules/
 modules/
   workflow-engine/               Module 1 — see its own README for details
   conversational-engine/          Module 2
@@ -286,6 +288,22 @@ modules/
   billing-and-metering/                                                                     Module 33
   sdk-and-developer-portal/                                                                   Module 34
 ```
+
+## Proofs of concept
+
+`pocs/` holds standalone technical proofs that inform a module's design
+before any module code commits to it — they are not deployable and are not
+wired into any module under `modules/`.
+
+- [`pocs/adk-skills-routing/`](pocs/adk-skills-routing/) — proves, against a
+  real Google Agent Development Kit (ADK) `LlmAgent`/`Runner`, that which
+  skill an agent uses for a given job can be decided *deterministically* by
+  an external router (a job-type → agent/skill lookup table) rather than by
+  the agent's own model, and that this routing is swappable at runtime with
+  no redeploy. Relevant to whichever module ends up owning cross-agent skill
+  dispatch — most plausibly `tool-orchestration` (module 4) or
+  `agent-marketplace` (module 24) — see that PoC's own README for what it
+  does and does not prove.
 
 ## Cross-module integration, once deployed together
 
