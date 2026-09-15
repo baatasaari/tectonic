@@ -296,14 +296,18 @@ before any module code commits to it — they are not deployable and are not
 wired into any module under `modules/`.
 
 - [`pocs/adk-skills-routing/`](pocs/adk-skills-routing/) — proves, against a
-  real Google Agent Development Kit (ADK) `LlmAgent`/`Runner`, that which
-  skill an agent uses for a given job can be decided *deterministically* by
-  an external router (a job-type → agent/skill lookup table) rather than by
-  the agent's own model, and that this routing is swappable at runtime with
-  no redeploy. Relevant to whichever module ends up owning cross-agent skill
-  dispatch — most plausibly `tool-orchestration` (module 4) or
-  `agent-marketplace` (module 24) — see that PoC's own README for what it
-  does and does not prove.
+  real Google Agent Development Kit (ADK) `LlmAgent`/`Runner`, two things:
+  (1) which skill an agent uses for a given job can be decided
+  *deterministically* by an external router (a job-type → agent/skill
+  lookup table) rather than by the agent's own model, and that routing is
+  swappable at runtime with no redeploy; and (2) an agent can gain a
+  brand-new skill purely from an edit to an on-disk manifest — checked
+  concretely via an unchanged `sys.modules` and `os.getpid()` across the
+  change, i.e. no new code reached the process and it was never restarted.
+  Relevant to whichever module ends up owning cross-agent skill dispatch —
+  most plausibly `tool-orchestration` (module 4) or `agent-marketplace`
+  (module 24) — see that PoC's own README for what it does and does not
+  prove.
 
 ## Cross-module integration, once deployed together
 

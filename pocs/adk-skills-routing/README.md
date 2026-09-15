@@ -1,4 +1,4 @@
-# ADK Skill Routing PoC — deterministic skill selection for agents
+# ADK Skill Routing PoC — deterministic, hot-updatable skill selection for agents
 
 A small, standalone proof of concept. It is **not** a Tectonic module (no
 FastAPI service, no Postgres, nothing deployable) — it lives under `pocs/`
@@ -7,7 +7,15 @@ because it proves an architectural pattern that several Tectonic modules
 eventually need to make a real decision about, without committing any of
 those modules' code to it yet.
 
-## The question this answers
+It answers two related questions, in two parts:
+
+- **Part 1 — who decides which skill an agent uses for a job?** (the
+  agent's own model, or something outside it)
+- **Part 2 — can an agent gain a brand-new skill without redeploying the
+  service?** (editing a manifest on disk, with no new code reaching the
+  running process and no restart)
+
+## Part 1 — the question this answers
 
 In a Google Agent Development Kit (ADK) multi-agent system, when an agent
 has several skills available to it, **who decides which skill it uses for
@@ -27,7 +35,7 @@ anything where "the agent used the correct capability for this job" is
 itself a control, not just a UX nicety. This PoC builds and empirically
 proves that column, then names what it deliberately leaves out.
 
-## Design
+## Part 1 — design
 
 ```
 job {job_type, payload}
@@ -63,7 +71,7 @@ Five pieces, each with a single job:
 - **Audit log** — one record per job. Every claim below is checked against
   it with an `assert`, not just asserted in prose.
 
-## What the notebook proves (with real ADK, running code, asserted results)
+## What Part 1 proves (with real ADK, running code, asserted results)
 
 1. **One agent, several job types, several skills** — `CaseWorkerAgent`
    handles three distinct job types via three distinct skills, resolved
@@ -83,6 +91,53 @@ Five pieces, each with a single job:
 5. **Many-to-many, not disguised 1:1** — the full audit log shows at least
    one agent used more than one skill, and at least one job type resolved
    to more than one agent (across the runtime change in step 4).
+
+## Part 2 — design: skills as configuration, not code
+
+Part 1's `SKILLS` dict is four bespoke Python functions. Part 2 re-expresses
+those same four skills as pure **configuration** of a small, fixed,
+already-loaded library of generic tool primitives, then adds a *fifth*,
+previously-unknown skill purely by editing a file:
+
+```
+skills_manifest.json (on disk)                PRIMITIVES (already imported
+  {skill_id, job_type, agent,        ──►        in the running process,
+   instruction, primitive, params}              fixed set, never changes)
+        │
+        ▼
+ SkillManifestRegistry.reload()   ← reads the file, builds one closure
+        │                            per entry: primitive + that entry's
+        │                            params. No new source code, ever.
+        ▼
+ registry.skills / registry.routing_table()   ← same shape as Part 1's
+        │                                        SKILLS / ROUTING_TABLE
+        ▼
+ build_agent_for_manifest_skill(...) → InMemoryRunner   ← identical
+                                                            plumbing to Part 1
+```
+
+A skill can only do what some combination of `PRIMITIVES` + `params` can
+express. That's the trade: less expressive than bespoke code, but a new
+skill is then genuinely just data — nothing to review for injection beyond
+the manifest's own values, nothing to build, nothing to deploy.
+
+## What Part 2 proves (with real ADK, running code, asserted results)
+
+6. **No behaviour change from the refactor** — the same four Part-1 jobs,
+   run again through the manifest-driven registry, produce byte-identical
+   output to Part 1's audit log.
+7. **A brand-new skill becomes usable from a config edit alone** —
+   `vulnerable-customer-flag` (a Consumer-Duty-style safeguarding check)
+   is appended to `skills_manifest.json` on disk and picked up by
+   `registry.reload()`; the very next job of that new type runs
+   successfully through the same `LlmAgent`/`InMemoryRunner` plumbing.
+8. **No redeploy, checked concretely, not asserted** — `sys.modules` is
+   identical before and after the new skill goes live (no new code was
+   imported anywhere in the process) and `os.getpid()` is identical (same
+   process throughout, not a restart).
+9. **The same agent gained the skill, not a new agent** — `QAAgent`,
+   which already had `compliance-flag`, is shown going from one skill to
+   two.
 
 ## Why the model is a stub, not live Gemini
 
@@ -110,30 +165,48 @@ jupyter notebook adk_skills_routing_poc.ipynb   # or: jupyter lab
 
 The committed notebook already carries real output from an actual run
 (`google-adk==2.9.0`) — you don't have to execute it to see the result,
-but every cell is reproducible offline.
+but every cell is reproducible offline. Running it writes/mutates
+`skills_manifest.json` next to the notebook (a real file — see Part 2);
+it is `.gitignore`d here because it's a runtime artifact standing in for a
+real config/manifest store, not source.
 
 ## What this does not prove (scope, named explicitly)
 
 - **No live model call.** See above — this validates routing/binding
   mechanics, not a real Gemini model's tool-selection accuracy or latency.
-- **No persistence.** `ROUTING_TABLE` is an in-memory dict. A production
-  version needs a versioned, access-controlled store (e.g. a
-  routing-policy table with an audit/outbox event per change — the shape
-  this repository's `auditability` and `regulatory-compliance` modules
-  already use for other kinds of decisions), not a module-level Python
-  dict.
+- **No persistence for the routing table.** Part 1's `ROUTING_TABLE` is an
+  in-memory dict. A production version needs a versioned, access-controlled
+  store (e.g. a routing-policy table with an audit/outbox event per change
+  — the shape this repository's `auditability` and `regulatory-compliance`
+  modules already use for other kinds of decisions), not a module-level
+  Python dict.
 - **One tool per skill.** Real skills will often need several related
-  tools and few-shot examples; the fix is `Skill.tool_fns: list[Callable]`
-  and fanning `tools=[...]` over all of them in the binder — the pattern
-  is unchanged, just not exercised here.
+  tools and few-shot examples; the fix is a list of tools/primitives per
+  skill and fanning `tools=[...]` over all of them in the binder — the
+  pattern is unchanged, just not exercised here.
 - **No "no route found" handling.** An unmapped `job_type` raises
   `KeyError` today. Production needs an explicit, logged failure mode.
 - **No concurrency / multi-tenant stress test.** Jobs run sequentially,
-  each against its own fresh agent and session.
-- **No authorization control on who can change the routing table.**
-  Hot-swapping a dict (proof 4) stands in for a real routing-policy
-  change; it is not a substitute for access control and its own audit
-  trail on that change.
+  each against its own fresh agent and session; concurrent jobs racing a
+  registry `reload()` are not exercised.
+- **No authorization control on who can change routing or the manifest.**
+  Hot-swapping a dict (Part 1, proof 4) or a JSON file (Part 2, proof 7)
+  stands in for a real config change; neither is a substitute for access
+  control and its own audit trail on that change.
+- **No manifest schema validation or provenance check.** The manifest's
+  shape and content are trusted outright; production needs schema
+  validation and ideally signing/provenance checks before `reload()` ever
+  executes a primitive with attacker- or error-supplied `params`.
+- **No reload-trigger mechanism.** `reload()` is called explicitly in the
+  notebook; a real service needs an explicit way to invoke it (file
+  watcher, webhook, poll, admin endpoint), each with different staleness
+  and failure-mode trade-offs — not modelled here.
+- **"No redeploy" has a ceiling.** It holds for any skill expressible as
+  an existing primitive + parameters. A skill needing genuinely new logic
+  is new code, and that code still needs to reach the running process
+  somehow — a real deploy of a new primitive, or a dynamic-import plugin
+  mechanism with its own security review. This PoC names that ceiling
+  rather than pretending config can replace all future code changes.
 
 ## Relationship to Tectonic's modules
 

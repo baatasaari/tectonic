@@ -1,0 +1,3 @@
+# Generated at notebook run time (§13 writes it, §16 mutates it) — it is a
+# runtime artifact standing in for a real config/manifest store, not source.
+skills_manifest.json
