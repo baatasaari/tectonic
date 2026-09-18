@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#161f26" />
+    <meta
+      name="description"
+      content="Explore Tectonic. A governed agent workspace connecting knowledge, tools, human decisions and execution evidence."
+    />
+    <title>Tectonic — The agent workspace</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to workspace</a>
+    <aside id="sidebar">
+      <a class="brand" href="#/overview"
+        ><span class="brand-icon">▰</span> tectonic<span class="brand-dot"
+          >•</span
+        ></a
+      >
+      <div class="workspace-label">YOUR WORKSPACE</div>
+      <button id="tenant-button" class="tenant-button">
+        <span class="avatar">A</span
+        ><span>Acme Corporation<small>Support operations</small></span
+        ><span>⌄</span>
+      </button>
+      <nav id="nav"></nav>
+      <div class="sidebar-bottom">
+        <div class="pilot-note">
+          <span class="pulse"></span> Built for human oversight
+          <p>Give agents room to work.<br />Keep the decisions that matter.</p>
+        </div>
+        <button class="profile" data-action="profile">
+          <span class="avatar sand">VR</span
+          ><span>Vijay Rentala<small>Demo operator</small></span
+          ><span>↗</span>
+        </button>
+      </div>
+    </aside>
+    <div id="shell">
+      <header>
+        <div id="breadcrumbs"></div>
+        <div class="header-actions">
+          <button id="search-button" class="search-button">
+            ⌕ <span>Find anything</span><kbd>⌘ K</kbd></button
+          ><span class="demo-tag"><i></i> Demonstration</span
+          ><button class="primary small" data-action="lead">
+            Discuss a pilot ↗
+          </button>
+        </div>
+      </header>
+      <main id="main" tabindex="-1"></main>
+      <footer>
+        <span>TECTONIC / AGENTIC OPERATIONS</span
+        ><span>Repository-backed capabilities · Illustrative runtime data</span
+        ><button data-action="reset">Reset demo</button>
+      </footer>
+    </div>
+    <dialog id="modal"></dialog>
+    <div id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>

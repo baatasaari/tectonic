@@ -1852,3 +1852,20 @@ uv venv && uv pip install -e ".[dev]"
 pytest                                                    # unit tests, no external services needed
 docker compose -f deploy/docker-compose.yml up --build    # full stack (Postgres/Redis + dependency-stub)
 ```
+
+
+## Spatial pilot console
+
+Explore the existing support-agent journey through an isometric agent workspace,
+module/API catalogue, animated demonstration runs, human review and step evidence.
+The console also captures pilot enquiries in a local server-side store.
+
+```sh
+python apps/pilot-console/server.py
+# http://127.0.0.1:3000
+```
+
+See [the console guide](apps/pilot-console/README.md) for optional backend chat,
+testing and export instructions. Spatial events are explicitly labelled demo data;
+the local adapter is not the public authenticated pilot gateway. This frontend does
+not certify the ten-ticket production acceptance gates.

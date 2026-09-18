@@ -1,0 +1,2022 @@
+[
+  {
+    "id": "a2a",
+    "name": "A2A",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 22: A2A. Standardised agent-to-agent delegation and capability negotiation, cross-vendor federation over the A2A protocol.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/a2a/delegate",
+        "handler": "delegate",
+        "source": "modules/a2a/src/a2a_gateway/api/routes_a2a.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/a2a/tasks",
+        "handler": "list_tasks",
+        "source": "modules/a2a/src/a2a_gateway/api/routes_a2a.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/a2a/tasks/{task_id}",
+        "handler": "get_task",
+        "source": "modules/a2a/src/a2a_gateway/api/routes_a2a.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/a2a/tasks/{task_id}/cancel",
+        "handler": "cancel_task",
+        "source": "modules/a2a/src/a2a_gateway/api/routes_a2a.py"
+      },
+      {
+        "method": "PUT",
+        "path": "/v1/a2a/access-policies/{caller_agent_id}",
+        "handler": "set_access_policy",
+        "source": "modules/a2a/src/a2a_gateway/api/routes_a2a.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/a2a/rpc",
+        "handler": "rpc",
+        "source": "modules/a2a/src/a2a_gateway/api/routes_a2a.py"
+      }
+    ]
+  },
+  {
+    "id": "agent-cards",
+    "name": "Agent Cards",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 23: Agent Cards. Trust-scored, machine-readable capability manifests for discovery.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/agent-cards",
+        "handler": "register_card",
+        "source": "modules/agent-cards/src/agent_cards/api/routes_agent_cards.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/agent-cards",
+        "handler": "discover_cards",
+        "source": "modules/agent-cards/src/agent_cards/api/routes_agent_cards.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/agent-cards/{card_id}",
+        "handler": "get_card",
+        "source": "modules/agent-cards/src/agent_cards/api/routes_agent_cards.py"
+      },
+      {
+        "method": "PUT",
+        "path": "/v1/agent-cards/{card_id}",
+        "handler": "update_card",
+        "source": "modules/agent-cards/src/agent_cards/api/routes_agent_cards.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/agent-cards/{card_id}/recompute-trust-score",
+        "handler": "recompute_trust_score",
+        "source": "modules/agent-cards/src/agent_cards/api/routes_agent_cards.py"
+      }
+    ]
+  },
+  {
+    "id": "agent-marketplace",
+    "name": "Agent Marketplace",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 24: Agent Marketplace / Registry. Internal catalogue of built agents with governance, reuse tracking and (future) external monetisation.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/agent-marketplace/listings",
+        "handler": "submit_listing",
+        "source": "modules/agent-marketplace/src/agent_marketplace/api/routes_agent_marketplace.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/agent-marketplace/listings",
+        "handler": "search_listings",
+        "source": "modules/agent-marketplace/src/agent_marketplace/api/routes_agent_marketplace.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/agent-marketplace/listings/{listing_id}",
+        "handler": "get_listing",
+        "source": "modules/agent-marketplace/src/agent_marketplace/api/routes_agent_marketplace.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/agent-marketplace/listings/{listing_id}/approve",
+        "handler": "approve_listing",
+        "source": "modules/agent-marketplace/src/agent_marketplace/api/routes_agent_marketplace.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/agent-marketplace/listings/{listing_id}/reject",
+        "handler": "reject_listing",
+        "source": "modules/agent-marketplace/src/agent_marketplace/api/routes_agent_marketplace.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/agent-marketplace/listings/{listing_id}/deprecate",
+        "handler": "deprecate_listing",
+        "source": "modules/agent-marketplace/src/agent_marketplace/api/routes_agent_marketplace.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/agent-marketplace/listings/{listing_id}/sync",
+        "handler": "sync_listing",
+        "source": "modules/agent-marketplace/src/agent_marketplace/api/routes_agent_marketplace.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/agent-marketplace/listings/{listing_id}/record-usage",
+        "handler": "record_usage",
+        "source": "modules/agent-marketplace/src/agent_marketplace/api/routes_agent_marketplace.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/agent-marketplace/listings/{listing_id}/reuse-metrics",
+        "handler": "reuse_metrics",
+        "source": "modules/agent-marketplace/src/agent_marketplace/api/routes_agent_marketplace.py"
+      }
+    ]
+  },
+  {
+    "id": "agentic-rag",
+    "name": "Agentic RAG",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 6: Agentic RAG. Multi-hop, self-correcting retrieval that reformulates queries, checks groundedness and re-retrieves when needed.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/agentic-rag/retrieve",
+        "handler": "retrieve",
+        "source": "modules/agentic-rag/src/agentic_rag/api/routes_rag.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/agentic-rag/requests/{request_id}",
+        "handler": "get_request",
+        "source": "modules/agentic-rag/src/agentic_rag/api/routes_rag.py"
+      }
+    ]
+  },
+  {
+    "id": "auditability",
+    "name": "Auditability",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 20: Auditability. Immutable, hash-chained event log with tamper-evidence, audit-pack export and natural-language query.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/auditability/events",
+        "handler": "ingest_event",
+        "source": "modules/auditability/src/auditability/api/routes_auditability.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/auditability/events",
+        "handler": "list_events",
+        "source": "modules/auditability/src/auditability/api/routes_auditability.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/auditability/events/verify-chain",
+        "handler": "verify_chain_route",
+        "source": "modules/auditability/src/auditability/api/routes_auditability.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/auditability/audit-packs",
+        "handler": "create_audit_pack",
+        "source": "modules/auditability/src/auditability/api/routes_auditability.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/auditability/audit-packs/{pack_id}",
+        "handler": "get_audit_pack",
+        "source": "modules/auditability/src/auditability/api/routes_auditability.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/auditability/query",
+        "handler": "nl_query",
+        "source": "modules/auditability/src/auditability/api/routes_auditability.py"
+      }
+    ]
+  },
+  {
+    "id": "billing-and-metering",
+    "name": "Billing And Metering",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 33: Billing and Metering. Turns real per-tenant usage signals from FinOps and Auditability into metered usage records and invoices.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/billing/pricing-plans",
+        "handler": "create_pricing_plan",
+        "source": "modules/billing-and-metering/src/billing_and_metering/api/routes_billing_and_metering.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/billing/pricing-plans",
+        "handler": "list_pricing_plans",
+        "source": "modules/billing-and-metering/src/billing_and_metering/api/routes_billing_and_metering.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/billing/pricing-plans/{plan_id}",
+        "handler": "get_pricing_plan",
+        "source": "modules/billing-and-metering/src/billing_and_metering/api/routes_billing_and_metering.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/billing/invoices/generate",
+        "handler": "generate_invoice",
+        "source": "modules/billing-and-metering/src/billing_and_metering/api/routes_billing_and_metering.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/billing/invoices",
+        "handler": "list_invoices",
+        "source": "modules/billing-and-metering/src/billing_and_metering/api/routes_billing_and_metering.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/billing/invoices/{invoice_id}",
+        "handler": "get_invoice",
+        "source": "modules/billing-and-metering/src/billing_and_metering/api/routes_billing_and_metering.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/billing/invoices/{invoice_id}/finalize",
+        "handler": "finalize_invoice",
+        "source": "modules/billing-and-metering/src/billing_and_metering/api/routes_billing_and_metering.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/billing/tenants/{tenant_id}/meter",
+        "handler": "meter_tenant",
+        "source": "modules/billing-and-metering/src/billing_and_metering/api/routes_billing_and_metering.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/billing/usage-records",
+        "handler": "list_usage_records",
+        "source": "modules/billing-and-metering/src/billing_and_metering/api/routes_billing_and_metering.py"
+      }
+    ]
+  },
+  {
+    "id": "context-engineering",
+    "name": "Context Engineering",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 7: Context Engineering. Assembles, compresses and prunes context within token budget using ontology constraints.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/context-engineering/assemble",
+        "handler": "assemble",
+        "source": "modules/context-engineering/src/context_engineering/api/routes_context.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/context-engineering/ontologies",
+        "handler": "create_ontology",
+        "source": "modules/context-engineering/src/context_engineering/api/routes_context.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/context-engineering/weights/{task_type}",
+        "handler": "get_weights",
+        "source": "modules/context-engineering/src/context_engineering/api/routes_context.py"
+      }
+    ]
+  },
+  {
+    "id": "conversational-engine",
+    "name": "Conversational Engine",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 2: Conversational Engine. Multi-turn dialogue management with persona control, channel adaptation, and emotional/urgency-aware handoff.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/conversational-engine/sessions",
+        "handler": "create_session",
+        "source": "modules/conversational-engine/src/conversational_engine/api/routes_sessions.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/conversational-engine/sessions",
+        "handler": "list_sessions",
+        "source": "modules/conversational-engine/src/conversational_engine/api/routes_sessions.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/conversational-engine/sessions/{session_id}",
+        "handler": "get_session",
+        "source": "modules/conversational-engine/src/conversational_engine/api/routes_sessions.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/conversational-engine/sessions/{session_id}/export",
+        "handler": "export_session",
+        "source": "modules/conversational-engine/src/conversational_engine/api/routes_sessions.py"
+      },
+      {
+        "method": "DELETE",
+        "path": "/v1/conversational-engine/sessions/{session_id}",
+        "handler": "delete_session",
+        "source": "modules/conversational-engine/src/conversational_engine/api/routes_sessions.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/conversational-engine/sessions/{session_id}/messages",
+        "handler": "send_message",
+        "source": "modules/conversational-engine/src/conversational_engine/api/routes_sessions.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/conversational-engine/sessions/{session_id}/resume",
+        "handler": "resume_session",
+        "source": "modules/conversational-engine/src/conversational_engine/api/routes_sessions.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/conversational-engine/sessions/{session_id}/handoff",
+        "handler": "handoff",
+        "source": "modules/conversational-engine/src/conversational_engine/api/routes_sessions.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/conversational-engine/sessions/{session_id}/close",
+        "handler": "close_session",
+        "source": "modules/conversational-engine/src/conversational_engine/api/routes_sessions.py"
+      }
+    ]
+  },
+  {
+    "id": "data-source-plugins",
+    "name": "Data Source Plugins",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 8: Data Source Plugins. Connects to external data systems, normalises payloads, detects schema drift, and scores data quality at ingestion.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/data-source-plugins/connectors",
+        "handler": "create_connector",
+        "source": "modules/data-source-plugins/src/data_source_plugins/api/routes_connectors.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/data-source-plugins/connectors/{connector_id}",
+        "handler": "get_connector",
+        "source": "modules/data-source-plugins/src/data_source_plugins/api/routes_connectors.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/data-source-plugins/connectors/{connector_id}/sync",
+        "handler": "trigger_sync",
+        "source": "modules/data-source-plugins/src/data_source_plugins/api/routes_connectors.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/data-source-plugins/connectors/{connector_id}/query",
+        "handler": "query_connector",
+        "source": "modules/data-source-plugins/src/data_source_plugins/api/routes_connectors.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/data-source-plugins/connectors/{connector_id}/quality",
+        "handler": "get_quality",
+        "source": "modules/data-source-plugins/src/data_source_plugins/api/routes_connectors.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/data-source-plugins/connectors/{connector_id}/drift-incidents",
+        "handler": "list_drift_incidents",
+        "source": "modules/data-source-plugins/src/data_source_plugins/api/routes_connectors.py"
+      }
+    ]
+  },
+  {
+    "id": "deployment-strategy",
+    "name": "Deployment Strategy",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 27: Deployment Strategy. Cloud-agnostic packaging with agent-aware canary analysis, gated by real Evaluation Framework and FinOps signals.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/deployment-strategy/deployments",
+        "handler": "deploy",
+        "source": "modules/deployment-strategy/src/deployment_strategy/api/routes_deployment_strategy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/deployment-strategy/deployments",
+        "handler": "list_deployments",
+        "source": "modules/deployment-strategy/src/deployment_strategy/api/routes_deployment_strategy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/deployment-strategy/deployments/{deployment_id}",
+        "handler": "get_deployment",
+        "source": "modules/deployment-strategy/src/deployment_strategy/api/routes_deployment_strategy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/deployment-strategy/deployments/{deployment_id}/canary-health",
+        "handler": "canary_health",
+        "source": "modules/deployment-strategy/src/deployment_strategy/api/routes_deployment_strategy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/deployment-strategy/deployments/{deployment_id}/promote",
+        "handler": "promote",
+        "source": "modules/deployment-strategy/src/deployment_strategy/api/routes_deployment_strategy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/deployment-strategy/deployments/{deployment_id}/rollback",
+        "handler": "rollback",
+        "source": "modules/deployment-strategy/src/deployment_strategy/api/routes_deployment_strategy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/deployment-strategy/services/{service_name}/active",
+        "handler": "get_active_deployment",
+        "source": "modules/deployment-strategy/src/deployment_strategy/api/routes_deployment_strategy.py"
+      }
+    ]
+  },
+  {
+    "id": "evaluation-framework",
+    "name": "Evaluation Framework",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 18: Evaluation Framework. Faithfulness, coherence, tool-trace scoring, CI/CD gating and continuous production evaluation.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/evaluation-framework/evaluate",
+        "handler": "evaluate",
+        "source": "modules/evaluation-framework/src/evaluation_framework/api/routes_evalfw.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/evaluation-framework/gate",
+        "handler": "gate",
+        "source": "modules/evaluation-framework/src/evaluation_framework/api/routes_evalfw.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/evaluation-framework/eval-runs",
+        "handler": "list_eval_runs",
+        "source": "modules/evaluation-framework/src/evaluation_framework/api/routes_evalfw.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/evaluation-framework/domain-packs",
+        "handler": "create_domain_pack",
+        "source": "modules/evaluation-framework/src/evaluation_framework/api/routes_evalfw.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/evaluation-framework/scores",
+        "handler": "list_scores",
+        "source": "modules/evaluation-framework/src/evaluation_framework/api/routes_evalfw.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/evaluation-framework/sample",
+        "handler": "sample",
+        "source": "modules/evaluation-framework/src/evaluation_framework/api/routes_evalfw.py"
+      }
+    ]
+  },
+  {
+    "id": "finops",
+    "name": "Finops",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 26: FinOps. Budgets, chargeback, autonomous cost-optimisation agent and predictive forecasting, built on LLM Gateway's own real spend data.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/finops/usage-events",
+        "handler": "report_usage_event",
+        "source": "modules/finops/src/finops/api/routes_finops.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/finops/cost-reports/{tenant_id}",
+        "handler": "get_cost_report",
+        "source": "modules/finops/src/finops/api/routes_finops.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/finops/budget-policies",
+        "handler": "create_budget_policy",
+        "source": "modules/finops/src/finops/api/routes_finops.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/finops/budget-policies/{budget_policy_id}",
+        "handler": "get_budget_policy",
+        "source": "modules/finops/src/finops/api/routes_finops.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/finops/budget-policies/{budget_policy_id}/evaluate",
+        "handler": "evaluate_budget_policy",
+        "source": "modules/finops/src/finops/api/routes_finops.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/finops/budget-policies/{budget_policy_id}/actions",
+        "handler": "list_optimisation_actions",
+        "source": "modules/finops/src/finops/api/routes_finops.py"
+      }
+    ]
+  },
+  {
+    "id": "graph-db",
+    "name": "Graph DB",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 11: Graph DB. Temporal, causally-typed entity/relationship storage for graph-based reasoning and memory.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/graph-db/nodes",
+        "handler": "create_node",
+        "source": "modules/graph-db/src/graph_db/api/routes_graph.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/graph-db/edges",
+        "handler": "create_edge",
+        "source": "modules/graph-db/src/graph_db/api/routes_graph.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/graph-db/query",
+        "handler": "query",
+        "source": "modules/graph-db/src/graph_db/api/routes_graph.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/graph-db/nodes/{node_id}/neighbours",
+        "handler": "get_neighbours",
+        "source": "modules/graph-db/src/graph_db/api/routes_graph.py"
+      }
+    ]
+  },
+  {
+    "id": "guardrails",
+    "name": "Guardrails",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 14: Guardrails. Dual-stage input/output policy enforcement: PII, jailbreak, content safety, groundedness.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/guardrails/check",
+        "handler": "check",
+        "source": "modules/guardrails/src/guardrails/api/routes_guardrails.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/guardrails/policy-profiles",
+        "handler": "create_policy_profile",
+        "source": "modules/guardrails/src/guardrails/api/routes_guardrails.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/guardrails/red-team-runs",
+        "handler": "list_red_team_runs",
+        "source": "modules/guardrails/src/guardrails/api/routes_guardrails.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/guardrails/red-team-runs/trigger",
+        "handler": "trigger_red_team_run",
+        "source": "modules/guardrails/src/guardrails/api/routes_guardrails.py"
+      }
+    ]
+  },
+  {
+    "id": "human-oversight",
+    "name": "Human Oversight",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 16: Human Oversight. Designed-in approval queues, override logging, escalation routing per EU AI Act Article 14.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/human-oversight/requests",
+        "handler": "create_request",
+        "source": "modules/human-oversight/src/human_oversight/api/routes_oversight.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/human-oversight/requests/{request_id}/claim",
+        "handler": "claim_request",
+        "source": "modules/human-oversight/src/human_oversight/api/routes_oversight.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/human-oversight/requests/{request_id}/decide",
+        "handler": "decide_request",
+        "source": "modules/human-oversight/src/human_oversight/api/routes_oversight.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/human-oversight/requests",
+        "handler": "list_requests",
+        "source": "modules/human-oversight/src/human_oversight/api/routes_oversight.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/human-oversight/requests/{request_id}",
+        "handler": "get_request",
+        "source": "modules/human-oversight/src/human_oversight/api/routes_oversight.py"
+      }
+    ]
+  },
+  {
+    "id": "identity-and-access",
+    "name": "Identity And Access",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 31: Identity and Access. Zero-trust identity registry, role/scope-based tokens, and a live authorize gate whose revocation checks take effect immediately, not at token expiry.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/roles",
+        "handler": "create_role",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/identity-access/roles",
+        "handler": "list_roles",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/identities",
+        "handler": "register_identity",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/identity-access/identities",
+        "handler": "list_identities",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/identity-access/identities/{identity_id}",
+        "handler": "get_identity",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/identities/{identity_id}/revoke",
+        "handler": "revoke_identity",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/identities/{identity_id}/reinstate",
+        "handler": "reinstate_identity",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/identities/{identity_id}/roles",
+        "handler": "grant_role",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/identities/{identity_id}/roles/{role_name}/revoke",
+        "handler": "revoke_role",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/identity-access/identities/{identity_id}/role-bindings",
+        "handler": "list_identity_role_bindings",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/identity-access/identities/{identity_id}/auth-decisions",
+        "handler": "list_auth_decisions",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/tokens",
+        "handler": "issue_token",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/authorize",
+        "handler": "authorize",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/identity-providers",
+        "handler": "register_identity_provider",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/identity-access/identity-providers",
+        "handler": "list_identity_providers",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/identity-access/identity-providers/{provider_id}",
+        "handler": "get_identity_provider",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/identity-providers/{provider_id}/disable",
+        "handler": "disable_identity_provider",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/identity-providers/{provider_id}/enable",
+        "handler": "enable_identity_provider",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/oidc/login",
+        "handler": "oidc_login",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/saml/login",
+        "handler": "saml_login",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/groups",
+        "handler": "register_group",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/identity-access/groups",
+        "handler": "list_groups",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/identity-access/groups/{group_id}",
+        "handler": "get_group",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/groups/{group_id}/roles",
+        "handler": "set_group_roles",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/scim-tokens",
+        "handler": "create_scim_token",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/identity-access/scim-tokens",
+        "handler": "list_scim_tokens",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/identity-access/scim-tokens/{token_id}/revoke",
+        "handler": "revoke_scim_token",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_identity_and_access.py"
+      },
+      {
+        "method": "POST",
+        "path": "/scim/v2/{tenant_id}/Users",
+        "handler": "create_user",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_scim.py"
+      },
+      {
+        "method": "GET",
+        "path": "/scim/v2/{tenant_id}/Users/{user_id}",
+        "handler": "get_user",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_scim.py"
+      },
+      {
+        "method": "GET",
+        "path": "/scim/v2/{tenant_id}/Users",
+        "handler": "list_users",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_scim.py"
+      },
+      {
+        "method": "PUT",
+        "path": "/scim/v2/{tenant_id}/Users/{user_id}",
+        "handler": "replace_user",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_scim.py"
+      },
+      {
+        "method": "PATCH",
+        "path": "/scim/v2/{tenant_id}/Users/{user_id}",
+        "handler": "patch_user",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_scim.py"
+      },
+      {
+        "method": "DELETE",
+        "path": "/scim/v2/{tenant_id}/Users/{user_id}",
+        "handler": "delete_user",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_scim.py"
+      },
+      {
+        "method": "POST",
+        "path": "/scim/v2/{tenant_id}/Groups",
+        "handler": "create_group",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_scim.py"
+      },
+      {
+        "method": "GET",
+        "path": "/scim/v2/{tenant_id}/Groups/{group_id}",
+        "handler": "get_group",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_scim.py"
+      },
+      {
+        "method": "GET",
+        "path": "/scim/v2/{tenant_id}/Groups",
+        "handler": "list_groups",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_scim.py"
+      },
+      {
+        "method": "PUT",
+        "path": "/scim/v2/{tenant_id}/Groups/{group_id}",
+        "handler": "replace_group",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_scim.py"
+      },
+      {
+        "method": "PATCH",
+        "path": "/scim/v2/{tenant_id}/Groups/{group_id}",
+        "handler": "patch_group",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_scim.py"
+      },
+      {
+        "method": "DELETE",
+        "path": "/scim/v2/{tenant_id}/Groups/{group_id}",
+        "handler": "delete_group",
+        "source": "modules/identity-and-access/src/identity_and_access/api/routes_scim.py"
+      }
+    ]
+  },
+  {
+    "id": "intent-detection",
+    "name": "Intent Detection",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 5: Intent Detection. Classifies input into intents, decomposes compositional multi-goal utterances, and monitors intent drift.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/intent-detection/classify",
+        "handler": "classify",
+        "source": "modules/intent-detection/src/intent_detection/api/routes_intents.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/intent-detection/taxonomies",
+        "handler": "create_taxonomy",
+        "source": "modules/intent-detection/src/intent_detection/api/routes_intents.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/intent-detection/taxonomies/{taxonomy_id}/activate",
+        "handler": "activate_taxonomy",
+        "source": "modules/intent-detection/src/intent_detection/api/routes_intents.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/intent-detection/drift-reports",
+        "handler": "list_drift_reports",
+        "source": "modules/intent-detection/src/intent_detection/api/routes_intents.py"
+      }
+    ]
+  },
+  {
+    "id": "knowledge-base",
+    "name": "Knowledge Base",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 9: Knowledge Base / Document Management. Ingests, chunks, versions and manages source-of-truth documents feeding Agentic RAG.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/knowledge-base/documents",
+        "handler": "ingest_document",
+        "source": "modules/knowledge-base/src/knowledge_base/api/routes_documents.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/knowledge-base/documents/{document_id}/versions",
+        "handler": "create_version",
+        "source": "modules/knowledge-base/src/knowledge_base/api/routes_documents.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/knowledge-base/documents/{document_id}",
+        "handler": "get_document",
+        "source": "modules/knowledge-base/src/knowledge_base/api/routes_documents.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/knowledge-base/chunks",
+        "handler": "list_chunks",
+        "source": "modules/knowledge-base/src/knowledge_base/api/routes_documents.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/knowledge-base/documents/{document_id}/review",
+        "handler": "review_document",
+        "source": "modules/knowledge-base/src/knowledge_base/api/routes_documents.py"
+      }
+    ]
+  },
+  {
+    "id": "llm-gateway",
+    "name": "LLM Gateway",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 3: LLM Gateway. The only module permitted to call model providers directly: quality-aware routing, semantic caching, cost governance and failover across providers.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/llm-gateway/admin/virtual-keys",
+        "handler": "create_virtual_key",
+        "source": "modules/llm-gateway/src/llm_gateway/api/routes_admin.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/llm-gateway/admin/virtual-keys",
+        "handler": "list_virtual_keys",
+        "source": "modules/llm-gateway/src/llm_gateway/api/routes_admin.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/llm-gateway/admin/budgets/{budget_policy_id}",
+        "handler": "get_budget_status",
+        "source": "modules/llm-gateway/src/llm_gateway/api/routes_admin.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/llm-gateway/admin/budget-policies",
+        "handler": "create_budget_policy",
+        "source": "modules/llm-gateway/src/llm_gateway/api/routes_admin.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/llm-gateway/admin/providers",
+        "handler": "create_provider_config",
+        "source": "modules/llm-gateway/src/llm_gateway/api/routes_admin.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/llm-gateway/admin/providers",
+        "handler": "list_providers",
+        "source": "modules/llm-gateway/src/llm_gateway/api/routes_admin.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/llm-gateway/chat/completions",
+        "handler": "chat_completions",
+        "source": "modules/llm-gateway/src/llm_gateway/api/routes_completions.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/llm-gateway/embeddings",
+        "handler": "embeddings",
+        "source": "modules/llm-gateway/src/llm_gateway/api/routes_completions.py"
+      }
+    ]
+  },
+  {
+    "id": "llmops",
+    "name": "LLMops",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 25: LLMOps. Model registry, versioning, staged rollout and automatic canary evaluation gated by real Evaluation Framework scores.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/llmops/model-versions",
+        "handler": "register_model_version",
+        "source": "modules/llmops/src/llmops/api/routes_llmops.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/llmops/model-versions",
+        "handler": "list_model_versions",
+        "source": "modules/llmops/src/llmops/api/routes_llmops.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/llmops/model-versions/{model_version_id}",
+        "handler": "get_model_version",
+        "source": "modules/llmops/src/llmops/api/routes_llmops.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/llmops/deployments",
+        "handler": "start_canary",
+        "source": "modules/llmops/src/llmops/api/routes_llmops.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/llmops/deployments/{deployment_id}",
+        "handler": "get_deployment",
+        "source": "modules/llmops/src/llmops/api/routes_llmops.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/llmops/deployments/{deployment_id}/canary-gate",
+        "handler": "canary_gate",
+        "source": "modules/llmops/src/llmops/api/routes_llmops.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/llmops/deployments/{deployment_id}/promote",
+        "handler": "promote",
+        "source": "modules/llmops/src/llmops/api/routes_llmops.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/llmops/deployments/{deployment_id}/rollback",
+        "handler": "rollback",
+        "source": "modules/llmops/src/llmops/api/routes_llmops.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/llmops/models/{model_name}/active",
+        "handler": "get_active_version",
+        "source": "modules/llmops/src/llmops/api/routes_llmops.py"
+      }
+    ]
+  },
+  {
+    "id": "long-term-memory",
+    "name": "Long Term Memory",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 13: Long-Term Memory. Durable, cross-session hybrid memory store with consolidation, forgetting and self-reflection.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/long-term-memory/items",
+        "handler": "store_item",
+        "source": "modules/long-term-memory/src/long_term_memory/api/routes_memory.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/long-term-memory/query",
+        "handler": "query_items",
+        "source": "modules/long-term-memory/src/long_term_memory/api/routes_memory.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/long-term-memory/reflections",
+        "handler": "list_reflections",
+        "source": "modules/long-term-memory/src/long_term_memory/api/routes_memory.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/long-term-memory/reflections",
+        "handler": "generate_reflection",
+        "source": "modules/long-term-memory/src/long_term_memory/api/routes_memory.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/long-term-memory/erasure-requests",
+        "handler": "create_erasure_request",
+        "source": "modules/long-term-memory/src/long_term_memory/api/routes_memory.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/long-term-memory/erasure-requests/{deletion_id}",
+        "handler": "get_erasure_request",
+        "source": "modules/long-term-memory/src/long_term_memory/api/routes_memory.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/long-term-memory/consolidation-runs",
+        "handler": "run_consolidation",
+        "source": "modules/long-term-memory/src/long_term_memory/api/routes_memory.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/long-term-memory/consent-records",
+        "handler": "grant_consent",
+        "source": "modules/long-term-memory/src/long_term_memory/api/routes_memory.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/long-term-memory/consent-records",
+        "handler": "list_consent_records",
+        "source": "modules/long-term-memory/src/long_term_memory/api/routes_memory.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/long-term-memory/consent-records/{consent_id}/revoke",
+        "handler": "revoke_consent",
+        "source": "modules/long-term-memory/src/long_term_memory/api/routes_memory.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/long-term-memory/legal-holds",
+        "handler": "place_legal_hold",
+        "source": "modules/long-term-memory/src/long_term_memory/api/routes_memory.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/long-term-memory/legal-holds",
+        "handler": "list_legal_holds",
+        "source": "modules/long-term-memory/src/long_term_memory/api/routes_memory.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/long-term-memory/legal-holds/{hold_id}/release",
+        "handler": "release_legal_hold",
+        "source": "modules/long-term-memory/src/long_term_memory/api/routes_memory.py"
+      }
+    ]
+  },
+  {
+    "id": "mcp",
+    "name": "MCP",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 21: MCP. Standardised agent-to-tool/data interface over JSON-RPC, with an internal server marketplace and per-tenant/per-tool access policy.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/mcp/servers",
+        "handler": "register_server",
+        "source": "modules/mcp/src/mcp_gateway/api/routes_mcp.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/mcp/servers",
+        "handler": "list_servers",
+        "source": "modules/mcp/src/mcp_gateway/api/routes_mcp.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/mcp/servers/{server_id}",
+        "handler": "get_server",
+        "source": "modules/mcp/src/mcp_gateway/api/routes_mcp.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/mcp/servers/{server_id}/sync",
+        "handler": "sync_server",
+        "source": "modules/mcp/src/mcp_gateway/api/routes_mcp.py"
+      },
+      {
+        "method": "PUT",
+        "path": "/v1/mcp/servers/{server_id}/access-policy",
+        "handler": "set_access_policy",
+        "source": "modules/mcp/src/mcp_gateway/api/routes_mcp.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/mcp/servers/{server_id}/rpc",
+        "handler": "rpc",
+        "source": "modules/mcp/src/mcp_gateway/api/routes_mcp.py"
+      }
+    ]
+  },
+  {
+    "id": "multi-modality",
+    "name": "Multi Modality",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 28: Multi-modality. Text, voice, image, document handling unified behind one interface, with a real cross-modal groundedness gate via Guardrails.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/multi-modality/extractions",
+        "handler": "extract",
+        "source": "modules/multi-modality/src/multi_modality/api/routes_multi_modality.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-modality/extractions",
+        "handler": "list_extractions",
+        "source": "modules/multi-modality/src/multi_modality/api/routes_multi_modality.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-modality/extractions/{extraction_id}",
+        "handler": "get_extraction",
+        "source": "modules/multi-modality/src/multi_modality/api/routes_multi_modality.py"
+      }
+    ]
+  },
+  {
+    "id": "multi-tenancy",
+    "name": "Multi Tenancy",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 30: Multi-tenancy. Tenant registry and lifecycle, plus a real, executable isolation probe against every platform module's shared tenant-scoped list contract.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/tenants",
+        "handler": "register_tenant",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/tenants",
+        "handler": "list_tenants",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/tenants/{tenant_id}",
+        "handler": "get_tenant",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/tenants/{tenant_id}/gate",
+        "handler": "tenant_gate",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/tenants/{tenant_id}/entitlements",
+        "handler": "list_entitlements",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/tenants/{tenant_id}/entitlements",
+        "handler": "set_entitlements",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/tenants/{tenant_id}/suspend",
+        "handler": "suspend_tenant",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/tenants/{tenant_id}/reactivate",
+        "handler": "reactivate_tenant",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/tenants/{tenant_id}/delete",
+        "handler": "delete_tenant",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/organisations",
+        "handler": "register_organisation",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/organisations",
+        "handler": "list_organisations",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/organisations/{organisation_id}",
+        "handler": "get_organisation",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/organisations/{organisation_id}/suspend",
+        "handler": "suspend_organisation",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/organisations/{organisation_id}/reactivate",
+        "handler": "reactivate_organisation",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/organisations/{organisation_id}/delete",
+        "handler": "delete_organisation",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/workspaces",
+        "handler": "register_workspace",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/workspaces",
+        "handler": "list_workspaces",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/workspaces/{workspace_id}",
+        "handler": "get_workspace",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/workspaces/{workspace_id}/suspend",
+        "handler": "suspend_workspace",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/workspaces/{workspace_id}/reactivate",
+        "handler": "reactivate_workspace",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/workspaces/{workspace_id}/delete",
+        "handler": "delete_workspace",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/environments",
+        "handler": "register_environment",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/environments",
+        "handler": "list_environments",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/environments/{environment_id}",
+        "handler": "get_environment",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/environments/{environment_id}/suspend",
+        "handler": "suspend_environment",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/environments/{environment_id}/reactivate",
+        "handler": "reactivate_environment",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/environments/{environment_id}/delete",
+        "handler": "delete_environment",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/tenants/{tenant_id}/quota-set",
+        "handler": "get_quota_set",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/tenants/{tenant_id}/quota-set",
+        "handler": "set_quota_set",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/tenants/{tenant_id}/residency-policy",
+        "handler": "get_residency_policy",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/tenants/{tenant_id}/residency-policy",
+        "handler": "set_residency_policy",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/tenants/{tenant_id}/quota/check",
+        "handler": "check_quota",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/resource-allocations",
+        "handler": "request_resource_allocation",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/resource-allocations",
+        "handler": "list_resource_allocations",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/resource-allocations/{allocation_id}",
+        "handler": "get_resource_allocation",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/resource-allocations/{allocation_id}/approve",
+        "handler": "approve_resource_allocation",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/resource-allocations/{allocation_id}/reject",
+        "handler": "reject_resource_allocation",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/multi-tenancy/isolation-probes",
+        "handler": "run_isolation_probe",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/multi-tenancy/isolation-probes",
+        "handler": "list_isolation_probes",
+        "source": "modules/multi-tenancy/src/multi_tenancy/api/routes_multi_tenancy.py"
+      }
+    ]
+  },
+  {
+    "id": "observability",
+    "name": "Observability",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 19: Observability. Reasoning-trace narrative reconstruction and cost-attributed tracing over ingested spans.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/observability/ingest",
+        "handler": "ingest",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/observability/reasoning-narrative/{trace_id}",
+        "handler": "reasoning_narrative",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/observability/cost-attribution/{trace_id}",
+        "handler": "cost_attribution",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/observability/trace-completeness",
+        "handler": "trace_completeness",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/observability/traces",
+        "handler": "list_traces",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/observability/traces/{trace_id}",
+        "handler": "get_trace",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/observability/slos",
+        "handler": "create_slo",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/observability/slos",
+        "handler": "list_slos",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/observability/slos/{slo_id}",
+        "handler": "get_slo",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/observability/slos/{slo_id}/evaluate",
+        "handler": "evaluate_slo",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/observability/alert-rules",
+        "handler": "create_alert_rule",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/observability/alert-rules",
+        "handler": "list_alert_rules",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/observability/alert-rules/{rule_id}/enable",
+        "handler": "enable_alert_rule",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/observability/alert-rules/{rule_id}/disable",
+        "handler": "disable_alert_rule",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/observability/alert-rules/{rule_id}/evaluate",
+        "handler": "evaluate_alert_rule",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/observability/alert-events",
+        "handler": "list_alert_events",
+        "source": "modules/observability/src/observability/api/routes_observability.py"
+      }
+    ]
+  },
+  {
+    "id": "promptops",
+    "name": "Promptops",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 29: PromptOps. Prompt versioning, statistically-gated A/B testing, drift detection, and a bounded reflection-based optimiser, built on real Evaluation Framework and LLM Gateway peers.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/promptops/prompt-versions",
+        "handler": "register_prompt_version",
+        "source": "modules/promptops/src/promptops/api/routes_promptops.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/promptops/prompt-versions",
+        "handler": "list_prompt_versions",
+        "source": "modules/promptops/src/promptops/api/routes_promptops.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/promptops/prompt-versions/{prompt_version_id}",
+        "handler": "get_prompt_version",
+        "source": "modules/promptops/src/promptops/api/routes_promptops.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/promptops/prompt-versions/{prompt_version_id}/drift-check",
+        "handler": "drift_check",
+        "source": "modules/promptops/src/promptops/api/routes_promptops.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/promptops/prompt-versions/{prompt_version_id}/reflect",
+        "handler": "reflect",
+        "source": "modules/promptops/src/promptops/api/routes_promptops.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/promptops/ab-tests",
+        "handler": "start_ab_test",
+        "source": "modules/promptops/src/promptops/api/routes_promptops.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/promptops/ab-tests/{ab_test_id}",
+        "handler": "get_ab_test",
+        "source": "modules/promptops/src/promptops/api/routes_promptops.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/promptops/ab-tests/{ab_test_id}/result",
+        "handler": "ab_test_result",
+        "source": "modules/promptops/src/promptops/api/routes_promptops.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/promptops/ab-tests/{ab_test_id}/conclude",
+        "handler": "conclude_ab_test",
+        "source": "modules/promptops/src/promptops/api/routes_promptops.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/promptops/prompts/{prompt_name}/active",
+        "handler": "get_active_prompt_version",
+        "source": "modules/promptops/src/promptops/api/routes_promptops.py"
+      }
+    ]
+  },
+  {
+    "id": "regulatory-compliance",
+    "name": "Regulatory Compliance",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 17: Regulatory and Compliance. Crosswalk engine mapping controls to EU AI Act, NIST AI RMF, ISO 42001 and DORA, with evidence pack generation.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/regulatory-compliance/framework-profiles",
+        "handler": "create_framework_profile",
+        "source": "modules/regulatory-compliance/src/regulatory_compliance/api/routes_regcomp.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/regulatory-compliance/mappings",
+        "handler": "list_mappings",
+        "source": "modules/regulatory-compliance/src/regulatory_compliance/api/routes_regcomp.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/regulatory-compliance/mappings/publish",
+        "handler": "publish_mappings",
+        "source": "modules/regulatory-compliance/src/regulatory_compliance/api/routes_regcomp.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/regulatory-compliance/control-events",
+        "handler": "record_control_event",
+        "source": "modules/regulatory-compliance/src/regulatory_compliance/api/routes_regcomp.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/regulatory-compliance/coverage",
+        "handler": "coverage",
+        "source": "modules/regulatory-compliance/src/regulatory_compliance/api/routes_regcomp.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/regulatory-compliance/evidence-packs",
+        "handler": "create_evidence_pack",
+        "source": "modules/regulatory-compliance/src/regulatory_compliance/api/routes_regcomp.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/regulatory-compliance/evidence-packs/{pack_id}",
+        "handler": "get_evidence_pack",
+        "source": "modules/regulatory-compliance/src/regulatory_compliance/api/routes_regcomp.py"
+      }
+    ]
+  },
+  {
+    "id": "sdk-and-developer-portal",
+    "name": "Sdk And Developer Portal",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 34: SDK and Developer Portal. Real sandbox provisioning (Identity and Access + Multi-tenancy), SDKs generated from every peer's real OpenAPI spec, and adoption metrics computed from real Auditability history.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/sdk-portal/developers",
+        "handler": "register_developer",
+        "source": "modules/sdk-and-developer-portal/src/sdk_and_developer_portal/api/routes_sdk_and_developer_portal.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/sdk-portal/developers",
+        "handler": "list_developers",
+        "source": "modules/sdk-and-developer-portal/src/sdk_and_developer_portal/api/routes_sdk_and_developer_portal.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/sdk-portal/developers/{developer_id}",
+        "handler": "get_developer",
+        "source": "modules/sdk-and-developer-portal/src/sdk_and_developer_portal/api/routes_sdk_and_developer_portal.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/sdk-portal/developers/{developer_id}/revoke",
+        "handler": "revoke_developer",
+        "source": "modules/sdk-and-developer-portal/src/sdk_and_developer_portal/api/routes_sdk_and_developer_portal.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/sdk-portal/developers/{developer_id}/token",
+        "handler": "issue_sandbox_token",
+        "source": "modules/sdk-and-developer-portal/src/sdk_and_developer_portal/api/routes_sdk_and_developer_portal.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/sdk-portal/developers/{developer_id}/adoption",
+        "handler": "get_developer_adoption",
+        "source": "modules/sdk-and-developer-portal/src/sdk_and_developer_portal/api/routes_sdk_and_developer_portal.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/sdk-portal/adoption-rate",
+        "handler": "get_adoption_rate",
+        "source": "modules/sdk-and-developer-portal/src/sdk_and_developer_portal/api/routes_sdk_and_developer_portal.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/sdk-portal/catalog/sync",
+        "handler": "sync_catalog",
+        "source": "modules/sdk-and-developer-portal/src/sdk_and_developer_portal/api/routes_sdk_and_developer_portal.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/sdk-portal/catalog",
+        "handler": "list_catalog",
+        "source": "modules/sdk-and-developer-portal/src/sdk_and_developer_portal/api/routes_sdk_and_developer_portal.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/sdk-portal/catalog/{module_name}",
+        "handler": "get_catalog_entry",
+        "source": "modules/sdk-and-developer-portal/src/sdk_and_developer_portal/api/routes_sdk_and_developer_portal.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/sdk-portal/sdks/generate",
+        "handler": "generate_sdk",
+        "source": "modules/sdk-and-developer-portal/src/sdk_and_developer_portal/api/routes_sdk_and_developer_portal.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/sdk-portal/sdks",
+        "handler": "list_sdks",
+        "source": "modules/sdk-and-developer-portal/src/sdk_and_developer_portal/api/routes_sdk_and_developer_portal.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/sdk-portal/sdks/{package_id}",
+        "handler": "get_sdk",
+        "source": "modules/sdk-and-developer-portal/src/sdk_and_developer_portal/api/routes_sdk_and_developer_portal.py"
+      }
+    ]
+  },
+  {
+    "id": "secrets-and-credential-management",
+    "name": "Secrets And Credential Management",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 32: Secrets and Credential Management. A per-tenant secret vault, encrypted at rest, retrieved only through a real zero-trust authorization gate, with tracked rotation compliance.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/secrets",
+        "handler": "create_secret",
+        "source": "modules/secrets-and-credential-management/src/secrets_and_credential_management/api/routes_secrets_and_credential_management.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/secrets",
+        "handler": "list_secrets",
+        "source": "modules/secrets-and-credential-management/src/secrets_and_credential_management/api/routes_secrets_and_credential_management.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/secrets/due-for-rotation",
+        "handler": "list_due_for_rotation",
+        "source": "modules/secrets-and-credential-management/src/secrets_and_credential_management/api/routes_secrets_and_credential_management.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/secrets/compliance",
+        "handler": "get_compliance",
+        "source": "modules/secrets-and-credential-management/src/secrets_and_credential_management/api/routes_secrets_and_credential_management.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/secrets/{secret_id}",
+        "handler": "get_secret",
+        "source": "modules/secrets-and-credential-management/src/secrets_and_credential_management/api/routes_secrets_and_credential_management.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/secrets/{secret_id}/revoke",
+        "handler": "revoke_secret",
+        "source": "modules/secrets-and-credential-management/src/secrets_and_credential_management/api/routes_secrets_and_credential_management.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/secrets/{secret_id}/rotate",
+        "handler": "rotate_secret",
+        "source": "modules/secrets-and-credential-management/src/secrets_and_credential_management/api/routes_secrets_and_credential_management.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/secrets/{secret_id}/retrieve",
+        "handler": "retrieve_secret",
+        "source": "modules/secrets-and-credential-management/src/secrets_and_credential_management/api/routes_secrets_and_credential_management.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/secrets/{secret_id}/access-log",
+        "handler": "list_access_log",
+        "source": "modules/secrets-and-credential-management/src/secrets_and_credential_management/api/routes_secrets_and_credential_management.py"
+      }
+    ]
+  },
+  {
+    "id": "sentinel-agents",
+    "name": "Sentinel Agents",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 15: Sentinel Agents. Runtime agents monitoring other agents: behavioural baselining and swarm-level anomaly detection.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/sentinel-agents/events",
+        "handler": "ingest_event",
+        "source": "modules/sentinel-agents/src/sentinel_agents/api/routes_sentinel.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/sentinel-agents/alerts",
+        "handler": "list_alerts",
+        "source": "modules/sentinel-agents/src/sentinel_agents/api/routes_sentinel.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/sentinel-agents/alerts/{alert_id}",
+        "handler": "get_alert",
+        "source": "modules/sentinel-agents/src/sentinel_agents/api/routes_sentinel.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/sentinel-agents/baselines/{agent_ref}",
+        "handler": "get_baselines",
+        "source": "modules/sentinel-agents/src/sentinel_agents/api/routes_sentinel.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/sentinel-agents/config",
+        "handler": "configure",
+        "source": "modules/sentinel-agents/src/sentinel_agents/api/routes_sentinel.py"
+      }
+    ]
+  },
+  {
+    "id": "short-term-memory",
+    "name": "Short Term Memory",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 12: Short-Term Memory. Token-budgeted session buffer with salience-weighted retention.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/short-term-memory/sessions/{session_id}/messages",
+        "handler": "append_message",
+        "source": "modules/short-term-memory/src/short_term_memory/api/routes_sessions.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/short-term-memory/sessions/{session_id}",
+        "handler": "get_session",
+        "source": "modules/short-term-memory/src/short_term_memory/api/routes_sessions.py"
+      },
+      {
+        "method": "DELETE",
+        "path": "/v1/short-term-memory/sessions/{session_id}",
+        "handler": "delete_session",
+        "source": "modules/short-term-memory/src/short_term_memory/api/routes_sessions.py"
+      }
+    ]
+  },
+  {
+    "id": "tool-orchestration",
+    "name": "Tool Orchestration",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 4: Tool Orchestration. Discovery, invocation, retry, circuit-breaking and reliability-scored routing for every agent-to-tool call, plus guarded just-in-time tool synthesis.",
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/v1/tool-orchestration/tools",
+        "handler": "list_tools",
+        "source": "modules/tool-orchestration/src/tool_orchestration/api/routes_tools.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/tool-orchestration/tools/{tool_id}",
+        "handler": "get_tool",
+        "source": "modules/tool-orchestration/src/tool_orchestration/api/routes_tools.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/tool-orchestration/invoke",
+        "handler": "invoke",
+        "source": "modules/tool-orchestration/src/tool_orchestration/api/routes_tools.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/tool-orchestration/tools",
+        "handler": "register_tool",
+        "source": "modules/tool-orchestration/src/tool_orchestration/api/routes_tools.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/tool-orchestration/synthesise",
+        "handler": "synthesise",
+        "source": "modules/tool-orchestration/src/tool_orchestration/api/routes_tools.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/tool-orchestration/tools/{tool_id}/approve",
+        "handler": "approve_tool",
+        "source": "modules/tool-orchestration/src/tool_orchestration/api/routes_tools.py"
+      }
+    ]
+  },
+  {
+    "id": "vector-db",
+    "name": "Vector DB",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 10: Vector DB. Hybrid dense-sparse embedding storage with automatic embedding model migration, backed by Qdrant.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/vector-db/points",
+        "handler": "index_point",
+        "source": "modules/vector-db/src/vector_db/api/routes_vectors.py"
+      },
+      {
+        "method": "DELETE",
+        "path": "/v1/vector-db/points/{point_id}",
+        "handler": "delete_point",
+        "source": "modules/vector-db/src/vector_db/api/routes_vectors.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/vector-db/query",
+        "handler": "query",
+        "source": "modules/vector-db/src/vector_db/api/routes_vectors.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/vector-db/migrations",
+        "handler": "start_migration",
+        "source": "modules/vector-db/src/vector_db/api/routes_vectors.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/vector-db/migrations/{migration_id}",
+        "handler": "get_migration",
+        "source": "modules/vector-db/src/vector_db/api/routes_vectors.py"
+      }
+    ]
+  },
+  {
+    "id": "workflow-engine",
+    "name": "Workflow Engine",
+    "description": "Tectonic Agentic AI Platform \u2014 Module 1: Workflow Engine. Executes agent workflows as DAGs/graphs with neurosymbolic step routing, confidence-gated autonomy and human-in-the-loop checkpoints.",
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/v1/workflow-engine/definitions",
+        "handler": "create_definition",
+        "source": "modules/workflow-engine/src/workflow_engine/api/routes_definitions.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/workflow-engine/definitions/{definition_id}/publish",
+        "handler": "publish_definition",
+        "source": "modules/workflow-engine/src/workflow_engine/api/routes_definitions.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/workflow-engine/definitions/{definition_id}",
+        "handler": "get_definition",
+        "source": "modules/workflow-engine/src/workflow_engine/api/routes_definitions.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/workflow-engine/instances",
+        "handler": "start_instance",
+        "source": "modules/workflow-engine/src/workflow_engine/api/routes_instances.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/workflow-engine/instances/{instance_id}",
+        "handler": "get_instance",
+        "source": "modules/workflow-engine/src/workflow_engine/api/routes_instances.py"
+      },
+      {
+        "method": "GET",
+        "path": "/v1/workflow-engine/instances/{instance_id}/steps",
+        "handler": "list_steps",
+        "source": "modules/workflow-engine/src/workflow_engine/api/routes_instances.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/workflow-engine/instances/{instance_id}/pause",
+        "handler": "pause_instance",
+        "source": "modules/workflow-engine/src/workflow_engine/api/routes_instances.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/workflow-engine/instances/{instance_id}/resume",
+        "handler": "resume_instance",
+        "source": "modules/workflow-engine/src/workflow_engine/api/routes_instances.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/workflow-engine/instances/{instance_id}/terminate",
+        "handler": "terminate_instance",
+        "source": "modules/workflow-engine/src/workflow_engine/api/routes_instances.py"
+      },
+      {
+        "method": "POST",
+        "path": "/v1/workflow-engine/instances/{instance_id}/approvals/{approval_id}/callback",
+        "handler": "approval_callback",
+        "source": "modules/workflow-engine/src/workflow_engine/api/routes_instances.py"
+      }
+    ]
+  }
+]
