@@ -1,0 +1,46 @@
+name: Pilot Console
+on:
+  pull_request:
+    paths:
+      - 'apps/pilot-console/**'
+      - '.github/workflows/pilot-console.yml'
+  push:
+    branches: [main, 'claude/spatial-pilot-console']
+    paths:
+      - 'apps/pilot-console/**'
+      - '.github/workflows/pilot-console.yml'
+permissions:
+  contents: read
+jobs:
+  console:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/pilot-console/package-lock.json
+      - run: python -m unittest discover -s apps/pilot-console/tests -v
+      - run: node --check apps/pilot-console/static/app.js
+      - run: npm ci --prefix apps/pilot-console
+      - run: npx --prefix apps/pilot-console playwright install --with-deps chromium
+      - name: Test all journeys and responsive routes
+        run: |
+          python apps/pilot-console/server.py > /tmp/console.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:3000/healthz; then break; fi
+            sleep 0.25
+          done
+          npm run test:browser --prefix apps/pilot-console
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pilot-console-screenshots
+          path: /tmp/tectonic-*.png

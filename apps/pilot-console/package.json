@@ -1,0 +1,13 @@
+{
+  "name": "tectonic-pilot-console",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "test:browser": "node tests/browser.cjs",
+    "format": "prettier --write static/app.js static/styles.css static/index.html tests/browser.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.51.1",
+    "prettier": "3.6.2"
+  }
+}
